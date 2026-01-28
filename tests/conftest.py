@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import pytest
-
 from fleetroll.cli import Args
 from fleetroll.constants import CONTENT_SENTINEL, DEFAULT_VAULT_PATH
 
@@ -30,11 +29,7 @@ def tmp_host_file(tmp_dir: Path) -> Path:
     """Create a temporary host list file with sample hosts."""
     path = tmp_dir / "hosts.txt"
     path.write_text(
-        "host1.example.com\n"
-        "host2.example.com\n"
-        "# this is a comment\n"
-        "\n"
-        "host3.example.com\n"
+        "host1.example.com\nhost2.example.com\n# this is a comment\n\nhost3.example.com\n"
     )
     return path
 

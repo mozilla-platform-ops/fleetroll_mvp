@@ -5,12 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from fleetroll.exceptions import FleetRollError, UserError
 from fleetroll.utils import (
     default_audit_log_path,
-    ensure_parent_dir,
     ensure_host_or_file,
+    ensure_parent_dir,
     infer_actor,
     is_host_file,
     looks_like_host,
@@ -27,16 +26,12 @@ class TestSha256Hex:
     def test_empty_bytes(self):
         """SHA256 of empty string is well-known value."""
         result = sha256_hex(b"")
-        assert (
-            result == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        )
+        assert result == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
     def test_simple_string(self):
         """SHA256 of 'hello' is well-known value."""
         result = sha256_hex(b"hello")
-        assert (
-            result == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-        )
+        assert result == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
     def test_returns_lowercase_hex(self):
         """Result should be lowercase hex string of 64 chars."""

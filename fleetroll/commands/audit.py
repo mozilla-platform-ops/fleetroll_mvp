@@ -10,7 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -38,8 +38,8 @@ from ..ssh import (
 )
 from ..utils import (
     default_audit_log_path,
-    infer_actor,
     ensure_host_or_file,
+    infer_actor,
     is_host_file,
     parse_host_list,
     utc_now_iso,
@@ -64,17 +64,17 @@ def audit_single_host_with_retry(
     host: str,
     *,
     args: Args,
-    ssh_opts: List[str],
+    ssh_opts: list[str],
     remote_cmd: str,
     audit_log: Path,
     actor: str,
-    retry_budget: Dict[str, Any],
+    retry_budget: dict[str, Any],
     lock: threading.Lock,
     log_lock: threading.Lock,
     overrides_dir: Path | None = None,
-    vault_checksums: Dict[str, str] | None = None,
+    vault_checksums: dict[str, str] | None = None,
     vault_dir: Path | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Audit single host with retry for connection failures."""
     max_retries = AUDIT_MAX_RETRIES
     retry_delay = AUDIT_RETRY_DELAY_S  # Exponential backoff base
@@ -99,9 +99,7 @@ def audit_single_host_with_retry(
         if attempt > 0:
             logger.debug("Retry attempt %d/%d for %s", attempt + 1, max_retries, host)
 
-        rc, out, err = run_ssh(
-            host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout
-        )
+        rc, out, err = run_ssh(host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout)
 
         # Check if retryable (connection errors)
         is_connection_error = rc != 0 and (
@@ -168,7 +166,7 @@ def audit_single_host_with_retry(
     }
 
 
-def format_summary_table(summary: Dict[str, Any], verbose: bool = False) -> str:
+def format_summary_table(summary: dict[str, Any], verbose: bool = False) -> str:
     """Format batch audit results as human-readable table."""
     results = summary["results"]
     total = summary["total"]
@@ -180,18 +178,15 @@ def format_summary_table(summary: Dict[str, Any], verbose: bool = False) -> str:
     lines.append("\nSummary:")
     lines.append("=" * 60)
     lines.append(f"Total hosts:        {total}")
-    lines.append(f"Successful:         {successful} ({100*successful/total:.1f}%)")
-    lines.append(f"Failed:             {failed} ({100*failed/total:.1f}%)")
+    lines.append(f"Successful:         {successful} ({100 * successful / total:.1f}%)")
+    lines.append(f"Failed:             {failed} ({100 * failed / total:.1f}%)")
 
     # Categorize failures
     conn_failures = sum(
         1
         for r in results
         if not r.get("ok")
-        and (
-            "timeout" in r.get("error", "").lower()
-            or "connection" in r.get("stderr", "").lower()
-        )
+        and ("timeout" in r.get("error", "").lower() or "connection" in r.get("stderr", "").lower())
     )
     if failed > 0:
         lines.append(f"  - Connection:     {conn_failures}")
@@ -248,9 +243,7 @@ def format_summary_table(summary: Dict[str, Any], verbose: bool = False) -> str:
                 lines.append(
                     f"[{idx}] SHA256: {sha[:12]}... ({host_count} host{'s' if host_count != 1 else ''})"
                 )
-                lines.append(
-                    f"    Stored: ~/{AUDIT_DIR_NAME}/{OVERRIDES_DIR_NAME}/{sha[:12]}"
-                )
+                lines.append(f"    Stored: ~/{AUDIT_DIR_NAME}/{OVERRIDES_DIR_NAME}/{sha[:12]}")
             else:
                 # Non-verbose mode: show inline content
                 lines.append(
@@ -266,7 +259,7 @@ def format_summary_table(summary: Dict[str, Any], verbose: bool = False) -> str:
     return "\n".join(lines)
 
 
-def cmd_host_audit_batch(hosts: List[str], args: Args) -> Dict[str, Any]:
+def cmd_host_audit_batch(hosts: list[str], args: Args) -> dict[str, Any]:
     """Audit multiple hosts in parallel."""
     actor = infer_actor()
     ssh_opts = build_ssh_options(args)
@@ -350,7 +343,7 @@ def cmd_host_audit_batch(hosts: List[str], args: Args) -> Dict[str, Any]:
                     bar.update(1)
 
     # Collect unique overrides by SHA256
-    unique_overrides: Dict[str, Tuple[str, List[str]]] = {}
+    unique_overrides: dict[str, tuple[str, list[str]]] = {}
     for r in results:
         if r.get("ok") and r.get("observed", {}).get("override_present"):
             sha = r["observed"].get("override_sha256")
@@ -370,7 +363,7 @@ def cmd_host_audit_batch(hosts: List[str], args: Args) -> Dict[str, Any]:
     }
 
 
-def format_single_host_output(result: Dict[str, Any], args: Args) -> None:
+def format_single_host_output(result: dict[str, Any], args: Args) -> None:
     """Format and print output for a single host audit result."""
     host = result["host"]
     obs = result.get("observed", {})
@@ -451,9 +444,7 @@ def cmd_host_audit(args: Args) -> None:
 
     # Show progress message for batch mode
     if is_batch and not args.json:
-        print(
-            f"Auditing {len(hosts)} hosts from {host_file} with {args.workers} workers..."
-        )
+        print(f"Auditing {len(hosts)} hosts from {host_file} with {args.workers} workers...")
 
     # Always use batch logic (works for single host too, provides retry)
     summary = cmd_host_audit_batch(hosts, args)

@@ -6,7 +6,6 @@ import subprocess
 from unittest.mock import MagicMock
 
 import pytest
-
 from fleetroll.constants import SSH_TIMEOUT_EXIT_CODE
 from fleetroll.exceptions import FleetRollError
 from fleetroll.ssh import run_ssh
@@ -174,7 +173,7 @@ class TestRunSsh:
         mock_run = mocker.patch("fleetroll.ssh.subprocess.run")
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="héllo wörld".encode("utf-8"),
+            stdout="héllo wörld".encode(),
             stderr=b"",
         )
 

@@ -10,7 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -38,7 +38,7 @@ def resolve_vault_path(sha_prefix: str, *, vault_dir: Path) -> Path:
     if not vault_dir.exists():
         raise UserError(f"Vault directory not found: {vault_dir}")
 
-    matches: List[Path] = []
+    matches: list[Path] = []
     for entry in vault_dir.iterdir():
         if entry.is_symlink():
             continue
@@ -58,7 +58,7 @@ def resolve_vault_humanhash(human_hash: str, *, vault_dir: Path) -> Path:
     if not vault_dir.exists():
         raise UserError(f"Vault directory not found: {vault_dir}")
 
-    matches: List[tuple[Path, str]] = []
+    matches: list[tuple[Path, str]] = []
     for entry in vault_dir.iterdir():
         if entry.is_symlink():
             continue
@@ -97,7 +97,7 @@ def set_vault_for_host(
     host: str,
     *,
     args: Args,
-    ssh_opts: List[str],
+    ssh_opts: list[str],
     remote_cmd: str,
     data: bytes,
     actor: str,
@@ -107,7 +107,7 @@ def set_vault_for_host(
     source: str,
     stored_path: Path | None = None,
     log_lock: threading.Lock | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Set vault file for a single host and append audit log."""
     rc, out, err = run_ssh(
         host,
@@ -117,7 +117,7 @@ def set_vault_for_host(
         timeout_s=args.timeout,
     )
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "ts": utc_now_iso(),
         "actor": actor,
         "action": "host.set_vault",
@@ -147,7 +147,7 @@ def set_vault_for_host(
     return result
 
 
-def format_set_line(result: Dict[str, Any]) -> str:
+def format_set_line(result: dict[str, Any]) -> str:
     """Format a single-line status for batch set results."""
     host = result.get("host", "?")
     if result.get("ok"):
@@ -225,7 +225,7 @@ def cmd_host_set_vault(args: Args) -> None:
             print("Run again with --confirm to apply changes.")
         return
 
-    backup_suffix = dt.datetime.now(dt.timezone.utc).strftime(BACKUP_TIME_FORMAT)
+    backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)
     vault_dir = audit_log.parent / VAULT_YAMLS_DIR_NAME
     content_text = data.decode("utf-8", errors="replace")
     stored_path = store_content_file(content_text, content_hash, vault_dir)
@@ -262,7 +262,7 @@ def cmd_host_set_vault(args: Args) -> None:
 
         if rc != 0:
             print(
-                f"[{args.host}] set vault FAILED (rc={rc}). stderr:\n{result.get('stderr','')}",
+                f"[{args.host}] set vault FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -277,7 +277,7 @@ def cmd_host_set_vault(args: Args) -> None:
         print(f"Audit log: {audit_log}")
         return
 
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     log_lock = threading.Lock()
     show_progress = not args.json
     start_time = time.monotonic()

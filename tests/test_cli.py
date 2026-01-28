@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-
 from fleetroll.cli import cli, setup_logging
 
 
@@ -240,8 +239,7 @@ class TestCliLogging:
             stderr_handlers = [
                 h
                 for h in logger.handlers
-                if isinstance(h, logging.StreamHandler)
-                and getattr(h, "stream", None) is sys.stderr
+                if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stderr
             ]
             assert len(stderr_handlers) == 1
         finally:

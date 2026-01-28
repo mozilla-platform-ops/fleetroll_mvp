@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from fleetroll.cli import Args
 from fleetroll.commands.override import cmd_override_show, resolve_override_humanhash
 from fleetroll.exceptions import UserError
@@ -41,9 +40,7 @@ def test_override_show_humanhash_ambiguous(tmp_dir: Path, monkeypatch) -> None:
     _write_override(overrides_dir, "one\n")
     _write_override(overrides_dir, "two\n")
 
-    monkeypatch.setattr(
-        "fleetroll.commands.override.humanize", lambda *_a, **_k: "same-hash"
-    )
+    monkeypatch.setattr("fleetroll.commands.override.humanize", lambda *_a, **_k: "same-hash")
 
     with pytest.raises(UserError) as excinfo:
         resolve_override_humanhash("same-hash", overrides_dir=overrides_dir)

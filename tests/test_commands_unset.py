@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from fleetroll.cli import Args
 from fleetroll.commands.unset import cmd_host_unset
 
@@ -20,18 +19,14 @@ class TestCmdHostUnset:
         mock_args_unset.json = False
         mock_run_ssh = mocker.patch("fleetroll.commands.unset.run_ssh")
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_unset(mock_args_unset)
 
         mock_run_ssh.assert_not_called()
         assert any("DRY RUN" in line for line in captured)
 
-    def test_successful_unset_removed(
-        self, mocker, mock_args_unset: Args, tmp_dir: Path
-    ):
+    def test_successful_unset_removed(self, mocker, mock_args_unset: Args, tmp_dir: Path):
         """Successfully unsets existing override."""
         mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_unset.json = True
@@ -40,9 +35,7 @@ class TestCmdHostUnset:
         mock_run_ssh.return_value = (0, "REMOVED=1\n", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_unset(mock_args_unset)
 
@@ -51,9 +44,7 @@ class TestCmdHostUnset:
         assert output["action"] == "host.unset_override"
         assert output["observed"]["removed"] is True
 
-    def test_successful_unset_not_present(
-        self, mocker, mock_args_unset: Args, tmp_dir: Path
-    ):
+    def test_successful_unset_not_present(self, mocker, mock_args_unset: Args, tmp_dir: Path):
         """Handles case where override doesn't exist."""
         mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_unset.json = True
@@ -62,9 +53,7 @@ class TestCmdHostUnset:
         mock_run_ssh.return_value = (0, "REMOVED=0\n", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_unset(mock_args_unset)
 
@@ -82,9 +71,7 @@ class TestCmdHostUnset:
         mock_run_ssh.return_value = (0, "REMOVED=1\n", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_unset(mock_args_unset)
 
@@ -102,9 +89,7 @@ class TestCmdHostUnset:
         mock_run_ssh.return_value = (0, "REMOVED=1\n", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_unset(mock_args_unset)
 
@@ -121,9 +106,7 @@ class TestCmdHostUnset:
         mock_run_ssh.return_value = (0, "REMOVED=1\n", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_unset(mock_args_unset)
 
@@ -139,9 +122,7 @@ class TestCmdHostUnset:
         mock_run_ssh.return_value = (255, "", "Connection refused")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         with pytest.raises(SystemExit) as excinfo:
             cmd_host_unset(mock_args_unset)

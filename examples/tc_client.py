@@ -1,11 +1,13 @@
 """Taskcluster API client wrapper."""
 
 import json
-import taskcluster
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-import requests
 import logging
+from pathlib import Path
+from typing import Any
+
+import requests
+
+import taskcluster
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ class TaskclusterClient:
             }
         )
 
-    def _load_credentials(self, credentials_path: str) -> Dict[str, str]:
+    def _load_credentials(self, credentials_path: str) -> dict[str, str]:
         """Load Taskcluster credentials from file."""
         path = Path(credentials_path).expanduser()
         if not path.exists():
@@ -45,9 +47,7 @@ class TaskclusterClient:
             creds = json.load(f)
 
         if "clientId" not in creds or "accessToken" not in creds:
-            raise ValueError(
-                "Credentials file must contain 'clientId' and 'accessToken'"
-            )
+            raise ValueError("Credentials file must contain 'clientId' and 'accessToken'")
 
         return creds
 
@@ -57,7 +57,7 @@ class TaskclusterClient:
         worker_type: str,
         worker_group: str,
         worker_id: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get quarantine details for a worker using GraphQL API.
 
@@ -126,14 +126,10 @@ class TaskclusterClient:
             # Log the actual error response for debugging
             try:
                 error_data = response.json()
-                logger.warning(
-                    f"Failed to fetch quarantine details for {worker_id}: {e}"
-                )
+                logger.warning(f"Failed to fetch quarantine details for {worker_id}: {e}")
                 logger.debug(f"GraphQL error response: {error_data}")
             except:
-                logger.warning(
-                    f"Failed to fetch quarantine details for {worker_id}: {e}"
-                )
+                logger.warning(f"Failed to fetch quarantine details for {worker_id}: {e}")
             return None
         except Exception as e:
             logger.warning(f"Failed to fetch quarantine details for {worker_id}: {e}")
@@ -141,7 +137,7 @@ class TaskclusterClient:
 
     def list_quarantined_workers(
         self, provisioner_id: str, worker_type: str, fetch_details: bool = False
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         List all quarantined workers for a worker type.
 
@@ -180,9 +176,7 @@ class TaskclusterClient:
                     provisioner_id, worker_type, worker_group, worker_id
                 )
 
-                if quarantine_details_list and isinstance(
-                    quarantine_details_list, list
-                ):
+                if quarantine_details_list and isinstance(quarantine_details_list, list):
                     # quarantineDetails is an array of history entries
                     # Get the most recent entry (last in the list)
                     if len(quarantine_details_list) > 0:
@@ -192,9 +186,7 @@ class TaskclusterClient:
                         # Store the latest entry for convenience
                         worker["quarantineDetails"] = latest_details
                         # Extract the quarantineInfo (the reason) for easy access
-                        worker["quarantineInfo"] = latest_details.get(
-                            "quarantineInfo", ""
-                        )
+                        worker["quarantineInfo"] = latest_details.get("quarantineInfo", "")
                     else:
                         worker["quarantineInfo"] = ""
                 else:
@@ -202,9 +194,7 @@ class TaskclusterClient:
 
         return workers
 
-    def list_all_workers(
-        self, provisioner_id: str, worker_type: str
-    ) -> List[Dict[str, Any]]:
+    def list_all_workers(self, provisioner_id: str, worker_type: str) -> list[dict[str, Any]]:
         """
         List all workers for a worker type.
 
@@ -229,9 +219,7 @@ class TaskclusterClient:
 
         return workers
 
-    def get_worker_group(
-        self, provisioner_id: str, worker_type: str, worker_id: str
-    ) -> str:
+    def get_worker_group(self, provisioner_id: str, worker_type: str, worker_id: str) -> str:
         """
         Determine worker group for a specific worker.
 
@@ -265,15 +253,12 @@ class TaskclusterClient:
 
         if len(worker_groups) == 1:
             return list(worker_groups)[0]
-        elif len(worker_groups) == 0:
-            raise ValueError(
-                f"Cannot determine workerGroup for {worker_id}: no workers found"
-            )
-        else:
-            raise ValueError(
-                f"Cannot determine workerGroup for {worker_id}: "
-                f"multiple groups exist: {worker_groups}"
-            )
+        if len(worker_groups) == 0:
+            raise ValueError(f"Cannot determine workerGroup for {worker_id}: no workers found")
+        raise ValueError(
+            f"Cannot determine workerGroup for {worker_id}: "
+            f"multiple groups exist: {worker_groups}"
+        )
 
     def quarantine_worker(
         self,
@@ -297,9 +282,7 @@ class TaskclusterClient:
             "quarantineUntil": taskcluster.fromNow("10 years"),
             "quarantineInfo": quarantine_message,
         }
-        self.queue.quarantineWorker(
-            provisioner_id, worker_type, worker_group, worker_id, payload
-        )
+        self.queue.quarantineWorker(provisioner_id, worker_type, worker_group, worker_id, payload)
 
     def unquarantine_worker(
         self,
@@ -323,9 +306,7 @@ class TaskclusterClient:
             "quarantineUntil": taskcluster.fromNow("-1 year"),
             "quarantineInfo": reason,
         }
-        self.queue.quarantineWorker(
-            provisioner_id, worker_type, worker_group, worker_id, payload
-        )
+        self.queue.quarantineWorker(provisioner_id, worker_type, worker_group, worker_id, payload)
 
     def get_worker_details(
         self,
@@ -333,7 +314,7 @@ class TaskclusterClient:
         worker_type: str,
         worker_group: str,
         worker_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get worker details including recent tasks.
 
@@ -381,7 +362,7 @@ class TaskclusterClient:
             logger.warning(f"Failed to fetch pending queue count: {e}")
             return 0
 
-    def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
+    def get_task_status(self, task_id: str) -> dict[str, Any] | None:
         """
         Get task status.
 
@@ -403,7 +384,7 @@ class TaskclusterClient:
             return None
 
     # similar to get_quarantine_details_graphql(), but for tasks
-    def get_task_details_graphql(self, task_id: str) -> Optional[Dict[str, Any]]:
+    def get_task_details_graphql(self, task_id: str) -> dict[str, Any] | None:
         # curl 'https://firefox-ci-tc.services.mozilla.com/graphql' \
         #   -X POST \
         #   -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:146.0) Gecko/20100101 Firefox/146.0' \
@@ -429,7 +410,7 @@ class TaskclusterClient:
         provisioner_id: str,
         worker_type: str,
         worker_id: str,
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Get current quarantine state and message for a worker.
 

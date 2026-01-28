@@ -14,9 +14,9 @@ from .constants import DEFAULT_OVERRIDE_PATH, DEFAULT_ROLE_PATH
 from .exceptions import FleetRollError, UserError
 
 __all__ = [
-    "main",
-    "FleetRollError",
-    "UserError",
     "DEFAULT_OVERRIDE_PATH",
     "DEFAULT_ROLE_PATH",
+    "FleetRollError",
+    "UserError",
+    "main",
 ]

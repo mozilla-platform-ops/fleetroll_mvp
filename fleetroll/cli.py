@@ -6,7 +6,6 @@ import logging
 import shlex
 import sys
 from importlib.metadata import version
-from typing import Optional, Tuple
 
 import click
 
@@ -33,8 +32,7 @@ def setup_logging(debug: bool = False) -> None:
     level = logging.DEBUG if debug else logging.WARNING
     logger.setLevel(level)
     if any(
-        isinstance(h, logging.StreamHandler)
-        and getattr(h, "stream", None) is sys.stderr
+        isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stderr
         for h in logger.handlers
     ):
         return
@@ -150,10 +148,10 @@ def cli(ctx: click.Context, debug: bool):
 )
 def host_audit(
     host: str,
-    ssh_option: Tuple[str, ...],
+    ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
-    audit_log: Optional[str],
+    audit_log: str | None,
     json_output: bool,
     override_path: str,
     role_path: str,
@@ -224,7 +222,7 @@ def host_audit(
 )
 def host_monitor(
     host: str,
-    audit_log: Optional[str],
+    audit_log: str | None,
     json_output: bool,
     override_path: str,
     role_path: str,
@@ -251,7 +249,7 @@ def host_monitor(
     type=click.Path(),
     help="Path to local JSONL audit log (default: ~/.fleetroll/audit.jsonl).",
 )
-def override_show(sha_prefix: str, audit_log: Optional[str]):
+def override_show(sha_prefix: str, audit_log: str | None):
     """Show stored override contents by SHA prefix."""
     args = Args(
         sha_prefix=sha_prefix,
@@ -267,7 +265,7 @@ def override_show(sha_prefix: str, audit_log: Optional[str]):
     type=click.Path(),
     help="Path to local JSONL audit log (default: ~/.fleetroll/audit.jsonl).",
 )
-def vault_show(sha_prefix: str, audit_log: Optional[str]):
+def vault_show(sha_prefix: str, audit_log: str | None):
     """Show stored vault contents by SHA prefix or humanhash."""
     args = Args(
         sha_prefix=sha_prefix,
@@ -386,20 +384,20 @@ def debug_host_script(
 )
 def host_set_override(
     host: str,
-    ssh_option: Tuple[str, ...],
+    ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
-    audit_log: Optional[str],
+    audit_log: str | None,
     json_output: bool,
     workers: int,
     override_path: str,
-    from_file: Optional[str],
+    from_file: str | None,
     no_validate: bool,
     mode: str,
     owner: str,
     group: str,
     no_backup: bool,
-    reason: Optional[str],
+    reason: str | None,
     confirm: bool,
 ):
     """Set the override file on a host (atomic write).
@@ -483,19 +481,19 @@ def host_set_override(
 )
 def host_set_vault(
     host: str,
-    ssh_option: Tuple[str, ...],
+    ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
-    audit_log: Optional[str],
+    audit_log: str | None,
     json_output: bool,
     workers: int,
     vault_path: str,
-    from_file: Optional[str],
+    from_file: str | None,
     mode: str,
     owner: str,
     group: str,
     no_backup: bool,
-    reason: Optional[str],
+    reason: str | None,
     confirm: bool,
 ):
     """Set the vault.yaml file on a host (atomic write)."""
@@ -551,15 +549,15 @@ def host_set_vault(
 )
 def host_unset_override(
     host: str,
-    ssh_option: Tuple[str, ...],
+    ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
-    audit_log: Optional[str],
+    audit_log: str | None,
     json_output: bool,
     workers: int,
     override_path: str,
     no_backup: bool,
-    reason: Optional[str],
+    reason: str | None,
     confirm: bool,
 ):
     """Remove the override file from a host."""

@@ -8,7 +8,6 @@ functions. For tighter control over the output, see :class:`HumanHasher`.
 import operator
 import uuid as uuidlib
 
-
 DEFAULT_WORDLIST = (
     "ack",
     "alabama",
@@ -269,7 +268,7 @@ DEFAULT_WORDLIST = (
 )
 
 
-class HumanHasher(object):
+class HumanHasher:
     """
     Transforms hex digests to human-readable strings.
 
@@ -301,9 +300,7 @@ class HumanHasher(object):
         """
 
         # Gets a list of byte values between 0-255.
-        bytes = map(
-            lambda x: int(x, 16), map("".join, zip(hexdigest[::2], hexdigest[1::2]))
-        )
+        bytes = map(lambda x: int(x, 16), map("".join, zip(hexdigest[::2], hexdigest[1::2])))
         # Compress an arbitrary number of bytes to `words`.
         compressed = self.compress(bytes, words)
         # Map the compressed byte values through the word list.

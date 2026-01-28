@@ -6,7 +6,7 @@ import logging
 import shlex
 import subprocess
 import time
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING
 
 from .constants import CONTENT_SENTINEL, SSH_TIMEOUT_EXIT_CODE
 from .exceptions import FleetRollError
@@ -21,10 +21,10 @@ def run_ssh(
     host: str,
     remote_cmd: str,
     *,
-    ssh_options: List[str],
-    input_bytes: Optional[bytes] = None,
+    ssh_options: list[str],
+    input_bytes: bytes | None = None,
     timeout_s: int = 60,
-) -> Tuple[int, str, str]:
+) -> tuple[int, str, str]:
     """
     Executes: ssh [opts...] host remote_cmd
 
@@ -53,9 +53,7 @@ def run_ssh(
             e.stderr.decode("utf-8", "replace") if e.stderr else "ssh timeout",
         )
     except FileNotFoundError:
-        raise FleetRollError(
-            "ssh binary not found on PATH. Install OpenSSH client (ssh)."
-        )
+        raise FleetRollError("ssh binary not found on PATH. Install OpenSSH client (ssh).")
 
     elapsed = time.time() - start_time
     logger.debug("SSH completed in %.2fs (rc=%d)", elapsed, p.returncode)
@@ -66,9 +64,9 @@ def run_ssh(
     )
 
 
-def build_ssh_options(args: Args) -> List[str]:
+def build_ssh_options(args: Args) -> list[str]:
     """Build SSH options list from command arguments."""
-    opts: List[str] = []
+    opts: list[str] = []
     # ConnectTimeout is client-side only; safe default for humans.
     opts += ["-o", f"ConnectTimeout={args.connect_timeout}"]
     # Prefer to fail fast rather than hang on unknown host key prompts.

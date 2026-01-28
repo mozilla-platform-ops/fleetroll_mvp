@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import sys
 import time
-import datetime as dt
+from collections.abc import Iterable
 from curses import error as curses_error
 from curses import wrapper as curses_wrapper
 from importlib.metadata import version as get_version
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from ..audit import iter_audit_records
 from ..constants import TC_WORKERS_FILE_NAME
@@ -60,7 +61,7 @@ HEALTHY   Overall rollout health status
 
 
 def record_matches(
-    record: Dict[str, Any],
+    record: dict[str, Any],
     *,
     hosts: set[str],
     override_path: str,
@@ -88,7 +89,7 @@ def strip_fqdn(hostname: str) -> str:
     return hostname.split(".")[0]
 
 
-def detect_common_fqdn_suffix(hosts: List[str]) -> Optional[str]:
+def detect_common_fqdn_suffix(hosts: list[str]) -> str | None:
     """Detect common FQDN suffix across all hosts.
 
     Returns the common suffix (e.g., '.test.releng.mdc1.mozilla.com') if all hosts
@@ -108,7 +109,7 @@ def detect_common_fqdn_suffix(hosts: List[str]) -> Optional[str]:
     return None  # Multiple suffixes
 
 
-def load_tc_worker_data(path: Path) -> Dict[str, Dict[str, Any]]:
+def load_tc_worker_data(path: Path) -> dict[str, dict[str, Any]]:
     """Load TaskCluster worker data from JSONL file.
 
     Returns a dict mapping short hostname to worker data.
@@ -117,7 +118,7 @@ def load_tc_worker_data(path: Path) -> Dict[str, Dict[str, Any]]:
     if not path.exists():
         return {}
 
-    host_data: Dict[str, Dict[str, Any]] = {}
+    host_data: dict[str, dict[str, Any]] = {}
 
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -139,9 +140,7 @@ def load_tc_worker_data(path: Path) -> Dict[str, Dict[str, Any]]:
                     short_host = strip_fqdn(host)
 
                     # Keep most recent record
-                    if short_host not in host_data or ts > host_data[short_host].get(
-                        "ts", ""
-                    ):
+                    if short_host not in host_data or ts > host_data[short_host].get("ts", ""):
                         host_data[short_host] = record
 
                 except json.JSONDecodeError:
@@ -163,9 +162,7 @@ def clip_cell(value: str, width: int) -> str:
     return f"{value[: width - 3]}..."
 
 
-def render_cell_text(
-    col_name: str, value: str, width: int, *, include_marker: bool = True
-) -> str:
+def render_cell_text(col_name: str, value: str, width: int, *, include_marker: bool = True) -> str:
     """Render a padded cell for a column."""
     if include_marker and col_name == "role" and width >= 2:
         return clip_cell(f"# {value}", width)
@@ -173,10 +170,10 @@ def render_cell_text(
 
 
 def render_row_cells(
-    values: Dict[str, str],
+    values: dict[str, str],
     *,
     columns: list[str],
-    widths: Dict[str, int],
+    widths: dict[str, int],
     include_marker: bool = True,
 ) -> list[str]:
     """Render padded cell strings for a row."""
@@ -224,21 +221,21 @@ def humanize_age(ts_value: str) -> str:
         return ts_value
 
 
-def age_seconds(ts_value: str) -> Optional[int]:
+def age_seconds(ts_value: str) -> int | None:
     """Return age in seconds for an ISO timestamp."""
     if not ts_value or ts_value == "?":
         return None
     try:
         parsed = dt.datetime.fromisoformat(ts_value)
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=dt.timezone.utc)
-        now = dt.datetime.now(dt.timezone.utc)
+            parsed = parsed.replace(tzinfo=dt.UTC)
+        now = dt.datetime.now(dt.UTC)
         return max(int((now - parsed).total_seconds()), 0)
     except ValueError:
         return None
 
 
-def humanize_duration(seconds_value: Optional[int], *, min_unit: str = "s") -> str:
+def humanize_duration(seconds_value: int | None, *, min_unit: str = "s") -> str:
     """Return a humanized duration from seconds.
 
     Args:
@@ -272,11 +269,11 @@ def format_ts_with_age(ts_value: str) -> str:
 
 def build_ok_row_values(
     host: str,
-    record: Dict[str, Any],
+    record: dict[str, Any],
     *,
-    tc_data: Optional[Dict[str, Any]] = None,
-    fqdn_suffix: Optional[str] = None,
-) -> Dict[str, str]:
+    tc_data: dict[str, Any] | None = None,
+    fqdn_suffix: str | None = None,
+) -> dict[str, str]:
     """Build string values for an OK monitor row."""
     # Strip common FQDN suffix if provided
     display_host = host
@@ -346,10 +343,10 @@ def build_ok_row_values(
             try:
                 scan_dt = dt.datetime.fromisoformat(scan_ts)
                 if scan_dt.tzinfo is None:
-                    scan_dt = scan_dt.replace(tzinfo=dt.timezone.utc)
+                    scan_dt = scan_dt.replace(tzinfo=dt.UTC)
                 last_active_dt = dt.datetime.fromisoformat(last_date_active)
                 if last_active_dt.tzinfo is None:
-                    last_active_dt = last_active_dt.replace(tzinfo=dt.timezone.utc)
+                    last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
                 tc_last_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
             except (ValueError, AttributeError):
                 pass
@@ -377,8 +374,8 @@ def build_ok_row_values(
             try:
                 parsed = dt.datetime.fromisoformat(quarantine_until)
                 if parsed.tzinfo is None:
-                    parsed = parsed.replace(tzinfo=dt.timezone.utc)
-                now = dt.datetime.now(dt.timezone.utc)
+                    parsed = parsed.replace(tzinfo=dt.UTC)
+                now = dt.datetime.now(dt.UTC)
                 if parsed > now:
                     tc_quar = "YES"
             except (ValueError, AttributeError):
@@ -393,10 +390,10 @@ def build_ok_row_values(
             try:
                 scan_dt = dt.datetime.fromisoformat(scan_ts)
                 if scan_dt.tzinfo is None:
-                    scan_dt = scan_dt.replace(tzinfo=dt.timezone.utc)
+                    scan_dt = scan_dt.replace(tzinfo=dt.UTC)
                 last_active_dt = dt.datetime.fromisoformat(last_date_active)
                 if last_active_dt.tzinfo is None:
-                    last_active_dt = last_active_dt.replace(tzinfo=dt.timezone.utc)
+                    last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
                 delta_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
                 tc_last = humanize_duration(delta_s)
             except (ValueError, AttributeError):
@@ -409,39 +406,29 @@ def build_ok_row_values(
             try:
                 scan_dt = dt.datetime.fromisoformat(scan_ts)
                 if scan_dt.tzinfo is None:
-                    scan_dt = scan_dt.replace(tzinfo=dt.timezone.utc)
+                    scan_dt = scan_dt.replace(tzinfo=dt.UTC)
                 task_started_dt = dt.datetime.fromisoformat(task_started)
                 if task_started_dt.tzinfo is None:
-                    task_started_dt = task_started_dt.replace(tzinfo=dt.timezone.utc)
+                    task_started_dt = task_started_dt.replace(tzinfo=dt.UTC)
 
                 if task_resolved:
                     # Completed: show duration (resolved - started)
                     task_resolved_dt = dt.datetime.fromisoformat(task_resolved)
                     if task_resolved_dt.tzinfo is None:
-                        task_resolved_dt = task_resolved_dt.replace(
-                            tzinfo=dt.timezone.utc
-                        )
-                    duration_s = max(
-                        int((task_resolved_dt - task_started_dt).total_seconds()), 0
-                    )
+                        task_resolved_dt = task_resolved_dt.replace(tzinfo=dt.UTC)
+                    duration_s = max(int((task_resolved_dt - task_started_dt).total_seconds()), 0)
                     tc_j_sf = humanize_duration(duration_s)
                 else:
                     # In progress: show time since start with trailing dash
-                    start_age_s = max(
-                        int((scan_dt - task_started_dt).total_seconds()), 0
-                    )
+                    start_age_s = max(int((scan_dt - task_started_dt).total_seconds()), 0)
                     tc_j_sf = f"{humanize_duration(start_age_s)} -"
             except (ValueError, AttributeError):
                 pass
 
     # DATA: Combined audit/tc ages (use minutes as minimum unit)
     audit_age = age_seconds(record.get("ts", "?"))
-    audit_str = (
-        humanize_duration(audit_age, min_unit="m") if audit_age is not None else "-"
-    )
-    tc_str = (
-        humanize_duration(tc_ts_age, min_unit="m") if tc_ts_age is not None else "-"
-    )
+    audit_str = humanize_duration(audit_age, min_unit="m") if audit_age is not None else "-"
+    tc_str = humanize_duration(tc_ts_age, min_unit="m") if tc_ts_age is not None else "-"
     data = f"{audit_str}/{tc_str}"
 
     return {
@@ -466,12 +453,12 @@ def build_ok_row_values(
 
 def build_row_values(
     host: str,
-    record: Optional[Dict[str, Any]],
+    record: dict[str, Any] | None,
     *,
-    last_ok: Optional[Dict[str, Any]] = None,
-    tc_data: Optional[Dict[str, Any]] = None,
-    fqdn_suffix: Optional[str] = None,
-) -> Dict[str, str]:
+    last_ok: dict[str, Any] | None = None,
+    tc_data: dict[str, Any] | None = None,
+    fqdn_suffix: str | None = None,
+) -> dict[str, str]:
     """Build string values for a monitor row."""
     # Strip common FQDN suffix if provided
     display_host = host
@@ -504,9 +491,7 @@ def build_row_values(
     if not record.get("ok"):
         err = record.get("error") or record.get("stderr") or "error"
         if last_ok and last_ok.get("ok"):
-            values = build_ok_row_values(
-                host, last_ok, tc_data=tc_data, fqdn_suffix=fqdn_suffix
-            )
+            values = build_ok_row_values(host, last_ok, tc_data=tc_data, fqdn_suffix=fqdn_suffix)
             values["status"] = "FAIL"
             values["err"] = err
             return values
@@ -514,9 +499,7 @@ def build_row_values(
         if tc_data and tc_data.get("ts"):
             tc_str = humanize_duration(age_seconds(tc_data.get("ts")), min_unit="m")
         audit_age = age_seconds(record.get("ts", "?"))
-        audit_str = (
-            humanize_duration(audit_age, min_unit="m") if audit_age is not None else "-"
-        )
+        audit_str = humanize_duration(audit_age, min_unit="m") if audit_age is not None else "-"
         return {
             "status": "FAIL",
             "host": display_host,
@@ -540,8 +523,8 @@ def build_row_values(
 
 
 def resolve_last_ok_ts(
-    record: Optional[Dict[str, Any]], *, last_ok: Optional[Dict[str, Any]]
-) -> Optional[str]:
+    record: dict[str, Any] | None, *, last_ok: dict[str, Any] | None
+) -> str | None:
     """Resolve the timestamp to use for LAST_OK field coloring."""
     if record is None:
         return None
@@ -554,15 +537,15 @@ def resolve_last_ok_ts(
 
 def compute_columns_and_widths(
     *,
-    hosts: List[str],
-    latest: Dict[str, Dict[str, Any]],
-    latest_ok: Optional[Dict[str, Dict[str, Any]]] = None,
-    tc_data: Optional[Dict[str, Dict[str, Any]]] = None,
+    hosts: list[str],
+    latest: dict[str, dict[str, Any]],
+    latest_ok: dict[str, dict[str, Any]] | None = None,
+    tc_data: dict[str, dict[str, Any]] | None = None,
     max_width: int,
     cap_widths: bool = True,
     sep_len: int = 1,
-    fqdn_suffix: Optional[str] = None,
-) -> tuple[list[str], Dict[str, int]]:
+    fqdn_suffix: str | None = None,
+) -> tuple[list[str], dict[str, int]]:
     """Compute columns and widths that fit within max_width."""
     columns = [
         "host",
@@ -665,14 +648,14 @@ def compute_columns_and_widths(
 
 def format_monitor_row(
     host: str,
-    record: Optional[Dict[str, Any]],
+    record: dict[str, Any] | None,
     *,
-    last_ok: Optional[Dict[str, Any]] = None,
-    tc_data: Optional[Dict[str, Any]] = None,
+    last_ok: dict[str, Any] | None = None,
+    tc_data: dict[str, Any] | None = None,
     columns: list[str],
-    widths: Dict[str, int],
+    widths: dict[str, int],
     col_sep: str = " ",
-    fqdn_suffix: Optional[str] = None,
+    fqdn_suffix: str | None = None,
 ) -> str:
     """Format a single table row for a host."""
     values = build_row_values(
@@ -684,17 +667,17 @@ def format_monitor_row(
 
 def render_monitor_lines(
     *,
-    hosts: List[str],
-    latest: Dict[str, Dict[str, Any]],
-    latest_ok: Optional[Dict[str, Dict[str, Any]]] = None,
-    tc_data: Optional[Dict[str, Dict[str, Any]]] = None,
+    hosts: list[str],
+    latest: dict[str, dict[str, Any]],
+    latest_ok: dict[str, dict[str, Any]] | None = None,
+    tc_data: dict[str, dict[str, Any]] | None = None,
     max_width: int,
     cap_widths: bool = True,
     col_sep: str = " ",
     start: int = 0,
-    limit: Optional[int] = None,
-    fqdn_suffix: Optional[str] = None,
-) -> tuple[str, List[str]]:
+    limit: int | None = None,
+    fqdn_suffix: str | None = None,
+) -> tuple[str, list[str]]:
     """Render monitor header + lines in sorted host order."""
     sorted_hosts = sorted(hosts)
     tc_data = tc_data or {}
@@ -746,12 +729,12 @@ def render_monitor_lines(
 
 
 def load_latest_records(
-    path: Path, *, hosts: List[str], override_path: str, role_path: str, vault_path: str
-) -> tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    path: Path, *, hosts: list[str], override_path: str, role_path: str, vault_path: str
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     """Load the latest matching audit record per host."""
     host_set = set(hosts)
-    latest: Dict[str, Dict[str, Any]] = {}
-    latest_ok: Dict[str, Dict[str, Any]] = {}
+    latest: dict[str, dict[str, Any]] = {}
+    latest_ok: dict[str, dict[str, Any]] = {}
     for record in iter_audit_records(path):
         if record_matches(
             record,
@@ -769,13 +752,13 @@ def load_latest_records(
 def tail_audit_log(
     path: Path,
     *,
-    hosts: List[str],
+    hosts: list[str],
     override_path: str,
     role_path: str,
     vault_path: str,
     start_at_end: bool = False,
     poll_interval_s: float = 0.5,
-) -> Iterable[Dict[str, Any]]:
+) -> Iterable[dict[str, Any]]:
     """Yield matching audit records appended to the log."""
     host_set = set(hosts)
     file_obj = None
@@ -831,7 +814,7 @@ class AuditLogTailer:
         self,
         path: Path,
         *,
-        hosts: List[str],
+        hosts: list[str],
         override_path: str,
         role_path: str,
         vault_path: str,
@@ -847,7 +830,7 @@ class AuditLogTailer:
         self.inode = None
         self.position = 0
 
-    def poll(self) -> Optional[Dict[str, Any]]:
+    def poll(self) -> dict[str, Any] | None:
         """Return one matching record if available; otherwise None."""
         try:
             stat = self.path.stat()
@@ -895,11 +878,11 @@ class MonitorDisplay:
         self,
         stdscr,
         *,
-        hosts: List[str],
+        hosts: list[str],
         host_source: str,
-        latest: Dict[str, Dict[str, Any]],
-        latest_ok: Dict[str, Dict[str, Any]],
-        tc_data: Dict[str, Dict[str, Any]],
+        latest: dict[str, dict[str, Any]],
+        latest_ok: dict[str, dict[str, Any]],
+        tc_data: dict[str, dict[str, Any]],
         tc_workers_path: Path,
     ) -> None:
         self.stdscr = stdscr
@@ -961,9 +944,7 @@ class MonitorDisplay:
                 curses.color_pair(1) if self.color_enabled else 0
             )
             self.header_data_attr = curses.color_pair(2) if self.color_enabled else 0
-            self.column_attr = curses.A_BOLD | (
-                curses.color_pair(3) if self.color_enabled else 0
-            )
+            self.column_attr = curses.A_BOLD | (curses.color_pair(3) if self.color_enabled else 0)
         except curses_error:
             return
 
@@ -976,7 +957,7 @@ class MonitorDisplay:
         except curses_error:
             return
 
-    def last_ok_attr(self, ts_value: Optional[str]) -> int:
+    def last_ok_attr(self, ts_value: str | None) -> int:
         if not self.color_enabled:
             return 0
         delta_s = age_seconds(ts_value) if ts_value else None
@@ -990,9 +971,7 @@ class MonitorDisplay:
             return self.curses_mod.color_pair(5) | self.curses_mod.A_BOLD
         return self.curses_mod.color_pair(6)
 
-    def threshold_color_attr(
-        self, seconds_value: Optional[int], thresholds: tuple[int, int]
-    ) -> int:
+    def threshold_color_attr(self, seconds_value: int | None, thresholds: tuple[int, int]) -> int:
         """Color by thresholds: green if < thresholds[0], yellow if < thresholds[1], red otherwise.
 
         Args:
@@ -1013,21 +992,19 @@ class MonitorDisplay:
             return self.curses_mod.color_pair(5)  # YELLOW
         return self.curses_mod.color_pair(6)  # RED
 
-    def uptime_attr(self, seconds_value: Optional[int]) -> int:
+    def uptime_attr(self, seconds_value: int | None) -> int:
         """Color uptime: green < 1h, yellow < 6h, red >= 6h."""
         return self.threshold_color_attr(seconds_value, (60 * 60, 6 * 60 * 60))
 
-    def last_ok_attr(self, seconds_value: Optional[int]) -> int:
+    def last_ok_attr(self, seconds_value: int | None) -> int:
         """Color last_ok age: green < 5m, yellow < 30m, red >= 30m."""
         return self.threshold_color_attr(seconds_value, (5 * 60, 30 * 60))
 
-    def tc_last_attr(self, seconds_value: Optional[int]) -> int:
+    def tc_last_attr(self, seconds_value: int | None) -> int:
         """Color TC last active: green < 5m, yellow < 1h, red >= 1h."""
         return self.threshold_color_attr(seconds_value, (5 * 60, 60 * 60))
 
-    def pp_last_attr(
-        self, seconds_value: Optional[int], *, failed: bool = False
-    ) -> int:
+    def pp_last_attr(self, seconds_value: int | None, *, failed: bool = False) -> int:
         """Color PP_LAST: green < 1h (success), yellow < 6h (success), red >= 6h or failed."""
         if not self.color_enabled:
             return 0
@@ -1067,14 +1044,14 @@ class MonitorDisplay:
         self,
         values: Iterable[str],
         *,
-        palette: List[int],
+        palette: list[int],
         base_attr: int = 0,
         seed: int = 0,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         if not self.color_enabled:
             return {}
         ordered = sorted(values)
-        mapping: Dict[str, int] = {}
+        mapping: dict[str, int] = {}
         for idx, value in enumerate(ordered):
             base = palette[(idx + seed) % len(palette)] | base_attr
             attr = base
@@ -1151,7 +1128,7 @@ class MonitorDisplay:
             return True
         return False
 
-    def update_record(self, record: Dict[str, Any]) -> None:
+    def update_record(self, record: dict[str, Any]) -> None:
         self.latest[record["host"]] = record
         if record.get("ok"):
             self.latest_ok[record["host"]] = record
@@ -1167,9 +1144,7 @@ class MonitorDisplay:
         self.offset = min(self.offset, self.max_offset)
         sorted_hosts = sorted(self.hosts)
         total_pages = max((len(self.hosts) + self.page_step - 1) // self.page_step, 1)
-        current_page = min(
-            ((self.offset + self.page_step - 1) // self.page_step) + 1, total_pages
-        )
+        current_page = min(((self.offset + self.page_step - 1) // self.page_step) + 1, total_pages)
         updated_age = age_seconds(self.last_updated) if self.last_updated else None
         updated = humanize_duration(updated_age) if updated_age is not None else "never"
 
@@ -1236,9 +1211,7 @@ class MonitorDisplay:
         # Determine which scrollable columns fit
         visible_scrollable = []
         running_width = 0
-        for col_idx, col in enumerate(
-            scrollable_cols[self.col_offset :], start=self.col_offset
-        ):
+        for col_idx, col in enumerate(scrollable_cols[self.col_offset :], start=self.col_offset):
             col_width = widths[col]
             separator_width = 3 if visible_scrollable else 0
             if running_width + col_width + separator_width <= available_width:
@@ -1301,9 +1274,7 @@ class MonitorDisplay:
             if right_start in header:
                 left_part, right_part = header[9:].rsplit(right_start, 1)
                 self.safe_addstr(0, 9, left_part)
-                self.safe_addstr(
-                    0, 9 + len(left_part), right_start, self.header_data_attr
-                )
+                self.safe_addstr(0, 9 + len(left_part), right_start, self.header_data_attr)
                 self.safe_addstr(
                     0,
                     9 + len(left_part) + len(right_start),
@@ -1380,9 +1351,7 @@ class MonitorDisplay:
             self.curses_mod.color_pair(11),  # yellow
         ]
         sha_colors = self.build_color_map(sha_values, palette=sha_palette, seed=0)
-        vlt_sha_colors = self.build_color_map(
-            vlt_sha_values, palette=sha_palette, seed=4
-        )
+        vlt_sha_colors = self.build_color_map(vlt_sha_values, palette=sha_palette, seed=4)
         role_colors = self.build_color_map(
             role_values, palette=role_palette, base_attr=self.curses_mod.A_BOLD, seed=0
         )
@@ -1400,16 +1369,14 @@ class MonitorDisplay:
                 tc_data=tc_worker_data,
                 fqdn_suffix=self.fqdn_suffix,
             )
-            ts_value = resolve_last_ok_ts(
-                self.latest.get(host), last_ok=self.latest_ok.get(host)
-            )
+            ts_value = resolve_last_ok_ts(self.latest.get(host), last_ok=self.latest_ok.get(host))
             tc_ts_value = tc_worker_data.get("ts") if tc_worker_data else None
             uptime_value = values.get("uptime")
             uptime_s = None
             if uptime_value and uptime_value not in ("-", "?"):
-                observed = (
-                    self.latest_ok.get(host) or self.latest.get(host) or {}
-                ).get("observed", {})
+                observed = (self.latest_ok.get(host) or self.latest.get(host) or {}).get(
+                    "observed", {}
+                )
                 uptime_s = observed.get("uptime_s")
 
             # Calculate TC_LAST in seconds for coloring
@@ -1421,15 +1388,11 @@ class MonitorDisplay:
                     try:
                         scan_dt = dt.datetime.fromisoformat(scan_ts)
                         if scan_dt.tzinfo is None:
-                            scan_dt = scan_dt.replace(tzinfo=dt.timezone.utc)
+                            scan_dt = scan_dt.replace(tzinfo=dt.UTC)
                         last_active_dt = dt.datetime.fromisoformat(last_date_active)
                         if last_active_dt.tzinfo is None:
-                            last_active_dt = last_active_dt.replace(
-                                tzinfo=dt.timezone.utc
-                            )
-                        tc_last_s = max(
-                            int((scan_dt - last_active_dt).total_seconds()), 0
-                        )
+                            last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
+                        tc_last_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
                     except (ValueError, AttributeError):
                         pass
             row_cells = render_row_cells(values, columns=columns, widths=widths)
@@ -1463,9 +1426,7 @@ class MonitorDisplay:
                     continue
                 if col_name == "pp_last":
                     # Get puppet data for coloring (relative to audit time)
-                    host_record = (
-                        self.latest_ok.get(host) or self.latest.get(host) or {}
-                    )
+                    host_record = self.latest_ok.get(host) or self.latest.get(host) or {}
                     observed = host_record.get("observed", {})
                     pp_epoch = observed.get("puppet_last_run_epoch")
                     pp_success = observed.get("puppet_success")
@@ -1569,12 +1530,8 @@ class MonitorDisplay:
 
         # Calculate popup dimensions
         content_width = max(len(line) for line in all_lines)
-        popup_width = (
-            content_width + 2 + (h_pad * 2)
-        )  # 2 for borders, h_pad on each side
-        popup_height = (
-            len(all_lines) + 2 + (v_pad * 2)
-        )  # 2 for borders, v_pad top and bottom
+        popup_width = content_width + 2 + (h_pad * 2)  # 2 for borders, h_pad on each side
+        popup_height = len(all_lines) + 2 + (v_pad * 2)  # 2 for borders, v_pad top and bottom
 
         # Center the popup
         start_y = max((height - popup_height) // 2, 0)
@@ -1588,15 +1545,11 @@ class MonitorDisplay:
 
         # Get attributes for popup (black on white - pair 18)
         popup_attr = (
-            self.curses_mod.color_pair(18)
-            if self.color_enabled
-            else self.curses_mod.A_REVERSE
+            self.curses_mod.color_pair(18) if self.color_enabled else self.curses_mod.A_REVERSE
         )
         # Yellow text on white background (color pair 17)
         mascot_attr = (
-            self.curses_mod.color_pair(17)
-            if self.color_enabled
-            else self.curses_mod.A_REVERSE
+            self.curses_mod.color_pair(17) if self.color_enabled else self.curses_mod.A_REVERSE
         )
 
         # Draw top border
@@ -1625,9 +1578,7 @@ class MonitorDisplay:
                 padding_needed = content_width - len(line)
                 left_pad = padding_needed // 2
                 right_pad = padding_needed - left_pad
-                padded = (
-                    " " * h_pad + " " * left_pad + line + " " * right_pad + " " * h_pad
-                )
+                padded = " " * h_pad + " " * left_pad + line + " " * right_pad + " " * h_pad
             else:
                 padded = " " * h_pad + line.ljust(content_width) + " " * h_pad
             if len(padded) > popup_width - 2:

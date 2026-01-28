@@ -8,7 +8,6 @@ import ipaddress
 import os
 import re
 from pathlib import Path
-from typing import Dict, List
 
 from .constants import AUDIT_DIR_NAME, AUDIT_FILE_NAME
 from .exceptions import FleetRollError, UserError
@@ -16,7 +15,7 @@ from .exceptions import FleetRollError, UserError
 
 def utc_now_iso() -> str:
     """Return current UTC time in ISO format without microseconds."""
-    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
+    return dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
 
 
 def sha256_hex(data: bytes) -> str:
@@ -45,9 +44,9 @@ def default_audit_log_path() -> Path:
     return home / AUDIT_DIR_NAME / AUDIT_FILE_NAME
 
 
-def parse_kv_lines(output: str) -> Dict[str, str]:
+def parse_kv_lines(output: str) -> dict[str, str]:
     """Parse key=value lines from string output."""
-    d: Dict[str, str] = {}
+    d: dict[str, str] = {}
     for line in output.splitlines():
         if "=" in line:
             k, v = line.split("=", 1)
@@ -63,7 +62,7 @@ def is_host_file(host_arg: str) -> bool:
     return p.exists() and p.is_file()
 
 
-def parse_host_list(file_path: Path) -> List[str]:
+def parse_host_list(file_path: Path) -> list[str]:
     """Parse host list file. One host per line, ignore comments (#) and blank lines."""
     if not (file_path.exists() and file_path.is_file()):
         raise FleetRollError(f"Host list file not found: {file_path}")
@@ -115,6 +114,5 @@ def ensure_host_or_file(host_arg: str) -> None:
         return
     if not (p.exists() and p.is_file()):
         raise UserError(
-            "HOST_OR_FILE does not look like a hostname or IP and file was not found: "
-            f"{host_arg}"
+            f"HOST_OR_FILE does not look like a hostname or IP and file was not found: {host_arg}"
         )

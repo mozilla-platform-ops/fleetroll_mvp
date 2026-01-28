@@ -12,7 +12,11 @@
       "Bash(uv run fleetroll --help:*)",
       "Bash(uv run pytest:*)",
       "Bash(wc:*)",
-      "Bash(uv run fleetroll debug-host-script:*)"
+      "Bash(uv run fleetroll debug-host-script:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv run ruff check:*)",
+      "Bash(uv run ruff format:*)",
+      "Bash(make lint:*)"
     ]
   }
 }

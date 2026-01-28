@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from ..constants import OVERRIDES_DIR_NAME
 from ..exceptions import UserError
@@ -19,7 +19,7 @@ def resolve_override_path(sha_prefix: str, *, overrides_dir: Path) -> Path:
     if not overrides_dir.exists():
         raise UserError(f"Overrides directory not found: {overrides_dir}")
 
-    matches: List[Path] = []
+    matches: list[Path] = []
     for entry in overrides_dir.iterdir():
         if entry.is_symlink():
             continue
@@ -39,7 +39,7 @@ def resolve_override_humanhash(human_hash: str, *, overrides_dir: Path) -> Path:
     if not overrides_dir.exists():
         raise UserError(f"Overrides directory not found: {overrides_dir}")
 
-    matches: List[tuple[Path, str]] = []
+    matches: list[tuple[Path, str]] = []
     for entry in overrides_dir.iterdir():
         if entry.is_symlink():
             continue
@@ -66,13 +66,9 @@ def cmd_override_show(args: Args) -> None:
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
     overrides_dir = audit_log.parent / OVERRIDES_DIR_NAME
     try:
-        override_path = resolve_override_path(
-            args.sha_prefix, overrides_dir=overrides_dir
-        )
+        override_path = resolve_override_path(args.sha_prefix, overrides_dir=overrides_dir)
     except UserError as exc:
         if "No override file found for prefix" not in str(exc):
             raise
-        override_path = resolve_override_humanhash(
-            args.sha_prefix, overrides_dir=overrides_dir
-        )
+        override_path = resolve_override_humanhash(args.sha_prefix, overrides_dir=overrides_dir)
     print(override_path.read_text(encoding="utf-8", errors="replace"), end="")

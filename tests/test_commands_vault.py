@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from fleetroll.cli import Args
 from fleetroll.commands.vault import cmd_host_set_vault
 from fleetroll.exceptions import UserError
@@ -16,9 +15,7 @@ from fleetroll.exceptions import UserError
 class TestCmdHostSetVault:
     """Tests for cmd_host_set_vault function."""
 
-    def test_dry_run_without_confirm(
-        self, mocker, mock_args_vault: Args, tmp_dir: Path
-    ):
+    def test_dry_run_without_confirm(self, mocker, mock_args_vault: Args, tmp_dir: Path):
         """Prints summary and exits when --confirm not provided."""
         content_file = tmp_dir / "vault.yaml"
         content_file.write_text("vault: data\n")
@@ -27,9 +24,7 @@ class TestCmdHostSetVault:
         mock_args_vault.json = False
         mock_run_ssh = mocker.patch("fleetroll.commands.vault.run_ssh")
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_set_vault(mock_args_vault)
 
@@ -43,9 +38,7 @@ class TestCmdHostSetVault:
         with pytest.raises(UserError, match="--from-file"):
             cmd_host_set_vault(mock_args_vault)
 
-    def test_successful_set_with_from_file(
-        self, mocker, mock_args_vault: Args, tmp_dir: Path
-    ):
+    def test_successful_set_with_from_file(self, mocker, mock_args_vault: Args, tmp_dir: Path):
         """Successfully sets vault with --from-file."""
         content_file = tmp_dir / "vault.yaml"
         content_file.write_text("vault: data\n")
@@ -58,9 +51,7 @@ class TestCmdHostSetVault:
         mock_run_ssh.return_value = (0, "", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_set_vault(mock_args_vault)
 

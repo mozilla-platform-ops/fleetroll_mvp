@@ -7,7 +7,6 @@ import time
 from pathlib import Path
 
 import pytest
-
 from fleetroll.cli import Args
 from fleetroll.commands.audit import audit_single_host_with_retry
 

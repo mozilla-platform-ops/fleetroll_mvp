@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from fleetroll.cli import Args
 from fleetroll.constants import CONTENT_SENTINEL
 from fleetroll.ssh import (

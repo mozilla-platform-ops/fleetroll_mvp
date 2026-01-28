@@ -13,10 +13,10 @@ from .vault import cmd_host_set_vault, cmd_vault_show
 __all__ = [
     "cmd_host_audit",
     "cmd_host_monitor",
-    "cmd_override_show",
     "cmd_host_set",
-    "cmd_tc_fetch",
-    "cmd_host_unset",
     "cmd_host_set_vault",
+    "cmd_host_unset",
+    "cmd_override_show",
+    "cmd_tc_fetch",
     "cmd_vault_show",
 ]

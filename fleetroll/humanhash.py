@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import operator
+from collections.abc import Iterable
 from functools import reduce
-from typing import Iterable, List
 
 DEFAULT_WORDLIST = (
     "ack",
@@ -266,7 +266,7 @@ DEFAULT_WORDLIST = (
 )
 
 
-def _compress(values: Iterable[int], target: int) -> List[int]:
+def _compress(values: Iterable[int], target: int) -> list[int]:
     """Compress values to a fixed target length."""
     values = list(values)
     length = len(values)

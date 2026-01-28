@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from fleetroll.exceptions import FleetRollError
 from fleetroll.taskcluster import (
     TaskClusterCredentials,
@@ -22,9 +21,7 @@ class TestLoadTCCredentials:
     def test_load_from_default_path(self, tmp_path: Path, monkeypatch):
         """Load credentials from default ~/.tc_token path."""
         cred_file = tmp_path / ".tc_token"
-        cred_file.write_text(
-            json.dumps({"clientId": "test-client", "accessToken": "test-token"})
-        )
+        cred_file.write_text(json.dumps({"clientId": "test-client", "accessToken": "test-token"}))
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("TC_TOKEN", raising=False)
 
@@ -132,14 +129,9 @@ class TestFetchWorkers:
         call_args = mock_post.call_args
         assert call_args[0][0] == "https://firefox-ci-tc.services.mozilla.com/graphql"
         assert call_args[1]["headers"]["Content-Type"] == "application/json"
-        assert (
-            "Authorization" not in call_args[1]["headers"]
-        )  # GraphQL endpoint is public
+        assert "Authorization" not in call_args[1]["headers"]  # GraphQL endpoint is public
         assert call_args[1]["json"]["variables"]["provisionerId"] == "releng-hardware"
-        assert (
-            call_args[1]["json"]["variables"]["workerType"]
-            == "gecko-t-linux-talos-1804"
-        )
+        assert call_args[1]["json"]["variables"]["workerType"] == "gecko-t-linux-talos-1804"
 
     @patch("fleetroll.taskcluster.requests.post")
     def test_fetch_workers_partial_data_with_errors(self, mock_post):

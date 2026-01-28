@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from fleetroll.audit import append_jsonl, process_audit_result, store_override_file
 from fleetroll.cli import Args
 from fleetroll.constants import CONTENT_SENTINEL
@@ -199,9 +197,7 @@ content
         assert meta["size"] == "256"
         assert meta["mtime_epoch"] == "1700000000"
 
-    def test_audit_log_excludes_override_contents(
-        self, tmp_dir: Path, mock_args_audit: Args
-    ):
+    def test_audit_log_excludes_override_contents(self, tmp_dir: Path, mock_args_audit: Args):
         """Audit log stores sha only, not raw override contents."""
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
@@ -335,9 +331,7 @@ OVERRIDE_PRESENT=0
         record = json.loads(audit_log.read_text().strip())
         assert record["host"] == "test.example.com"
 
-    def test_writes_to_audit_log_with_lock(
-        self, tmp_dir: Path, mock_args_audit: Args, mocker
-    ):
+    def test_writes_to_audit_log_with_lock(self, tmp_dir: Path, mock_args_audit: Args, mocker):
         """Appends result to audit log file while holding lock."""
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
@@ -365,9 +359,7 @@ OVERRIDE_PRESENT=0
         assert args[0] == audit_log
         assert args[1]["host"] == "test.example.com"
 
-    def test_stores_override_file_when_dir_provided(
-        self, tmp_dir: Path, mock_args_audit: Args
-    ):
+    def test_stores_override_file_when_dir_provided(self, tmp_dir: Path, mock_args_audit: Args):
         """Stores override content to file when overrides_dir provided."""
         audit_log = tmp_dir / "audit.jsonl"
         overrides_dir = tmp_dir / "overrides"
@@ -438,9 +430,7 @@ PP_SUCCESS=0
         assert result["observed"]["puppet_last_run_epoch"] == 1706140800
         assert result["observed"]["puppet_success"] is False
 
-    def test_puppet_fields_none_when_missing(
-        self, tmp_dir: Path, mock_args_audit: Args
-    ):
+    def test_puppet_fields_none_when_missing(self, tmp_dir: Path, mock_args_audit: Args):
         """Puppet fields are None when not in output."""
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)

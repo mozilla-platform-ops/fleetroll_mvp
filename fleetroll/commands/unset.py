@@ -10,7 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -34,20 +34,18 @@ def unset_override_for_host(
     host: str,
     *,
     args: Args,
-    ssh_opts: List[str],
+    ssh_opts: list[str],
     remote_cmd: str,
     actor: str,
     audit_log: Path,
     backup_suffix: str,
     log_lock: threading.Lock | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Unset override file for a single host and append audit log."""
-    rc, out, err = run_ssh(
-        host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout
-    )
+    rc, out, err = run_ssh(host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout)
     removed = "REMOVED=1" in out
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "ts": utc_now_iso(),
         "actor": actor,
         "action": "host.unset_override",
@@ -74,7 +72,7 @@ def unset_override_for_host(
     return result
 
 
-def format_unset_line(result: Dict[str, Any]) -> str:
+def format_unset_line(result: dict[str, Any]) -> str:
     """Format a single-line status for batch unset results."""
     host = result.get("host", "?")
     if result.get("ok"):
@@ -136,7 +134,7 @@ def cmd_host_unset(args: Args) -> None:
             print("Run again with --confirm to apply changes.")
         return
 
-    backup_suffix = dt.datetime.now(dt.timezone.utc).strftime(BACKUP_TIME_FORMAT)
+    backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)
     remote_cmd = remote_unset_script(
         override_path=args.override_path,
         backup=not args.no_backup,
@@ -164,7 +162,7 @@ def cmd_host_unset(args: Args) -> None:
 
         if rc != 0:
             print(
-                f"[{args.host}] unset override FAILED (rc={rc}). stderr:\n{result.get('stderr','')}",
+                f"[{args.host}] unset override FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -174,16 +172,14 @@ def cmd_host_unset(args: Args) -> None:
             if not args.no_backup:
                 print(f"backup: {args.override_path}.bak.{backup_suffix}")
         else:
-            print(
-                f"[{args.host}] override did not exist at {args.override_path} (no change)"
-            )
+            print(f"[{args.host}] override did not exist at {args.override_path} (no change)")
 
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")
         return
 
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     log_lock = threading.Lock()
     show_progress = not args.json
     start_time = time.monotonic()

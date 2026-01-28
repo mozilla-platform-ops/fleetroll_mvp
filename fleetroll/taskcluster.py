@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import requests
 
@@ -59,8 +59,7 @@ def load_tc_credentials() -> TaskClusterCredentials:
 
     if not client_id or not access_token:
         raise FleetRollError(
-            f"Missing clientId or accessToken in {cred_path}. "
-            f"File must contain both fields."
+            f"Missing clientId or accessToken in {cred_path}. File must contain both fields."
         )
 
     return TaskClusterCredentials(client_id=client_id, access_token=access_token)
@@ -71,7 +70,7 @@ def fetch_workers(
     worker_type: str,
     credentials: TaskClusterCredentials,
     verbose: bool = False,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Fetch workers for a given provisioner/workerType using GraphQL API.
 
     Args:
@@ -152,14 +151,12 @@ def fetch_workers(
             }
 
             if verbose:
-                print(f"\n[DEBUG] GraphQL Request:")
+                print("\n[DEBUG] GraphQL Request:")
                 print(f"  URL: {graphql_url}")
                 print(f"  Variables: {json.dumps(variables, indent=2)}")
                 print(f"  Headers: {json.dumps(headers, indent=2)}")
 
-            response = requests.post(
-                graphql_url, json=payload, headers=headers, timeout=30
-            )
+            response = requests.post(graphql_url, json=payload, headers=headers, timeout=30)
 
             # Check for HTTP errors
             if response.status_code != 200:
@@ -179,7 +176,7 @@ def fetch_workers(
             if "data" not in data or not data["data"]:
                 if "errors" in data:
                     raise FleetRollError(f"GraphQL errors: {data['errors']}")
-                raise FleetRollError(f"No data returned from GraphQL API")
+                raise FleetRollError("No data returned from GraphQL API")
 
             # GraphQL can return partial data with errors (e.g., deleted tasks)
             # We'll use whatever data we got and log errors if verbose

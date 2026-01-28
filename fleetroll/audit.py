@@ -6,8 +6,9 @@ import json
 import os
 import tempfile
 import threading
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
+from typing import TYPE_CHECKING, Any
 
 from .constants import CONTENT_PREFIX_LEN, CONTENT_PREFIX_STEP, CONTENT_SENTINEL
 from .exceptions import FleetRollError
@@ -17,14 +18,14 @@ if TYPE_CHECKING:
     from .cli import Args
 
 
-def append_jsonl(path: Path, record: Dict[str, Any]) -> None:
+def append_jsonl(path: Path, record: dict[str, Any]) -> None:
     """Append a JSON record to a JSONL file."""
     ensure_parent_dir(path)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, sort_keys=True) + "\n")
 
 
-def iter_audit_records(path: Path) -> Iterable[Dict[str, Any]]:
+def iter_audit_records(path: Path) -> Iterable[dict[str, Any]]:
     """Yield JSONL records from the audit log, skipping invalid lines."""
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -61,10 +62,9 @@ def store_content_file(content: str, sha256: str, target_dir: Path) -> Path:
             if existing_content == content:
                 # Same content, return existing path (idempotent)
                 return target_path
-            else:
-                # Collision: different content, extend prefix
-                prefix_len += CONTENT_PREFIX_STEP
-                continue
+            # Collision: different content, extend prefix
+            prefix_len += CONTENT_PREFIX_STEP
+            continue
 
         # File doesn't exist, write it atomically
         # Create temp file in same directory for atomic rename
@@ -81,9 +81,7 @@ def store_content_file(content: str, sha256: str, target_dir: Path) -> Path:
             raise
 
     # Should never reach here (would need 64-char collision)
-    raise FleetRollError(
-        f"Unable to store content file: too many collisions for SHA {sha256}"
-    )
+    raise FleetRollError(f"Unable to store content file: too many collisions for SHA {sha256}")
 
 
 def store_override_file(content: str, sha256: str, overrides_dir: Path) -> Path:
@@ -91,9 +89,9 @@ def store_override_file(content: str, sha256: str, overrides_dir: Path) -> Path:
     return store_content_file(content, sha256, overrides_dir)
 
 
-def load_latest_vault_checksums(path: Path) -> Dict[str, str]:
+def load_latest_vault_checksums(path: Path) -> dict[str, str]:
     """Return latest vault sha256 per host from audit log."""
-    latest: Dict[str, str] = {}
+    latest: dict[str, str] = {}
     try:
         with path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -146,12 +144,12 @@ def process_audit_result(
     args: Args,
     audit_log: Path,
     actor: str,
-    overrides_dir: Optional[Path] = None,
-    vault_sha256: Optional[str] = None,
-    vault_present: Optional[bool] = None,
-    vault_meta: Optional[Dict[str, str]] = None,
-    log_lock: Optional[threading.Lock] = None,
-) -> Dict[str, Any]:
+    overrides_dir: Path | None = None,
+    vault_sha256: str | None = None,
+    vault_present: bool | None = None,
+    vault_meta: dict[str, str] | None = None,
+    log_lock: threading.Lock | None = None,
+) -> dict[str, Any]:
     """Process audit SSH result into structured dict."""
     # Split content if present
     sentinel = CONTENT_SENTINEL
@@ -162,9 +160,7 @@ def process_audit_result(
 
     info = parse_kv_lines(header)
     override_present = info.get("OVERRIDE_PRESENT") == "1"
-    vault_present = (
-        info.get("VLT_PRESENT") == "1" if "VLT_PRESENT" in info else vault_present
-    )
+    vault_present = info.get("VLT_PRESENT") == "1" if "VLT_PRESENT" in info else vault_present
     role_present = info.get("ROLE_PRESENT") == "1"
     uptime_s = None
     uptime_raw = info.get("UPTIME_S")
@@ -209,7 +205,7 @@ def process_audit_result(
             "mtime_epoch": info.get("VLT_MTIME"),
         }
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "ts": utc_now_iso(),
         "actor": actor,
         "action": "host.audit",

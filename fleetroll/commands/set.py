@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -39,7 +39,7 @@ def set_override_for_host(
     host: str,
     *,
     args: Args,
-    ssh_opts: List[str],
+    ssh_opts: list[str],
     remote_cmd: str,
     data: bytes,
     actor: str,
@@ -48,7 +48,7 @@ def set_override_for_host(
     backup_suffix: str,
     source: str,
     log_lock: threading.Lock | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Set override file for a single host and append audit log."""
     rc, out, err = run_ssh(
         host,
@@ -58,7 +58,7 @@ def set_override_for_host(
         timeout_s=args.timeout,
     )
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "ts": utc_now_iso(),
         "actor": actor,
         "action": "host.set_override",
@@ -87,7 +87,7 @@ def set_override_for_host(
     return result
 
 
-def format_set_line(result: Dict[str, Any]) -> str:
+def format_set_line(result: dict[str, Any]) -> str:
     """Format a single-line status for batch set results."""
     host = result.get("host", "?")
     if result.get("ok"):
@@ -195,7 +195,7 @@ def cmd_host_set(args: Args) -> None:
     if args.validate:
         validate_override_syntax(data)
 
-    backup_suffix = dt.datetime.now(dt.timezone.utc).strftime(BACKUP_TIME_FORMAT)
+    backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)
 
     remote_cmd = remote_set_script(
         override_path=args.override_path,
@@ -228,7 +228,7 @@ def cmd_host_set(args: Args) -> None:
 
         if rc != 0:
             print(
-                f"[{args.host}] set override FAILED (rc={rc}). stderr:\n{result.get('stderr','')}",
+                f"[{args.host}] set override FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -242,7 +242,7 @@ def cmd_host_set(args: Args) -> None:
         print(f"Audit log: {audit_log}")
         return
 
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     log_lock = threading.Lock()
     show_progress = not args.json
     start_time = time.monotonic()

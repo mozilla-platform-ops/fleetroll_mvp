@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
-
 from fleetroll.cli import Args
 from fleetroll.commands.set import cmd_host_set
 from fleetroll.exceptions import UserError
@@ -31,9 +29,7 @@ class TestCmdHostSet:
         mock_args_set.json = False
         mock_run_ssh = mocker.patch("fleetroll.commands.set.run_ssh")
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_set(mock_args_set)
 
@@ -47,9 +43,7 @@ class TestCmdHostSet:
         with pytest.raises(UserError, match="--from-file"):
             cmd_host_set(mock_args_set)
 
-    def test_successful_set_with_from_file(
-        self, mocker, mock_args_set: Args, tmp_dir: Path
-    ):
+    def test_successful_set_with_from_file(self, mocker, mock_args_set: Args, tmp_dir: Path):
         """Successfully sets override with --from-file."""
         content_file = tmp_dir / "content.txt"
         content_file.write_text("file content here")
@@ -62,9 +56,7 @@ class TestCmdHostSet:
         mock_run_ssh.return_value = (0, "", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_set(mock_args_set)
 
@@ -72,9 +64,7 @@ class TestCmdHostSet:
         call_kwargs = mock_run_ssh.call_args[1]
         assert call_kwargs["input_bytes"] == b"file content here"
 
-    def test_includes_sha256_in_result(
-        self, mocker, mock_args_set: Args, tmp_dir: Path
-    ):
+    def test_includes_sha256_in_result(self, mocker, mock_args_set: Args, tmp_dir: Path):
         """Result includes SHA256 of content."""
         content_file = tmp_dir / "content.txt"
         content_file.write_text("test content")
@@ -86,9 +76,7 @@ class TestCmdHostSet:
         mock_run_ssh.return_value = (0, "", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_set(mock_args_set)
 
@@ -109,9 +97,7 @@ class TestCmdHostSet:
         mock_run_ssh.return_value = (0, "", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_set(mock_args_set)
 
@@ -132,9 +118,7 @@ class TestCmdHostSet:
         mock_run_ssh.return_value = (0, "", "")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         cmd_host_set(mock_args_set)
 
@@ -153,9 +137,7 @@ class TestCmdHostSet:
         mock_run_ssh.return_value = (1, "", "Permission denied")
 
         captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0])
-        )
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
         with pytest.raises(SystemExit) as excinfo:
             cmd_host_set(mock_args_set)

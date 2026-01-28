@@ -1,3 +1,5 @@
+from datetime import UTC
+
 from fleetroll.commands.monitor import (
     build_row_values,
     clip_cell,
@@ -51,9 +53,7 @@ def test_render_row_cells_alignment() -> None:
         "healthy": "HEALTHY",
         "data": "DATA",
     }
-    header_cells = render_row_cells(
-        labels, columns=columns, widths=widths, include_marker=False
-    )
+    header_cells = render_row_cells(labels, columns=columns, widths=widths, include_marker=False)
     values = build_row_values(hosts[0], record, last_ok=record)
     row_cells = render_row_cells(values, columns=columns, widths=widths)
 
@@ -137,8 +137,8 @@ def test_render_monitor_lines_sorted_and_sliced() -> None:
         },
     }
     hosts = ["host-b", "host-a", "host-c"]
-    latest = {host: record for host in hosts}
-    latest_ok = {host: record for host in hosts}
+    latest = dict.fromkeys(hosts, record)
+    latest_ok = dict.fromkeys(hosts, record)
     header, lines = render_monitor_lines(
         hosts=hosts,
         latest=latest,
@@ -193,9 +193,9 @@ def test_record_matches_vault_path() -> None:
 
 def test_quarantine_status_checks_future():
     """TC_QUAR should only show YES if quarantine time is in the future."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     past_time = (now - timedelta(hours=1)).isoformat()
     future_time = (now + timedelta(hours=1)).isoformat()
 
@@ -231,9 +231,9 @@ def test_quarantine_status_checks_future():
 
 def test_puppet_columns_applied_healthy():
     """Test PP_LAST, APPLIED, HEALTHY columns."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     now_epoch = int(now.timestamp())
 
     # Override present, puppet ran after mtime, succeeded -> APPLIED=Y

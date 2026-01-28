@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from fleetroll.cli import Args
 from fleetroll.commands.vault import cmd_vault_show, resolve_vault_humanhash
 from fleetroll.exceptions import UserError
@@ -41,9 +40,7 @@ def test_vault_show_humanhash_ambiguous(tmp_dir: Path, monkeypatch) -> None:
     _write_vault(vault_dir, "one\n")
     _write_vault(vault_dir, "two\n")
 
-    monkeypatch.setattr(
-        "fleetroll.commands.vault.humanize", lambda *_a, **_k: "same-hash"
-    )
+    monkeypatch.setattr("fleetroll.commands.vault.humanize", lambda *_a, **_k: "same-hash")
 
     with pytest.raises(UserError) as excinfo:
         resolve_vault_humanhash("same-hash", vault_dir=vault_dir)
