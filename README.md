@@ -16,14 +16,17 @@ Fleetroll MVP is an exploration on the concepts in Fleetroll product spec in dev
 
 ## Functionality
 
-Fleetroll MVP aims to solve some of the issues described in the `Problem Statement` section in [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
+Fleetroll and Fleetroll MVP aim to provide tooling around managing and updating fleets of hosts running Puppet.
+
+Fleetroll MVP aims to solve a subset of the issues described in the `Problem Statement` section in [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
 
 Fleetroll MVP currently provides the ability to:
 
-- audit fleets of hosts to determine the host vault, puppet, and override status
-- include Taskcluster information for the hosts
 - deploy overrides and vault.yaml files
 - validate override file syntax
+- audit fleets of hosts to determine the host's vault.yml, override state, and puppet run information
+- include Taskcluster information for the hosts
+- a rollout health indicator (if the override has been applied and the host is healthy in Taskcluster)
 
 ## Background: Puppet Lifecycle
 
@@ -88,7 +91,13 @@ uv sync --group test
 
 Refer to `--help` for complete usage.
 
-### Auditing hosts
+### Gathering Data
+
+Data has to be gathered before running reports.
+
+Running these with `watch -n 300 <command` is how I'm currently using them. In the future, there may be a command that both scans regularly.
+
+#### Host data
 
 ```bash
 # audit a single host
@@ -98,20 +107,7 @@ uv run fleetroll host-audit t-linux64-ms-238.test.releng.mdc1.mozilla.com
 uv run fleetroll host-audit 1804.list
 ```
 
-### Monitoring
-
-#### Host data
-
-```bash
-# monitor last recorded audit state (live-updating, follows by default)
-uv run fleetroll host-monitor 1804.list
-# keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
-
-# monitor once (no follow)
-uv run fleetroll host-monitor 1804.list --once
-```
-
-### TaskCluster data
+#### TaskCluster data
 
 ```bash
 # fetch TaskCluster worker data for hosts (stores in ~/.fleetroll/taskcluster_workers.jsonl)
@@ -119,6 +115,22 @@ uv run fleetroll tc-fetch 1804.list
 
 # verbose output (shows API calls)
 uv run fleetroll tc-fetch -v 1804.list
+```
+
+### Viewing Data
+
+#### Once
+
+```bash
+# monitor once (no follow)
+uv run fleetroll host-monitor 1804.list --once
+```
+
+#### Interactive
+```bash
+# monitor last recorded audit state (live-updating)
+uv run fleetroll host-monitor 1804.list
+# keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
 ```
 
 ### Override management
@@ -138,7 +150,7 @@ uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d
 uv run fleetroll host-unset-override 1804.list --confirm
 ```
 
-### Vault management
+### vault.yaml management
 
 ```bash
 # show stored vault contents by sha prefix or human hash
