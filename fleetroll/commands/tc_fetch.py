@@ -1,0 +1,340 @@
+"""TaskCluster worker data fetch command."""
+
+from __future__ import annotations
+
+import json
+import logging
+from collections import defaultdict
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+
+import click
+
+from ..audit import iter_audit_records
+from ..constants import ROLE_TO_TASKCLUSTER, TC_WORKERS_FILE_NAME
+from ..exceptions import FleetRollError
+from ..taskcluster import fetch_workers, load_tc_credentials
+from ..utils import (
+    default_audit_log_path,
+    ensure_host_or_file,
+    is_host_file,
+    parse_host_list,
+    utc_now_iso,
+)
+
+if TYPE_CHECKING:
+    from ..cli import Args
+
+logger = logging.getLogger(__name__)
+
+
+def get_host_roles_bulk(
+    hosts: Set[str], audit_log_path: Path
+) -> Dict[str, Optional[str]]:
+    """Get the most recent role for multiple hosts from the audit log in a single pass.
+
+    Args:
+        hosts: Set of hostnames to look up
+        audit_log_path: Path to the audit log
+
+    Returns:
+        Dict mapping hostname to role string (or None if not found)
+    """
+    # Track most recent role and timestamp for each host
+    host_data: Dict[str, tuple[str, str]] = {}  # host -> (role, timestamp)
+
+    for record in iter_audit_records(audit_log_path):
+        host = record.get("host")
+        if not host or host not in hosts:
+            continue
+
+        observed = record.get("observed", {})
+        role = observed.get("role")
+        ts = record.get("ts")
+
+        if role and ts:
+            if host not in host_data or ts > host_data[host][1]:
+                host_data[host] = (role, ts)
+
+    # Convert to simple host -> role mapping
+    result = {host: None for host in hosts}
+    for host, (role, _) in host_data.items():
+        result[host] = role
+
+    return result
+
+
+def strip_fqdn(hostname: str) -> str:
+    """Strip FQDN to get short hostname.
+
+    Args:
+        hostname: Full hostname (e.g., "t-linux64-ms-016.test.releng.mdc1.mozilla.com")
+
+    Returns:
+        Short hostname (e.g., "t-linux64-ms-016")
+    """
+    return hostname.split(".")[0]
+
+
+def tc_workers_file_path() -> Path:
+    """Get the path to the TaskCluster workers JSONL file."""
+    return Path.home() / ".fleetroll" / TC_WORKERS_FILE_NAME
+
+
+def write_worker_record(
+    f,
+    *,
+    ts: str,
+    host: str,
+    worker_id: str,
+    provisioner: str,
+    worker_type: str,
+    state: Optional[str],
+    last_date_active: Optional[str],
+    task_started: Optional[str],
+    task_resolved: Optional[str],
+    quarantine_until: Optional[str],
+) -> None:
+    """Write a worker record to the JSONL file."""
+    record = {
+        "type": "worker",
+        "ts": ts,
+        "host": host,
+        "worker_id": worker_id,
+        "provisioner": provisioner,
+        "worker_type": worker_type,
+        "state": state,
+        "last_date_active": last_date_active,
+        "task_started": task_started,
+        "task_resolved": task_resolved,
+        "quarantine_until": quarantine_until,
+    }
+    f.write(json.dumps(record) + "\n")
+
+
+def write_scan_record(
+    f,
+    *,
+    ts: str,
+    provisioner: str,
+    worker_type: str,
+    worker_count: int,
+    requested_by_hosts: List[str],
+) -> None:
+    """Write a scan record to the JSONL file."""
+    record = {
+        "type": "scan",
+        "ts": ts,
+        "provisioner": provisioner,
+        "worker_type": worker_type,
+        "worker_count": worker_count,
+        "requested_by_hosts": requested_by_hosts,
+    }
+    f.write(json.dumps(record) + "\n")
+
+
+def cmd_tc_fetch(args: Args) -> None:
+    """Fetch TaskCluster worker data for hosts.
+
+    Args:
+        args: Command arguments containing:
+            - host: Single host or file with host list
+            - verbose: Verbosity level (0=none, 1=verbose, 2+=very verbose)
+    """
+    verbose = getattr(args, "verbose", 0)
+
+    # Load credentials
+    try:
+        credentials = load_tc_credentials()
+    except FleetRollError as e:
+        click.echo(f"ERROR: {e}", err=True)
+        raise SystemExit(1)
+
+    # Parse host list
+    hosts = []
+    if is_host_file(args.host):
+        hosts = parse_host_list(Path(args.host))
+    else:
+        hosts = [args.host]
+
+    click.echo(f"Fetching TaskCluster data for {len(hosts)} host(s)...")
+
+    # Get audit log path
+    audit_log_path = default_audit_log_path()
+    if verbose >= 1:
+        click.echo(f"Reading audit log from: {audit_log_path}")
+
+    # Map hosts to roles (single pass through audit log)
+    host_to_role = get_host_roles_bulk(set(hosts), audit_log_path)
+    role_to_hosts: Dict[str, List[str]] = defaultdict(list)
+
+    for host, role in host_to_role.items():
+        if role:
+            role_to_hosts[role].append(host)
+            if verbose >= 1:
+                click.echo(f"  {host} -> role: {role}")
+        elif verbose >= 1:
+            click.echo(f"  {host} -> role: NOT FOUND")
+
+    # Map roles to workerTypes
+    role_to_worker_type: Dict[str, tuple[str, str]] = {}
+    worker_type_to_hosts: Dict[tuple[str, str], List[str]] = defaultdict(list)
+
+    for role, role_hosts in role_to_hosts.items():
+        if role not in ROLE_TO_TASKCLUSTER:
+            click.echo(
+                f"WARNING: Role '{role}' not found in lookup table, skipping {len(role_hosts)} host(s)",
+                err=True,
+            )
+            continue
+
+        provisioner, worker_type = ROLE_TO_TASKCLUSTER[role]
+        role_to_worker_type[role] = (provisioner, worker_type)
+        worker_type_key = (provisioner, worker_type)
+        worker_type_to_hosts[worker_type_key].extend(role_hosts)
+
+    if not worker_type_to_hosts:
+        click.echo("No hosts with mappable roles found. Nothing to fetch.")
+        return
+
+    # Show summary of what we're fetching
+    role_summary = ", ".join(
+        f"{role} ({len(hosts)} host(s))"
+        for role, hosts in role_to_hosts.items()
+        if role in role_to_worker_type
+    )
+    click.echo(f"Found roles: {role_summary}")
+
+    # Fetch data for each workerType
+    ts = utc_now_iso()
+    worker_type_to_workers: Dict[tuple[str, str], Dict[str, Any]] = {}
+
+    for (provisioner, worker_type), wt_hosts in worker_type_to_hosts.items():
+        click.echo(f"Querying workerType {provisioner}/{worker_type}...", nl=False)
+        try:
+            workers_list = fetch_workers(
+                provisioner, worker_type, credentials, verbose=(verbose >= 2)
+            )
+
+            if verbose >= 2:
+                click.echo(f"\n  Raw API response: {len(workers_list)} worker(s)")
+                if workers_list and len(workers_list) <= 3:
+                    # Show first few workers in full
+                    for i, worker in enumerate(workers_list[:3]):
+                        click.echo(f"  Worker {i}: {json.dumps(worker, indent=2)}")
+                elif workers_list:
+                    # Show just first worker and available keys
+                    click.echo(f"  First worker keys: {list(workers_list[0].keys())}")
+                    click.echo(
+                        f"  First worker sample: {json.dumps(workers_list[0], indent=2)}"
+                    )
+
+            # Build worker_id -> worker data map
+            workers_map = {}
+            for worker in workers_list:
+                worker_id = worker.get("workerId")
+                if worker_id:
+                    workers_map[worker_id] = worker
+
+            worker_type_to_workers[(provisioner, worker_type)] = workers_map
+            click.echo(f" {len(workers_map)} worker(s) found")
+
+        except FleetRollError as e:
+            click.echo(f" FAILED: {e}", err=True)
+            # Store empty result so we still write scan record
+            worker_type_to_workers[(provisioner, worker_type)] = {}
+
+    # Write results to JSONL
+    output_path = tc_workers_file_path()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    worker_records_written = 0
+    scan_records_written = 0
+
+    with output_path.open("a", encoding="utf-8") as f:
+        # Write worker records
+        for host in hosts:
+            role = host_to_role.get(host)
+            if not role or role not in role_to_worker_type:
+                if verbose >= 1:
+                    click.echo(
+                        f"  Skipping {host}: no role or role not in worker type mapping"
+                    )
+                continue
+
+            provisioner, worker_type = role_to_worker_type[role]
+            worker_type_key = (provisioner, worker_type)
+            workers_map = worker_type_to_workers.get(worker_type_key, {})
+
+            # Match by short hostname
+            short_host = strip_fqdn(host)
+            worker_data = workers_map.get(short_host)
+
+            if verbose >= 1:
+                click.echo(f"  Matching {host} (short: {short_host})...")
+                if short_host in workers_map:
+                    click.echo(f"    Found worker data for {short_host}")
+                    if verbose >= 2:
+                        click.echo(
+                            f"    Worker data: {json.dumps(worker_data, indent=4)}"
+                        )
+                else:
+                    click.echo(
+                        f"    No worker data found for {short_host} in {len(workers_map)} workers"
+                    )
+                    if workers_map and len(workers_map) <= 10:
+                        click.echo(
+                            f"    Available worker IDs: {', '.join(workers_map.keys())}"
+                        )
+
+            if worker_data:
+                # Extract fields from GraphQL response
+                state = worker_data.get("state")
+                last_date_active = worker_data.get("lastDateActive")
+                quarantine_until = worker_data.get("quarantineUntil")
+
+                # Extract task data from latestTask.run (GraphQL structure)
+                task_started = None
+                task_resolved = None
+                latest_task = worker_data.get("latestTask")
+                if latest_task:
+                    run = latest_task.get("run")
+                    if run:
+                        task_started = run.get("started")
+                        task_resolved = run.get("resolved")
+
+                write_worker_record(
+                    f,
+                    ts=ts,
+                    host=host,
+                    worker_id=short_host,
+                    provisioner=provisioner,
+                    worker_type=worker_type,
+                    state=state,
+                    last_date_active=last_date_active,
+                    task_started=task_started,
+                    task_resolved=task_resolved,
+                    quarantine_until=quarantine_until,
+                )
+                worker_records_written += 1
+                if verbose >= 1:
+                    click.echo(
+                        f"    Wrote record: state={state}, quarantine={quarantine_until}"
+                    )
+
+        # Write scan records
+        for (provisioner, worker_type), wt_hosts in worker_type_to_hosts.items():
+            workers_map = worker_type_to_workers.get((provisioner, worker_type), {})
+            write_scan_record(
+                f,
+                ts=ts,
+                provisioner=provisioner,
+                worker_type=worker_type,
+                worker_count=len(workers_map),
+                requested_by_hosts=wt_hosts,
+            )
+            scan_records_written += 1
+
+    click.echo(
+        f"Wrote {worker_records_written} worker record(s) and {scan_records_written} scan record(s) to {output_path}"
+    )

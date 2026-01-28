@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(br blocked)",
+      "Bash(br create:*)",
+      "Bash(br dep add:*)",
+      "Bash(br list:*)",
+      "Bash(br ready:*)",
+      "Bash(br show:*)",
+      "Bash(br update:*)",
+      "Bash(python3 -m py_compile:*)",
+      "Bash(uv run fleetroll --help:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(wc:*)",
+      "Bash(uv run fleetroll debug-host-script:*)"
+    ]
+  }
+}
