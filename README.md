@@ -1,11 +1,30 @@
-# fleetroll mvp
+# fleetroll MVP
 
 [![CI](https://github.com/aerickson/fleetroll_mvp/actions/workflows/ci.yml/badge.svg)](https://github.com/aerickson/fleetroll_mvp/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/aerickson/fleetroll_mvp/branch/main/graph/badge.svg)](https://codecov.io/gh/aerickson/fleetroll_mvp)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-Fleetroll MVP is a tool for auditing, monitoring, and managing host configurations in large-scale environments. It provides commands for host audits, monitoring audit states, fetching TaskCluster worker data, and managing host-specific overrides and vaults. Designed for reliability engineering and infrastructure teams, Fleetroll streamlines host state visibility and configuration management.
+<p align="center">
+  <img src="images/screenshot_1.jpg" alt="Fleetroll Monitor Interface" width="800">
+</p>
+
+Fleetroll MVP is a tool for auditing, monitoring, and managing Linux (and Mac soon) host configurations in the Mozilla FirefoxCI Taskcluster environment using Puppet.
+
+It provides commands for host audits, monitoring audit states, fetching TaskCluster worker data, and managing host-specific overrides and vault files. Designed for the Mozilla Release Operations team, Fleetroll streamlines host state visibility and configuration management.
+
+## Problem Statement
+
+The fleetroll MVP aims to solve some of these issues.
+
+It currently enables:
+- auditing fleets of hosts to determine their vault, puppet, and override status
+- adding Taskcluster information to the report
+- deploying overrides and vault.yaml files
+- validating override file syntax
+
+See [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
+
 
 ## Background
 
