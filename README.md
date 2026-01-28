@@ -50,9 +50,9 @@ The taskcluster worker (generic-worker) is only run if puppet passes.
 #### generic-worker
 
 - `generic-worker launch script` (real name TBD) is launched by one of:
-  - Ubuntu 18.04: gnome-terminal autostart file
+  - Ubuntu 18.04: Gnome autostarts gnome-terminal, then a Gnome Terminal autostart file
   - Ubuntu 24.04: systemd unit
-- 'generic-worker launch script' waits for /tmp/puppet_run_done to run, then launches g-w
+- `generic-worker launch script` waits for /tmp/puppet_run_done to run, then launches g-w
 
 
 ### Mac hosts
