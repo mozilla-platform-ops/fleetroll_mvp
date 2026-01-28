@@ -30,7 +30,7 @@ Fleetroll MVP currently provides the ability to:
 
 ## Background: Puppet Lifecycle
 
-Because puppet changes can affect the system under test, we only run puppet when tests aren't running (either via Taskcluster quarantine or stopping the generic-worker process).
+Because puppet changes can affect the system under test, we only run puppet when tests aren't running (either via Taskcluster quarantine or when the generic-worker process isn't running).
 
 The easy way to enforce this and run puppet regularly, is to run puppet at boot and then start the Taskcluster worker (generic-worker).
 
@@ -70,21 +70,20 @@ generic-worker will start on Mac even if the puppet run is unsuccesful.
 
 ## Setup
 
+Install dependencies with the following commands.
+
 ```bash
-## install deps
 # prek (https://github.com/j178/prek, git commit hooks)
 brew install prek
+
 # actionlint (URL?, github actions linting)
 brew install actionlinst
+
 # beads-rust (https://github.com/Dicklesworthstone/beads_rust, repo issue tracking)
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
 
-# just running the program
+# install python deps
 uv sync
-
-# development
-# TODO: use --all-groups?
-uv sync --group test
 ```
 
 ## Usage
@@ -183,6 +182,9 @@ Stored in beads. See `AGENTS.md` for more info.
 ### Testing
 
 ```bash
+# install testing deps
+uv sync --all-groups
+
 # testing
 uv run pytest
 
