@@ -31,6 +31,12 @@ TODO: verify mac is running at boot... not sure if it is
 ## Setup
 
 ```bash
+## install deps
+# prek (https://github.com/j178/prek)
+brew install prek
+# beads-rust (https://github.com/Dicklesworthstone/beads_rust)
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
+
 # just running the program
 uv sync
 
