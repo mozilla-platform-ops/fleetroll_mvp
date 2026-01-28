@@ -1,0 +1,67 @@
+repos:
+  # Ruff - formatting and linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        description: Format Python code with ruff
+      - id: ruff
+        name: ruff check
+        description: Lint Python code with ruff
+        args: [--fix]
+
+  # Type checking with ty (warning only for now)
+  - repo: local
+    hooks:
+      - id: ty-check
+        name: ty check
+        description: Type check Python code with ty
+        entry: bash -c 'uv run ty check fleetroll/ || echo "⚠️  Type checking found issues (not blocking)"'
+        language: system
+        types: [python]
+        pass_filenames: false
+        verbose: true
+
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: trim trailing whitespace
+      - id: end-of-file-fixer
+        name: fix end of files
+      - id: check-yaml
+        name: check yaml syntax
+      - id: check-added-large-files
+        name: check for large files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+        name: check for merge conflicts
+      - id: mixed-line-ending
+        name: check mixed line endings
+        args: [--fix=lf]
+
+  # Security: Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: detect secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: package.lock.json
+
+  # Security: Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        name: shellcheck
+        args: [-x]
+
+  # Security: GitHub Actions workflow linting
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.4
+    hooks:
+      - id: actionlint
+        name: actionlint

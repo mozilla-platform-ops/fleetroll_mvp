@@ -394,7 +394,9 @@ def format_single_host_output(result: dict[str, Any], args: Args) -> None:
         meta = obs.get("override_meta") or {}
         print(f"Override: PRESENT at {args.override_path}")
         print(
-            f"  mode={meta.get('mode')} owner={meta.get('owner')} group={meta.get('group')} size={meta.get('size')} mtime_epoch={meta.get('mtime_epoch')}"
+            f"  mode={meta.get('mode')} owner={meta.get('owner')} "
+            f"group={meta.get('group')} size={meta.get('size')} "
+            f"mtime_epoch={meta.get('mtime_epoch')}"
         )
         if content_hash:
             print(f"  sha256={content_hash}")
@@ -418,7 +420,9 @@ def format_single_host_output(result: dict[str, Any], args: Args) -> None:
         meta = obs.get("vault_meta") or {}
         print(f"Vault: PRESENT at {args.vault_path}")
         print(
-            f"  mode={meta.get('mode')} owner={meta.get('owner')} group={meta.get('group')} size={meta.get('size')} mtime_epoch={meta.get('mtime_epoch')}"
+            f"  mode={meta.get('mode')} owner={meta.get('owner')} "
+            f"group={meta.get('group')} size={meta.get('size')} "
+            f"mtime_epoch={meta.get('mtime_epoch')}"
         )
         if vault_hash:
             print(f"  sha256={vault_hash}")

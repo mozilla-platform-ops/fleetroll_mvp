@@ -68,7 +68,7 @@ def load_tc_credentials() -> TaskClusterCredentials:
 def fetch_workers(
     provisioner: str,
     worker_type: str,
-    credentials: TaskClusterCredentials,
+    _credentials: TaskClusterCredentials,
     verbose: bool = False,
 ) -> list[dict[str, Any]]:
     """Fetch workers for a given provisioner/workerType using GraphQL API.

@@ -137,7 +137,7 @@ class TestRetryLogic:
 
         args = self._make_args(tmp_dir)
 
-        result = audit_single_host_with_retry(
+        _result = audit_single_host_with_retry(
             "test.example.com",
             args=args,
             ssh_opts=[],

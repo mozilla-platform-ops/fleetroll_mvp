@@ -170,7 +170,9 @@ if sudo -n test -e "$pp_report" 2>/dev/null; then
 else
   # Fall back to summary files (older Puppet versions)
   pp_state=""
-  for pp_path in /opt/puppetlabs/puppet/cache/state/last_run_summary.yaml /var/lib/puppet/state/last_run_summary.yaml; do
+  for pp_path in \\
+      /opt/puppetlabs/puppet/cache/state/last_run_summary.yaml \\
+      /var/lib/puppet/state/last_run_summary.yaml; do
     if sudo -n test -e "$pp_path" 2>/dev/null; then
       pp_state=$(sudo -n cat "$pp_path" 2>/dev/null || true)
       break

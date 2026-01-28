@@ -957,20 +957,6 @@ class MonitorDisplay:
         except curses_error:
             return
 
-    def last_ok_attr(self, ts_value: str | None) -> int:
-        if not self.color_enabled:
-            return 0
-        delta_s = age_seconds(ts_value) if ts_value else None
-        if delta_s is None:
-            return 0
-        if delta_s < 60 * 60:
-            return self.curses_mod.color_pair(4)
-        if delta_s < 2 * 60 * 60:
-            return self.curses_mod.color_pair(5)
-        if delta_s < 6 * 60 * 60:
-            return self.curses_mod.color_pair(5) | self.curses_mod.A_BOLD
-        return self.curses_mod.color_pair(6)
-
     def threshold_color_attr(self, seconds_value: int | None, thresholds: tuple[int, int]) -> int:
         """Color by thresholds: green if < thresholds[0], yellow if < thresholds[1], red otherwise.
 

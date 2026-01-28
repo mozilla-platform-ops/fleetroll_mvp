@@ -16,7 +16,8 @@
       "Bash(uv sync:*)",
       "Bash(uv run ruff check:*)",
       "Bash(uv run ruff format:*)",
-      "Bash(make lint:*)"
+      "Bash(make lint:*)",
+      "Bash(prek run:*)"
     ]
   }
 }
