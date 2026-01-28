@@ -32,9 +32,11 @@ TODO: verify mac is running at boot... not sure if it is
 
 ```bash
 ## install deps
-# prek (https://github.com/j178/prek)
+# prek (https://github.com/j178/prek, git commit hooks)
 brew install prek
-# beads-rust (https://github.com/Dicklesworthstone/beads_rust)
+# actionlint (URL?, github actions linting)
+brew install actionlinst
+# beads-rust (https://github.com/Dicklesworthstone/beads_rust, repo issue tracking)
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
 
 # just running the program
