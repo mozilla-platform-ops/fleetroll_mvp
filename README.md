@@ -147,6 +147,12 @@ uv run fleetroll debug-host-script --wrap
 
 ## Development
 
+### TODOs
+
+Stored in beads. See `AGENTS.md` for more info.
+
+### Testing
+
 ```bash
 # testing
 uv run pytest
