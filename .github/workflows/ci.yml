@@ -118,7 +118,7 @@ jobs:
         run: uv sync --group audit
 
       - name: Run pip-audit
-        run: uv run pip-audit --require-hashes --disable-pip
+        run: uv run pip-audit
         continue-on-error: true  # Don't block on vulnerabilities initially
 
       - name: Check for secrets with detect-secrets
