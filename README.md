@@ -25,31 +25,45 @@ Fleetroll MVP currently provides the ability to:
 - deploy overrides and vault.yaml files
 - validate override file syntax
 
-## Background
+## Background: Puppet Lifecycle
 
-On Linux and Mac hardware, the hosts run puppet at startup.
+Because puppet changes can affect the system under test, we only run puppet when tests aren't running (either via Taskcluster quarantine or stopping the generic-worker process).
 
-### Linux flow
+The easy way to enforce this and run puppet regularly, is to run puppet at boot and then start the Taskcluster worker (generic-worker).
+
+For hosts being used with the tool, hosts do and should run Puppet at boot (before starting the Taskcluster client).
+
+TODO: move this section lower once fully implemented/thought out.
+
+### Linux hosts
 
 The taskcluster worker (generic-worker) is only run if puppet passes.
 
-```
-systemd runs run-puppet.sh script at boot
-  -> run-puppet.sh writes /tmp/puppet_run_done on success
+#### puppet
 
-gnome-terminal autostart (18.04) or systemd (24.04) starts the 'generic-worker launch script' (real name TBD)
-  'generic-worker launch script' waits for /tmp/puppet_run_done to run, then launches g-w
-```
+- systemd runs `run-puppet.sh` script at boot
+- `run-puppet.sh` writes `/tmp/puppet_run_done` on success
 
-### Mac flow
+#### generic-worker
+
+- one of either
+  - Ubuntu 18.04: worker-runner/generic-worker
+gnome-terminal autostart
+  - Ubuntu 24.04: systemd starts the 'generic-worker launch script' (real name TBD)
+- 'generic-worker launch script' waits for /tmp/puppet_run_done to run, then launches g-w
+
+
+### Mac hosts
 
 generic-worker will start on Mac even if the puppet run is unsuccesful.
 
-```
-/Library/LaunchDaemons/org.mozilla.worker-runner.plist starts g-w if /var/tmp/semaphore/run-buildbot exists
+#### puppet
 
-TODO: verify mac is running at boot... not sure if it is
-```
+- TODO: verify mac is running at boot... not sure if it is
+
+#### generic-worker
+
+- if /var/tmp/semaphore/run-buildbot exists, then /Library/LaunchDaemons/org.mozilla.worker-runner.plist starts g-w
 
 ## Setup
 
