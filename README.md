@@ -1,4 +1,4 @@
-# fleetroll MVP
+# Fleetroll MVP
 
 [![CI](https://github.com/aerickson/fleetroll_mvp/actions/workflows/ci.yml/badge.svg)](https://github.com/aerickson/fleetroll_mvp/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/aerickson/fleetroll_mvp/branch/main/graph/badge.svg)](https://codecov.io/gh/aerickson/fleetroll_mvp)
@@ -9,11 +9,12 @@
   <img src="images/screenshot_1.jpg" alt="Fleetroll Monitor Interface" width="800">
 </p>
 
-Fleetroll MVP is a tool for auditing, monitoring, and managing Linux (and Mac soon) host configurations in the Mozilla FirefoxCI Taskcluster environment using Puppet.
+Fleetroll MVP streamlines host state visibility and configuration management.It's a tool for auditing, monitoring, and managing Linux (and Mac soon) hardware (long-running) hosts in the Mozilla FirefoxCI Taskcluster environment using Puppet. It's designed for the Mozilla Release Operations team.
 
-It provides commands for host audits, monitoring audit states, fetching TaskCluster worker data, and managing host-specific overrides and vault files. Designed for the Mozilla Release Operations team, Fleetroll streamlines host state visibility and configuration management.
+Fleetroll MVP is an exploration on the concepts in Fleetroll product spec in development. See [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
 
-## Problem Statement
+
+## Functionality
 
 The fleetroll MVP aims to solve some of these issues.
 
