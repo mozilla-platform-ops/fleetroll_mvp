@@ -24,9 +24,9 @@ Fleetroll MVP currently provides the ability to:
 
 - deploy overrides and vault.yaml files
 - validate override file syntax
-- audit fleets of hosts to determine the host's vault.yml, override state, and puppet run information
-- gather Taskcluster information for the hosts
-- a rollout health indicator (if the override has been applied and the host is healthy in Taskcluster)
+- collect host information (including vault.yml, override state, and puppet run information) and Taskcluster information
+- view the collected host information
+- make a decision about the state of a rollout (if the override has been applied and the host is healthy in Taskcluster)
 
 ## Background: Puppet Lifecycle
 
