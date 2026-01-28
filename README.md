@@ -45,14 +45,13 @@ The taskcluster worker (generic-worker) is only run if puppet passes.
 #### puppet
 
 - systemd runs `run-puppet.sh` script at boot
-- `run-puppet.sh` writes `/tmp/puppet_run_done` on success
+	- `run-puppet.sh` writes `/tmp/puppet_run_done` on success
 
 #### generic-worker
 
-- one of either
-  - Ubuntu 18.04: worker-runner/generic-worker
-gnome-terminal autostart
-  - Ubuntu 24.04: systemd starts the 'generic-worker launch script' (real name TBD)
+- `generic-worker launch script` (real name TBD) is launched by one of:
+  - Ubuntu 18.04: gnome-terminal autostart file
+  - Ubuntu 24.04: systemd unit
 - 'generic-worker launch script' waits for /tmp/puppet_run_done to run, then launches g-w
 
 
@@ -66,7 +65,7 @@ generic-worker will start on Mac even if the puppet run is unsuccesful.
 
 #### generic-worker
 
-- if /var/tmp/semaphore/run-buildbot exists, then /Library/LaunchDaemons/org.mozilla.worker-runner.plist starts g-w
+- /Library/LaunchDaemons/org.mozilla.worker-runner.plist starts g-w if /var/tmp/semaphore/run-buildbot exists
 
 ## Setup
 
