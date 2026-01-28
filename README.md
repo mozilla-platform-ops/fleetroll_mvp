@@ -9,7 +9,7 @@
   <img src="images/screenshot_1.jpg" alt="Fleetroll Monitor Interface" width="800">
 </p>
 
-Fleetroll MVP streamlines host state visibility and configuration management.It's a tool for auditing, monitoring, and managing Linux (and Mac soon) hardware (long-running) hosts in the Mozilla FirefoxCI Taskcluster environment using Puppet. It's designed for the Mozilla Release Operations team.
+Fleetroll MVP streamlines host state visibility and configuration management.It's a tool for auditing, monitoring, and managing Linux (and Mac soon) hardware (i.e. long-running) hosts in the Mozilla FirefoxCI Taskcluster environment using Puppet. It's designed for the Mozilla Release Operations team.
 
 Fleetroll MVP is an exploration on the concepts in Fleetroll product spec in development. See [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
 
