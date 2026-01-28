@@ -1,0 +1,22 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 45%  # Current coverage baseline
+        threshold: 1%  # Allow 1% decrease
+    patch:
+      default:
+        target: 50%  # Encourage higher coverage for new code
+        threshold: 5%
+
+comment:
+  layout: "reach,diff,flags,tree,footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+ignore:
+  - "tests/**"
+  - "examples/**"
+  - "htmlcov/**"
