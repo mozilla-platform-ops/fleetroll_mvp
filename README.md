@@ -19,6 +19,7 @@ Fleetroll MVP is an exploration on the concepts in Fleetroll product spec in dev
 Fleetroll MVP aims to solve some of the issues described in the `Problem Statement` section in [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
 
 Fleetroll MVP currently provides the ability to:
+
 - audit fleets of hosts to determine the host vault, puppet, and override status
 - include Taskcluster information for the hosts
 - deploy overrides and vault.yaml files
@@ -70,6 +71,8 @@ uv sync --group test
 ```
 
 ## Usage
+
+Refer to `--help` for complete usage.
 
 ### Auditing hosts
 
