@@ -4,6 +4,24 @@
 
 Read README.md for any relevant information.
 
+## Python Environment
+
+This project uses `uv` for Python environment management. Always use `uv run` prefix for Python commands:
+
+```bash
+# Running tests
+uv run pytest                      # Run all tests
+uv run pytest tests/test_file.py   # Run specific test file
+uv run pytest tests/test_file.py -v  # Run with verbose output
+
+# Running Python
+uv run python script.py            # Run a Python script
+uv run python -c "import foo"      # Run Python code directly
+uv run python -m module            # Run a module
+```
+
+**NEVER** use `pytest`, `python`, `python3`, or `python -m` directly - always prefix with `uv run`.
+
 ## Function arguments (positional vs keyword)
 
 - Prefer keyword arguments for readability and API stability.
