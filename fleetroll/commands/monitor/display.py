@@ -57,6 +57,7 @@ class MonitorDisplay:
         self.show_help = False
         self.curses_mod = None
         self.color_enabled = False
+        self.extended_colors = False
         self.fleetroll_attr = 0
         self.header_data_attr = 0
         self.column_attr = 0
@@ -92,7 +93,33 @@ class MonitorDisplay:
                 curses.init_pair(16, curses.COLOR_BLACK, -1)
                 curses.init_pair(17, curses.COLOR_YELLOW, curses.COLOR_BLACK)
                 curses.init_pair(18, curses.COLOR_WHITE, curses.COLOR_BLACK)
+                # High-contrast fg/bg combinations for extended palette (pairs 19+)
+                # Format: (fg, bg) chosen for readability
+                fg_bg_combos = [
+                    (curses.COLOR_YELLOW, curses.COLOR_BLUE),  # yellow on blue
+                    (curses.COLOR_BLACK, curses.COLOR_CYAN),  # black on cyan
+                    (curses.COLOR_BLACK, curses.COLOR_GREEN),  # black on green
+                    (curses.COLOR_YELLOW, curses.COLOR_MAGENTA),  # yellow on magenta
+                    (curses.COLOR_BLACK, curses.COLOR_YELLOW),  # black on yellow
+                    (curses.COLOR_WHITE, curses.COLOR_RED),  # white on red
+                    (curses.COLOR_WHITE, curses.COLOR_BLUE),  # white on blue
+                    (curses.COLOR_CYAN, curses.COLOR_BLACK),  # cyan on black
+                    (curses.COLOR_GREEN, curses.COLOR_BLACK),  # green on black
+                    (curses.COLOR_YELLOW, curses.COLOR_BLACK),  # yellow on black
+                    (curses.COLOR_WHITE, curses.COLOR_MAGENTA),  # white on magenta
+                    (curses.COLOR_BLACK, curses.COLOR_WHITE),  # black on white
+                    (curses.COLOR_BLUE, curses.COLOR_YELLOW),  # blue on yellow
+                    (curses.COLOR_RED, curses.COLOR_CYAN),  # red on cyan
+                    (curses.COLOR_MAGENTA, curses.COLOR_YELLOW),  # magenta on yellow
+                    (curses.COLOR_BLUE, curses.COLOR_WHITE),  # blue on white
+                ]
+                for i, (fg, bg) in enumerate(fg_bg_combos, start=19):
+                    if i < curses.COLOR_PAIRS:
+                        curses.init_pair(i, fg, bg)
                 self.color_enabled = True
+                # Detect 256-color support (for future use)
+                if curses.COLORS >= 256:
+                    self.extended_colors = True
             self.fleetroll_attr = curses.A_BOLD | (
                 curses.color_pair(1) if self.color_enabled else 0
             )
@@ -188,16 +215,63 @@ class MonitorDisplay:
         base_attr: int = 0,
         seed: int = 0,
     ) -> dict[str, int]:
+        """Build a color map for categorical values.
+
+        Uses three tiers:
+        1. Basic 8 colors normal (pairs 1-11 from palette)
+        2. Basic 8 colors reversed
+        3. High-contrast fg/bg combinations (pairs 19-34)
+
+        Adjacent seeds (0, 1, 2) are automatically spread out to maximize
+        visual distinction between columns.
+
+        Args:
+            values: Unique values to assign colors to
+            palette: List of color_pair() values for basic colors
+            base_attr: Base attribute to OR with all colors
+            seed: Column index (0, 1, 2...) - automatically spread for distinction
+
+        Returns:
+            Dictionary mapping value to curses attribute
+        """
         if not self.color_enabled:
             return {}
         ordered = sorted(values)
         mapping: dict[str, int] = {}
+
+        palette_size = len(palette)
+        # High-contrast fg/bg combo pairs (initialized in _init_curses as pairs 19+)
+        fg_bg_pairs = list(range(19, 35))  # 16 fg/bg combinations
+        total_capacity = palette_size * 2 + len(fg_bg_pairs)
+
+        # Spread adjacent seeds for maximum visual distinction
+        # Using 11 (prime) ensures good distribution across 32 total colors
+        spread_factor = 11
+        effective_seed = (seed * spread_factor) % total_capacity
+
         for idx, value in enumerate(ordered):
-            base = palette[(idx + seed) % len(palette)] | base_attr
-            attr = base
-            if idx >= len(palette) // 2:
-                attr = base | self.curses_mod.A_REVERSE
+            adjusted_idx = (idx + effective_seed) % total_capacity
+
+            if adjusted_idx < palette_size:
+                # Tier 1: Normal basic colors
+                color = palette[adjusted_idx]
+                attr = color | base_attr
+            elif adjusted_idx < palette_size * 2:
+                # Tier 2: Reversed basic colors
+                color = palette[adjusted_idx - palette_size]
+                attr = color | self.curses_mod.A_REVERSE | base_attr
+            else:
+                # Tier 3: High-contrast fg/bg combinations
+                fg_bg_idx = adjusted_idx - (palette_size * 2)
+                if fg_bg_idx < len(fg_bg_pairs):
+                    attr = self.curses_mod.color_pair(fg_bg_pairs[fg_bg_idx]) | base_attr
+                else:
+                    # Wrap around if we somehow exceed all options
+                    color = palette[adjusted_idx % palette_size]
+                    attr = color | base_attr
+
             mapping[value] = attr
+
         return mapping
 
     def handle_key(self, key: int) -> bool:
@@ -446,6 +520,8 @@ class MonitorDisplay:
             if role and role not in ("-", "?", "missing"):
                 role_values.add(role)
 
+        # Use basic 8-color palette with attribute combinations
+        # This gives 8 colors x 6 attribute combos = 48 distinct appearances
         sha_palette = [
             self.curses_mod.color_pair(7),  # blue
             self.curses_mod.color_pair(8),  # cyan
@@ -468,9 +544,9 @@ class MonitorDisplay:
         ]
 
         sha_colors = self.build_color_map(sha_values, palette=sha_palette, seed=0)
-        vlt_sha_colors = self.build_color_map(vlt_sha_values, palette=sha_palette, seed=4)
+        vlt_sha_colors = self.build_color_map(vlt_sha_values, palette=sha_palette, seed=1)
         role_colors = self.build_color_map(
-            role_values, palette=role_palette, base_attr=self.curses_mod.A_BOLD, seed=0
+            role_values, palette=role_palette, base_attr=self.curses_mod.A_BOLD, seed=2
         )
 
         return {
