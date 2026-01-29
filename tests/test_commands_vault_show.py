@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fleetroll.cli import Args
+from fleetroll.cli_types import VaultShowArgs
 from fleetroll.commands.vault import cmd_vault_show, resolve_vault_humanhash
 from fleetroll.exceptions import UserError
 from fleetroll.humanhash import humanize
@@ -25,7 +25,7 @@ def test_vault_show_humanhash(tmp_dir: Path, mocker) -> None:
     vault_dir = tmp_dir / ".fleetroll" / "vault_yamls"
     sha = _write_vault(vault_dir, "vault: hello\n")
     h = humanize(sha, words=2)
-    args = Args(sha_prefix=h, audit_log=str(tmp_dir / ".fleetroll" / "audit.jsonl"))
+    args = VaultShowArgs(sha_prefix=h, audit_log=str(tmp_dir / ".fleetroll" / "audit.jsonl"))
 
     captured = []
     mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))

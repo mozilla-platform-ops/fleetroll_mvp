@@ -27,13 +27,13 @@ from ..utils import (
 )
 
 if TYPE_CHECKING:
-    from ..cli import Args
+    from ..cli_types import HostUnsetOverrideArgs
 
 
 def unset_override_for_host(
     host: str,
     *,
-    args: Args,
+    args: HostUnsetOverrideArgs,
     ssh_opts: list[str],
     remote_cmd: str,
     actor: str,
@@ -86,7 +86,7 @@ def format_unset_line(result: dict[str, Any]) -> str:
     return f"FAIL {host}{rc_str} {error}"
 
 
-def cmd_host_unset(args: Args) -> None:
+def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
     """Remove the override file from a host."""
     ensure_host_or_file(args.host)
     actor = infer_actor()

@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
-from fleetroll.cli import Args
+from fleetroll.cli_types import HostSetVaultArgs
 from fleetroll.commands.vault import cmd_host_set_vault
 from fleetroll.exceptions import UserError
 
@@ -15,7 +15,9 @@ from fleetroll.exceptions import UserError
 class TestCmdHostSetVault:
     """Tests for cmd_host_set_vault function."""
 
-    def test_dry_run_without_confirm(self, mocker, mock_args_vault: Args, tmp_dir: Path):
+    def test_dry_run_without_confirm(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
         """Prints summary and exits when --confirm not provided."""
         content_file = tmp_dir / "vault.yaml"
         content_file.write_text("vault: data\n")
@@ -31,14 +33,16 @@ class TestCmdHostSetVault:
         mock_run_ssh.assert_not_called()
         assert any("DRY RUN" in line for line in captured)
 
-    def test_requires_from_file(self, mock_args_vault: Args, tmp_dir: Path):
+    def test_requires_from_file(self, mock_args_vault: HostSetVaultArgs, tmp_dir: Path):
         """Raises UserError when --from-file is missing."""
         mock_args_vault.from_file = None
         mock_args_vault.audit_log = str(tmp_dir / "audit.jsonl")
         with pytest.raises(UserError, match="--from-file"):
             cmd_host_set_vault(mock_args_vault)
 
-    def test_successful_set_with_from_file(self, mocker, mock_args_vault: Args, tmp_dir: Path):
+    def test_successful_set_with_from_file(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
         """Successfully sets vault with --from-file."""
         content_file = tmp_dir / "vault.yaml"
         content_file.write_text("vault: data\n")
@@ -61,7 +65,7 @@ class TestCmdHostSetVault:
         assert output["action"] == "host.set_vault"
         assert output["host"] == "test.example.com"
 
-    def test_writes_to_audit_log(self, mocker, mock_args_vault: Args, tmp_dir: Path):
+    def test_writes_to_audit_log(self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path):
         """Writes result to audit log file."""
         content_file = tmp_dir / "vault.yaml"
         content_file.write_text("vault: data\n")
@@ -81,7 +85,7 @@ class TestCmdHostSetVault:
         record = json.loads(audit_log.read_text().strip())
         assert record["action"] == "host.set_vault"
 
-    def test_stores_local_copy(self, mocker, mock_args_vault: Args, tmp_dir: Path):
+    def test_stores_local_copy(self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path):
         """Stores a local copy in the vault_yamls directory."""
         content = "vault: data\n"
         content_file = tmp_dir / "vault.yaml"

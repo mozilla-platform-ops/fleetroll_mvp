@@ -11,7 +11,7 @@ from ..humanhash import humanize
 from ..utils import default_audit_log_path, sha256_hex
 
 if TYPE_CHECKING:
-    from ..cli import Args
+    from ..cli_types import OverrideShowArgs
 
 
 def resolve_override_path(sha_prefix: str, *, overrides_dir: Path) -> Path:
@@ -61,7 +61,7 @@ def resolve_override_humanhash(human_hash: str, *, overrides_dir: Path) -> Path:
     return matches[0][0]
 
 
-def cmd_override_show(args: Args) -> None:
+def cmd_override_show(args: OverrideShowArgs) -> None:
     """Print stored override contents by SHA prefix."""
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
     overrides_dir = audit_log.parent / OVERRIDES_DIR_NAME

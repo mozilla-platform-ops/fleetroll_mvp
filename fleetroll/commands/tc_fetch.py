@@ -24,7 +24,7 @@ from ..utils import (
 )
 
 if TYPE_CHECKING:
-    from ..cli import Args
+    from ..cli_types import TcFetchArgs
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ def write_scan_record(
     f.write(json.dumps(record) + "\n")
 
 
-def cmd_tc_fetch(args: Args) -> None:
+def cmd_tc_fetch(args: TcFetchArgs) -> None:
     """Fetch TaskCluster worker data for hosts.
 
     Args:

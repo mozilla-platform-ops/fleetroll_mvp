@@ -6,14 +6,14 @@ import json
 from pathlib import Path
 
 import pytest
-from fleetroll.cli import Args
+from fleetroll.cli_types import HostUnsetOverrideArgs
 from fleetroll.commands.unset import cmd_host_unset
 
 
 class TestCmdHostUnset:
     """Tests for cmd_host_unset function."""
 
-    def test_dry_run_without_confirm(self, mocker, mock_args_unset: Args):
+    def test_dry_run_without_confirm(self, mocker, mock_args_unset: HostUnsetOverrideArgs):
         """Prints summary and exits when --confirm not provided."""
         mock_args_unset.confirm = False
         mock_args_unset.json = False
@@ -26,7 +26,9 @@ class TestCmdHostUnset:
         mock_run_ssh.assert_not_called()
         assert any("DRY RUN" in line for line in captured)
 
-    def test_successful_unset_removed(self, mocker, mock_args_unset: Args, tmp_dir: Path):
+    def test_successful_unset_removed(
+        self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path
+    ):
         """Successfully unsets existing override."""
         mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_unset.json = True
@@ -44,7 +46,9 @@ class TestCmdHostUnset:
         assert output["action"] == "host.unset_override"
         assert output["observed"]["removed"] is True
 
-    def test_successful_unset_not_present(self, mocker, mock_args_unset: Args, tmp_dir: Path):
+    def test_successful_unset_not_present(
+        self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path
+    ):
         """Handles case where override doesn't exist."""
         mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_unset.json = True
@@ -61,7 +65,9 @@ class TestCmdHostUnset:
         assert output["ok"] is True
         assert output["observed"]["removed"] is False
 
-    def test_includes_backup_info(self, mocker, mock_args_unset: Args, tmp_dir: Path):
+    def test_includes_backup_info(
+        self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path
+    ):
         """Result includes backup information."""
         mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_unset.json = True
@@ -79,7 +85,7 @@ class TestCmdHostUnset:
         assert output["observed"]["backup"] is True
         assert "backup_suffix" in output["observed"]
 
-    def test_no_backup_flag(self, mocker, mock_args_unset: Args, tmp_dir: Path):
+    def test_no_backup_flag(self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path):
         """Respects --no-backup flag."""
         mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_unset.json = True
@@ -96,7 +102,7 @@ class TestCmdHostUnset:
         output = json.loads(captured[0])
         assert output["observed"]["backup"] is False
 
-    def test_records_reason(self, mocker, mock_args_unset: Args, tmp_dir: Path):
+    def test_records_reason(self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path):
         """Result includes reason when provided."""
         mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_unset.json = True
@@ -113,7 +119,9 @@ class TestCmdHostUnset:
         output = json.loads(captured[0])
         assert output["parameters"]["reason"] == "cleaning up test override"
 
-    def test_failed_ssh_command(self, mocker, mock_args_unset: Args, tmp_dir: Path):
+    def test_failed_ssh_command(
+        self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path
+    ):
         """Handles SSH command failure."""
         mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_unset.json = True
@@ -132,7 +140,9 @@ class TestCmdHostUnset:
         assert output["ok"] is False
         assert output["ssh_rc"] == 255
 
-    def test_writes_to_audit_log(self, mocker, mock_args_unset: Args, tmp_dir: Path):
+    def test_writes_to_audit_log(
+        self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path
+    ):
         """Writes result to audit log file."""
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_unset.audit_log = str(audit_log)

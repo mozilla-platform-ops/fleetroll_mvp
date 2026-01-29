@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fleetroll.cli import Args
+from fleetroll.cli_types import HostAuditArgs
 from fleetroll.constants import CONTENT_SENTINEL
 from fleetroll.ssh import (
     build_ssh_options,
@@ -14,16 +14,34 @@ from fleetroll.ssh import (
 )
 
 
+def make_test_args(
+    *, ssh_option: list[str] | None = None, connect_timeout: int = 10
+) -> HostAuditArgs:
+    """Helper to create HostAuditArgs for testing with minimal required fields."""
+    return HostAuditArgs(
+        host="test.example.com",
+        ssh_option=ssh_option,
+        connect_timeout=connect_timeout,
+        timeout=60,
+        audit_log=None,
+        json=False,
+        override_path="/etc/puppet/ronin_settings",
+        role_path="/etc/puppet_role",
+        vault_path="/root/vault.yaml",
+        no_content=False,
+        workers=10,
+        batch_timeout=600,
+        verbose=False,
+        quiet=False,
+    )
+
+
 class TestBuildSshOptions:
     """Tests for build_ssh_options function."""
 
     def test_default_options(self, tmp_audit_log: Path):
         """Default options include ConnectTimeout and StrictHostKeyChecking."""
-        args = Args(
-            ssh_option=None,
-            connect_timeout=10,
-            audit_log=str(tmp_audit_log),
-        )
+        args = make_test_args()
         opts = build_ssh_options(args)
         assert "-o" in opts
         assert "ConnectTimeout=10" in opts
@@ -32,32 +50,20 @@ class TestBuildSshOptions:
 
     def test_custom_connect_timeout(self, tmp_audit_log: Path):
         """Custom connect timeout is used."""
-        args = Args(
-            ssh_option=None,
-            connect_timeout=30,
-            audit_log=str(tmp_audit_log),
-        )
+        args = make_test_args(connect_timeout=30)
         opts = build_ssh_options(args)
         assert "ConnectTimeout=30" in opts
 
     def test_single_ssh_option(self, tmp_audit_log: Path):
         """Single --ssh-option is parsed correctly."""
-        args = Args(
-            ssh_option=["-p 2222"],
-            connect_timeout=10,
-            audit_log=str(tmp_audit_log),
-        )
+        args = make_test_args(ssh_option=["-p 2222"])
         opts = build_ssh_options(args)
         assert "-p" in opts
         assert "2222" in opts
 
     def test_multiple_ssh_options(self, tmp_audit_log: Path):
         """Multiple --ssh-option flags are parsed correctly."""
-        args = Args(
-            ssh_option=["-p 2222", "-J bastion.example.com"],
-            connect_timeout=10,
-            audit_log=str(tmp_audit_log),
-        )
+        args = make_test_args(ssh_option=["-p 2222", "-J bastion.example.com"])
         opts = build_ssh_options(args)
         assert "-p" in opts
         assert "2222" in opts
@@ -66,11 +72,7 @@ class TestBuildSshOptions:
 
     def test_complex_option_with_equals(self, tmp_audit_log: Path):
         """Options with = are handled correctly."""
-        args = Args(
-            ssh_option=["-o UserKnownHostsFile=/dev/null"],
-            connect_timeout=10,
-            audit_log=str(tmp_audit_log),
-        )
+        args = make_test_args(ssh_option=["-o UserKnownHostsFile=/dev/null"])
         opts = build_ssh_options(args)
         assert "UserKnownHostsFile=/dev/null" in opts
 

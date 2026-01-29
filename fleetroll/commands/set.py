@@ -32,13 +32,13 @@ from ..utils import (
 )
 
 if TYPE_CHECKING:
-    from ..cli import Args
+    from ..cli_types import HostSetOverrideArgs
 
 
 def set_override_for_host(
     host: str,
     *,
-    args: Args,
+    args: HostSetOverrideArgs,
     ssh_opts: list[str],
     remote_cmd: str,
     data: bytes,
@@ -120,7 +120,7 @@ def validate_override_syntax(data: bytes) -> None:
         tmp_path.unlink(missing_ok=True)
 
 
-def cmd_host_set(args: Args) -> None:
+def cmd_host_set(args: HostSetOverrideArgs) -> None:
     """Set the override file on a host."""
     ensure_host_or_file(args.host)
     actor = infer_actor()

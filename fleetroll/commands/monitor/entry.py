@@ -31,10 +31,10 @@ from .formatting import (
 )
 
 if TYPE_CHECKING:
-    from ...cli import Args
+    from ...cli_types import HostMonitorArgs
 
 
-def cmd_host_monitor(args: Args) -> None:
+def cmd_host_monitor(args: HostMonitorArgs) -> None:
     """Monitor the latest audit record for hosts by tailing the audit log."""
     ensure_host_or_file(args.host)
     if is_host_file(args.host):

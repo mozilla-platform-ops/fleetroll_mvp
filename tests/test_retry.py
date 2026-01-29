@@ -7,22 +7,30 @@ import time
 from pathlib import Path
 
 import pytest
-from fleetroll.cli import Args
+from fleetroll.cli_types import HostAuditArgs
 from fleetroll.commands.audit import audit_single_host_with_retry
 
 
 class TestRetryLogic:
     """Tests for audit_single_host_with_retry function."""
 
-    def _make_args(self, tmp_dir: Path) -> Args:
+    def _make_args(self, tmp_dir: Path) -> HostAuditArgs:
         """Create Args object for testing."""
-        return Args(
+        return HostAuditArgs(
+            host="test.example.com",
+            ssh_option=None,
+            connect_timeout=10,
             timeout=60,
             override_path="/etc/test",
             role_path="/etc/role",
             vault_path="/root/vault.yaml",
             no_content=True,
             audit_log=str(tmp_dir / "audit.jsonl"),
+            json=False,
+            workers=10,
+            batch_timeout=600,
+            verbose=False,
+            quiet=False,
         )
 
     def test_no_retry_on_success(self, mocker, tmp_dir: Path):

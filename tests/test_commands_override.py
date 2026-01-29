@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fleetroll.cli import Args
+from fleetroll.cli_types import OverrideShowArgs
 from fleetroll.commands.override import cmd_override_show, resolve_override_humanhash
 from fleetroll.exceptions import UserError
 from fleetroll.humanhash import humanize
@@ -25,7 +25,7 @@ def test_override_show_humanhash(tmp_dir: Path, mocker) -> None:
     overrides_dir = tmp_dir / ".fleetroll" / "overrides"
     sha = _write_override(overrides_dir, "hello\n")
     h = humanize(sha, words=2)
-    args = Args(sha_prefix=h, audit_log=str(tmp_dir / ".fleetroll" / "audit.jsonl"))
+    args = OverrideShowArgs(sha_prefix=h, audit_log=str(tmp_dir / ".fleetroll" / "audit.jsonl"))
 
     captured = []
     mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))

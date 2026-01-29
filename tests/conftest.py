@@ -7,7 +7,12 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from fleetroll.cli import Args
+from fleetroll.cli_types import (
+    HostAuditArgs,
+    HostSetOverrideArgs,
+    HostSetVaultArgs,
+    HostUnsetOverrideArgs,
+)
 from fleetroll.constants import CONTENT_SENTINEL, DEFAULT_VAULT_PATH
 
 
@@ -35,9 +40,9 @@ def tmp_host_file(tmp_dir: Path) -> Path:
 
 
 @pytest.fixture
-def mock_args_audit(tmp_audit_log: Path) -> Args:
+def mock_args_audit(tmp_audit_log: Path) -> HostAuditArgs:
     """Create Args object for audit command."""
-    return Args(
+    return HostAuditArgs(
         host="test.example.com",
         ssh_option=None,
         connect_timeout=10,
@@ -51,13 +56,14 @@ def mock_args_audit(tmp_audit_log: Path) -> Args:
         workers=10,
         batch_timeout=600,
         verbose=False,
+        quiet=False,
     )
 
 
 @pytest.fixture
-def mock_args_set(tmp_audit_log: Path) -> Args:
+def mock_args_set(tmp_audit_log: Path) -> HostSetOverrideArgs:
     """Create Args object for set command."""
-    return Args(
+    return HostSetOverrideArgs(
         host="test.example.com",
         ssh_option=None,
         connect_timeout=10,
@@ -78,9 +84,9 @@ def mock_args_set(tmp_audit_log: Path) -> Args:
 
 
 @pytest.fixture
-def mock_args_unset(tmp_audit_log: Path) -> Args:
+def mock_args_unset(tmp_audit_log: Path) -> HostUnsetOverrideArgs:
     """Create Args object for unset command."""
-    return Args(
+    return HostUnsetOverrideArgs(
         host="test.example.com",
         ssh_option=None,
         connect_timeout=10,
@@ -96,9 +102,9 @@ def mock_args_unset(tmp_audit_log: Path) -> Args:
 
 
 @pytest.fixture
-def mock_args_vault(tmp_audit_log: Path) -> Args:
+def mock_args_vault(tmp_audit_log: Path) -> HostSetVaultArgs:
     """Create Args object for vault set command."""
-    return Args(
+    return HostSetVaultArgs(
         host="test.example.com",
         ssh_option=None,
         connect_timeout=10,

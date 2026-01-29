@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from fleetroll.cli import Args
+from fleetroll.cli_types import HostAuditArgs
 from fleetroll.commands.audit import cmd_host_audit
 
 
@@ -13,7 +13,7 @@ class TestCmdHostAudit:
     """Tests for cmd_host_audit JSON exit codes."""
 
     def test_json_single_host_failure_exits_nonzero(
-        self, mocker, mock_args_audit: Args, tmp_dir, capsys
+        self, mocker, mock_args_audit: HostAuditArgs, tmp_dir, capsys
     ):
         """JSON single-host audit exits non-zero on failure."""
         mock_args_audit.json = True
@@ -30,7 +30,7 @@ class TestCmdHostAudit:
         assert output["ok"] is False
 
     def test_json_batch_failure_exits_nonzero(
-        self, mocker, mock_args_audit: Args, tmp_dir, tmp_host_file, capsys
+        self, mocker, mock_args_audit: HostAuditArgs, tmp_dir, tmp_host_file, capsys
     ):
         """JSON batch audit exits non-zero when any host fails."""
         mock_args_audit.json = True

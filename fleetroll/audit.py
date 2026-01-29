@@ -15,7 +15,7 @@ from .exceptions import FleetRollError
 from .utils import ensure_parent_dir, parse_kv_lines, sha256_hex, utc_now_iso
 
 if TYPE_CHECKING:
-    from .cli import Args
+    from .cli_types import HasAuditPaths
 
 
 def append_jsonl(path: Path, record: dict[str, Any]) -> None:
@@ -141,7 +141,7 @@ def process_audit_result(
     rc: int,
     out: str,
     err: str,
-    args: Args,
+    args: HasAuditPaths,
     audit_log: Path,
     actor: str,
     overrides_dir: Path | None = None,

@@ -9,6 +9,16 @@ from importlib.metadata import version
 
 import click
 
+from .cli_types import (
+    HostAuditArgs,
+    HostMonitorArgs,
+    HostSetOverrideArgs,
+    HostSetVaultArgs,
+    HostUnsetOverrideArgs,
+    OverrideShowArgs,
+    TcFetchArgs,
+    VaultShowArgs,
+)
 from .commands import (
     cmd_host_audit,
     cmd_host_monitor,
@@ -39,14 +49,6 @@ def setup_logging(debug: bool = False) -> None:
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     logger.addHandler(handler)
-
-
-class Args:
-    """Simple object to hold CLI arguments, compatible with command functions."""
-
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
 
 
 # Common options that apply to all commands
@@ -176,7 +178,7 @@ def host_audit(
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
 
-    args = Args(
+    args = HostAuditArgs(
         host=host,
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
@@ -241,7 +243,7 @@ def host_monitor(
     once: bool,
 ):
     """Monitor the latest audit record for a host (follows the audit log)."""
-    args = Args(
+    args = HostMonitorArgs(
         host=host,
         audit_log=audit_log,
         json=json_output,
@@ -262,7 +264,7 @@ def host_monitor(
 )
 def override_show(sha_prefix: str, audit_log: str | None):
     """Show stored override contents by SHA prefix."""
-    args = Args(
+    args = OverrideShowArgs(
         sha_prefix=sha_prefix,
         audit_log=audit_log,
     )
@@ -278,7 +280,7 @@ def override_show(sha_prefix: str, audit_log: str | None):
 )
 def vault_show(sha_prefix: str, audit_log: str | None):
     """Show stored vault contents by SHA prefix or humanhash."""
-    args = Args(
+    args = VaultShowArgs(
         sha_prefix=sha_prefix,
         audit_log=audit_log,
     )
@@ -415,7 +417,7 @@ def host_set_override(
 
     Contents must be provided via --from-file.
     """
-    args = Args(
+    args = HostSetOverrideArgs(
         host=host,
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
@@ -508,7 +510,7 @@ def host_set_vault(
     confirm: bool,
 ):
     """Set the vault.yaml file on a host (atomic write)."""
-    args = Args(
+    args = HostSetVaultArgs(
         host=host,
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
@@ -572,7 +574,7 @@ def host_unset_override(
     confirm: bool,
 ):
     """Remove the override file from a host."""
-    args = Args(
+    args = HostUnsetOverrideArgs(
         host=host,
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
@@ -607,7 +609,7 @@ def tc_fetch(host: str, verbose: int, quiet: bool):
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
 
-    args = Args(host=host, verbose=verbose, quiet=quiet)
+    args = TcFetchArgs(host=host, verbose=verbose, quiet=quiet)
     cmd_tc_fetch(args)
 
 

@@ -12,7 +12,7 @@ from .constants import CONTENT_SENTINEL, SSH_TIMEOUT_EXIT_CODE
 from .exceptions import FleetRollError
 
 if TYPE_CHECKING:
-    from .cli import Args
+    from .cli_types import HasSshOptions
 
 logger = logging.getLogger("fleetroll")
 
@@ -64,7 +64,7 @@ def run_ssh(
     )
 
 
-def build_ssh_options(args: Args) -> list[str]:
+def build_ssh_options(args: HasSshOptions) -> list[str]:
     """Build SSH options list from command arguments."""
     opts: list[str] = []
     # ConnectTimeout is client-side only; safe default for humans.

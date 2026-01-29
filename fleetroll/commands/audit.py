@@ -14,9 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-if TYPE_CHECKING:
-    from ..cli import Args
-
 from ..audit import (
     has_content_file,
     load_latest_vault_checksums,
@@ -46,13 +43,16 @@ from ..utils import (
     utc_now_iso,
 )
 
+if TYPE_CHECKING:
+    from ..cli_types import HostAuditArgs
+
 logger = logging.getLogger("fleetroll")
 
 
 def format_single_host_quiet(result: dict[str, Any], elapsed_seconds: float) -> str:
     """Format single host audit result in quiet mode.
 
-    Args:
+    HostAuditArgs:
         result: Audit result dictionary
         elapsed_seconds: Elapsed time in seconds
 
@@ -71,7 +71,7 @@ def format_single_host_quiet(result: dict[str, Any], elapsed_seconds: float) -> 
 def format_batch_quiet(summary: dict[str, Any], elapsed_seconds: float) -> str:
     """Format batch audit results in quiet mode.
 
-    Args:
+    HostAuditArgs:
         summary: Summary dictionary with results, total, successful, failed
         elapsed_seconds: Elapsed time in seconds
 
@@ -111,7 +111,7 @@ def format_progress_label(remaining: int, *, elapsed_s: float) -> str:
 def audit_single_host_with_retry(
     host: str,
     *,
-    args: Args,
+    args: HostAuditArgs,
     ssh_opts: list[str],
     remote_cmd: str,
     audit_log: Path,
@@ -307,7 +307,7 @@ def format_summary_table(summary: dict[str, Any], verbose: bool = False) -> str:
     return "\n".join(lines)
 
 
-def cmd_host_audit_batch(hosts: list[str], args: Args) -> dict[str, Any]:
+def cmd_host_audit_batch(hosts: list[str], args: HostAuditArgs) -> dict[str, Any]:
     """Audit multiple hosts in parallel."""
     actor = infer_actor()
     ssh_opts = build_ssh_options(args)
@@ -411,7 +411,7 @@ def cmd_host_audit_batch(hosts: list[str], args: Args) -> dict[str, Any]:
     }
 
 
-def format_single_host_output(result: dict[str, Any], args: Args) -> None:
+def format_single_host_output(result: dict[str, Any], args: HostAuditArgs) -> None:
     """Format and print output for a single host audit result."""
     host = result["host"]
     obs = result.get("observed", {})
@@ -482,7 +482,7 @@ def format_single_host_output(result: dict[str, Any], args: Args) -> None:
         print(f"Vault: NOT PRESENT at {args.vault_path}")
 
 
-def cmd_host_audit(args: Args) -> None:
+def cmd_host_audit(args: HostAuditArgs) -> None:
     """Audit command - handles both single host and batch mode."""
     start_time = time.time()
     ensure_host_or_file(args.host)

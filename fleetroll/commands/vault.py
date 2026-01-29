@@ -30,7 +30,7 @@ from ..utils import (
 )
 
 if TYPE_CHECKING:
-    from ..cli import Args
+    from ..cli_types import HostSetVaultArgs, VaultShowArgs
 
 
 def resolve_vault_path(sha_prefix: str, *, vault_dir: Path) -> Path:
@@ -80,7 +80,7 @@ def resolve_vault_humanhash(human_hash: str, *, vault_dir: Path) -> Path:
     return matches[0][0]
 
 
-def cmd_vault_show(args: Args) -> None:
+def cmd_vault_show(args: VaultShowArgs) -> None:
     """Print stored vault contents by SHA prefix or humanhash."""
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
     vault_dir = audit_log.parent / VAULT_YAMLS_DIR_NAME
@@ -96,7 +96,7 @@ def cmd_vault_show(args: Args) -> None:
 def set_vault_for_host(
     host: str,
     *,
-    args: Args,
+    args: HostSetVaultArgs,
     ssh_opts: list[str],
     remote_cmd: str,
     data: bytes,
@@ -158,7 +158,7 @@ def format_set_line(result: dict[str, Any]) -> str:
     return f"FAIL {host}{rc_str} {error}"
 
 
-def cmd_host_set_vault(args: Args) -> None:
+def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
     """Set the vault file on a host."""
     ensure_host_or_file(args.host)
     actor = infer_actor()
