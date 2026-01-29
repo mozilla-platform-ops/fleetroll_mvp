@@ -125,13 +125,11 @@ uv run fleetroll tc-fetch -v 1804.list
 #### Once
 
 ```bash
-# monitor once (no follow)
 uv run fleetroll host-monitor 1804.list --once
 ```
 
-#### Interactive
+#### Live-Updating Curses Interface
 ```bash
-# monitor last recorded audit state (live-updating)
 uv run fleetroll host-monitor 1804.list
 # keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
 ```
