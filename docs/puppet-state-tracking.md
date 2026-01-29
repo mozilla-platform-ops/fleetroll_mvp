@@ -291,8 +291,8 @@ fi
 ## Related Documentation
 
 - `docs/rollout-health-verification.md` - Current health verification approach (will be updated)
-- `examples/run-puppet.sh` - Current Linux puppet wrapper
-- `examples/run-puppet.mac.sh` - Current macOS puppet wrapper (empty placeholder)
+- `examples/run-puppet-linux.sh` - Current Linux puppet wrapper
+- `examples/run-puppet-macos.sh` - Current macOS puppet wrapper
 - Plan file: `~/.claude/plans/composed-percolating-walrus.md`
 
 ## References
