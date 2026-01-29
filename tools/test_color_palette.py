@@ -19,6 +19,15 @@ COLORS = {
     "yellow": "\033[33m",
     "red": "\033[31m",
     "white": "\033[37m",
+    # Extended 256 colors
+    "orange": "\033[38;5;208m",
+    "purple": "\033[38;5;129m",
+    "pink": "\033[38;5;205m",
+    "teal": "\033[38;5;33m",
+    "maroon": "\033[38;5;160m",
+    "gold": "\033[38;5;220m",
+    "forest-green": "\033[38;5;28m",
+    "orange-red": "\033[38;5;214m",
 }
 
 # High-contrast fg/bg combinations
@@ -57,18 +66,34 @@ def build_color_map(
     *,
     seed: int = 0,
 ) -> list[tuple[str, str]]:
-    """Build a color map using three tiers: normal, reverse, fg/bg combos.
+    """Build a color map using normal and reverse colors.
 
     Adjacent seeds are automatically spread for maximum visual distinction.
 
     Returns list of (label, ansi_code) tuples.
     """
-    # Build basic palette (matches monitor display.py order)
-    # Only 7 truly unique visible colors (BLACK doesn't work on dark terminals)
-    basic_colors = ["blue", "cyan", "green", "magenta", "yellow", "red", "white"]
-    palette_size = len(basic_colors)  # 7
-    fg_bg_count = len(FG_BG_COMBOS)  # 18
-    total_capacity = palette_size * 2 + fg_bg_count  # 7*2 + 18 = 32
+    # Build combined palette: 7 standard + 8 extended = 15 colors
+    basic_colors = [
+        # Standard 7
+        "blue",
+        "cyan",
+        "green",
+        "magenta",
+        "yellow",
+        "red",
+        "white",
+        # Extended 8 (256-color)
+        "orange",
+        "purple",
+        "pink",
+        "teal",
+        "maroon",
+        "gold",
+        "forest-green",
+        "orange-red",
+    ]
+    palette_size = len(basic_colors)  # 15
+    total_capacity = palette_size * 2  # 15*2 = 30
 
     # Spread adjacent seeds for maximum visual distinction (matches display.py)
     spread_factor = 11
@@ -80,28 +105,16 @@ def build_color_map(
         adjusted_idx = (idx + effective_seed) % total_capacity
 
         if adjusted_idx < palette_size:
-            # Tier 1: Normal basic colors
+            # Tier 1: Normal colors
             color_name = basic_colors[adjusted_idx]
             ansi_code = COLORS[color_name]
             color_label = f"normal:{color_name}"
-        elif adjusted_idx < palette_size * 2:
-            # Tier 2: Reversed basic colors
+        else:
+            # Tier 2: Reversed colors
             color_idx = adjusted_idx - palette_size
             color_name = basic_colors[color_idx]
             ansi_code = REVERSE + COLORS[color_name]
             color_label = f"reverse:{color_name}"
-        else:
-            # Tier 3: High-contrast fg/bg combinations
-            fg_bg_idx = adjusted_idx - (palette_size * 2)
-            if fg_bg_idx < fg_bg_count:
-                ansi_code, color_desc = FG_BG_COMBOS[fg_bg_idx]
-                color_label = f"fg/bg:{color_desc}"
-            else:
-                # Wrap around fallback
-                color_idx = adjusted_idx % palette_size
-                color_name = basic_colors[color_idx]
-                ansi_code = COLORS[color_name]
-                color_label = f"wrap:{color_name}"
 
         # Create a compact label showing value index, color index, and description
         label = f"v{idx:<2d} c{adjusted_idx:<2d} {color_label}"
@@ -162,10 +175,11 @@ def main():
         print("  ".join(row_parts))
 
     print("\n" + "=" * 100)
-    total = 7 * 2 + len(FG_BG_COMBOS)
+    total = 15 * 2  # 15 colors (7 standard + 8 extended) x 2 (normal + reverse)
     print(
         f"Total capacity: {total} distinct appearances "
-        f"(7 normal + 7 reverse + {len(FG_BG_COMBOS)} fg/bg)\n"
+        f"(15 normal + 15 reverse)\n"
+        f"Palette: 7 standard + 8 extended 256-colors\n"
     )
 
 

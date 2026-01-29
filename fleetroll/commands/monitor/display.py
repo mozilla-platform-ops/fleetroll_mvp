@@ -93,7 +93,17 @@ class MonitorDisplay:
                 curses.init_pair(16, curses.COLOR_BLACK, -1)
                 curses.init_pair(17, curses.COLOR_YELLOW, curses.COLOR_BLACK)
                 curses.init_pair(18, curses.COLOR_WHITE, curses.COLOR_BLACK)
-                # High-contrast fg/bg combinations for extended palette (pairs 19+)
+                # Extended 256 colors for more distinct palette (pairs 19-26)
+                if curses.COLORS >= 256:
+                    curses.init_pair(19, 208, -1)  # bright-orange
+                    curses.init_pair(20, 129, -1)  # bright-purple
+                    curses.init_pair(21, 205, -1)  # hot-pink
+                    curses.init_pair(22, 33, -1)  # teal
+                    curses.init_pair(23, 160, -1)  # maroon
+                    curses.init_pair(24, 220, -1)  # gold
+                    curses.init_pair(25, 28, -1)  # forest-green
+                    curses.init_pair(26, 214, -1)  # orange-red
+                # High-contrast fg/bg combinations for extended palette (pairs 27+)
                 # Format: (fg, bg) chosen for readability
                 fg_bg_combos = [
                     # (curses.COLOR_YELLOW, curses.COLOR_BLUE),  # yellow on blue - c16 UNREADABLE
@@ -530,10 +540,10 @@ class MonitorDisplay:
             if role and role not in ("-", "?", "missing"):
                 role_values.add(role)
 
-        # Use basic 7-color palette (all visible colors except black)
-        # This gives 7 normal + 7 reverse + 18 fg/bg = 32 distinct appearances
-        # Use 7 truly unique colors (all visible terminal colors except black)
+        # Use 15-color palette: 7 standard + 8 extended (if available)
+        # This gives 15 normal + 15 reverse = 30 distinct appearances
         sha_palette = [
+            # Standard 7 colors
             self.curses_mod.color_pair(7),  # blue
             self.curses_mod.color_pair(8),  # cyan
             self.curses_mod.color_pair(9),  # green
@@ -542,6 +552,20 @@ class MonitorDisplay:
             self.curses_mod.color_pair(6),  # red
             self.curses_mod.color_pair(15),  # white
         ]
+        # Add extended colors if 256-color terminal
+        if self.extended_colors:
+            sha_palette.extend(
+                [
+                    self.curses_mod.color_pair(19),  # bright-orange
+                    self.curses_mod.color_pair(20),  # bright-purple
+                    self.curses_mod.color_pair(21),  # hot-pink
+                    self.curses_mod.color_pair(22),  # teal
+                    self.curses_mod.color_pair(23),  # maroon
+                    self.curses_mod.color_pair(24),  # gold
+                    self.curses_mod.color_pair(25),  # forest-green
+                    self.curses_mod.color_pair(26),  # orange-red
+                ]
+            )
         role_palette = [
             self.curses_mod.color_pair(12),  # red
             self.curses_mod.color_pair(13),  # yellow
