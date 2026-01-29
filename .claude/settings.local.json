@@ -23,7 +23,8 @@
       "Bash(prek run:*)",
       "Bash(pytest:*)",
       "Bash(grep:*)",
-      "Bash(br dep list:*)"
+      "Bash(br dep list:*)",
+      "Bash(prek:*)"
     ]
   }
 }
