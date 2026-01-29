@@ -18,7 +18,7 @@ from ..audit import append_jsonl, store_content_file
 from ..constants import BACKUP_TIME_FORMAT, VAULT_YAMLS_DIR_NAME
 from ..exceptions import UserError
 from ..humanhash import humanize
-from ..ssh import build_ssh_options, remote_set_script, run_ssh
+from ..ssh import build_ssh_options, run_ssh
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
@@ -122,7 +122,6 @@ def set_vault_for_host(
         "actor": actor,
         "action": "host.set_vault",
         "host": host,
-        "vault_path": args.vault_path,
         "ok": (rc == 0),
         "ssh_rc": rc,
         "stderr": err.strip(),
@@ -190,7 +189,6 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
                 "host_count": len(hosts),
                 "host": None if is_batch else hosts[0],
                 "host_file": str(host_file) if is_batch else None,
-                "vault_path": args.vault_path,
                 "source": source,
                 "sha256": content_hash,
                 "mode": args.mode,
@@ -212,7 +210,6 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
                 print(f"Host: {hosts[0]}")
             action_target = f"{len(hosts)} host(s)"
             print(f"Action: set vault on {action_target}")
-            print(f"Vault path: {args.vault_path}")
             print(f"Vault source: {source}")
             print(f"Vault checksum: sha256={content_hash}")
             print(f"Mode: {args.mode} Owner: {args.owner} Group: {args.group}")
@@ -230,8 +227,9 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
     content_text = data.decode("utf-8", errors="replace")
     stored_path = store_content_file(content_text, content_hash, vault_dir)
 
-    remote_cmd = remote_set_script(
-        override_path=args.vault_path,
+    from ..ssh import remote_set_vault_script
+
+    remote_cmd = remote_set_vault_script(
         mode=args.mode,
         owner=args.owner,
         group=args.group,
@@ -267,11 +265,11 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
             )
             sys.exit(1)
 
-        print(f"[{args.host}] vault written to {args.vault_path}")
+        print(f"[{args.host}] vault written")
         print(f"sha256={content_hash}")
         print(f"stored: {stored_path}")
         if not args.no_backup:
-            print(f"backup (if existed): {args.vault_path}.bak.{backup_suffix}")
+            print("backup created (if file existed)")
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")
@@ -321,7 +319,6 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
                         "actor": actor,
                         "action": "host.set_vault",
                         "host": host,
-                        "vault_path": args.vault_path,
                         "ok": False,
                         "ssh_rc": None,
                         "stderr": "",

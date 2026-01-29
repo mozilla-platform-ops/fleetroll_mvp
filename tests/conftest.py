@@ -13,7 +13,7 @@ from fleetroll.cli_types import (
     HostSetVaultArgs,
     HostUnsetOverrideArgs,
 )
-from fleetroll.constants import CONTENT_SENTINEL, DEFAULT_VAULT_PATH
+from fleetroll.constants import CONTENT_SENTINEL
 
 
 @pytest.fixture
@@ -49,9 +49,6 @@ def mock_args_audit(tmp_audit_log: Path) -> HostAuditArgs:
         timeout=60,
         audit_log=str(tmp_audit_log),
         json=False,
-        override_path="/etc/puppet/ronin_settings",
-        role_path="/etc/puppet_role",
-        vault_path="/root/vault.yaml",
         no_content=False,
         workers=10,
         batch_timeout=600,
@@ -71,7 +68,6 @@ def mock_args_set(tmp_audit_log: Path) -> HostSetOverrideArgs:
         audit_log=str(tmp_audit_log),
         json=False,
         workers=10,
-        override_path="/etc/puppet/ronin_settings",
         from_file=None,
         validate=True,
         mode="0644",
@@ -94,7 +90,6 @@ def mock_args_unset(tmp_audit_log: Path) -> HostUnsetOverrideArgs:
         audit_log=str(tmp_audit_log),
         json=False,
         workers=10,
-        override_path="/etc/puppet/ronin_settings",
         no_backup=False,
         reason="test reason",
         confirm=True,
@@ -112,7 +107,6 @@ def mock_args_vault(tmp_audit_log: Path) -> HostSetVaultArgs:
         audit_log=str(tmp_audit_log),
         json=False,
         workers=10,
-        vault_path=DEFAULT_VAULT_PATH,
         from_file=None,
         mode="0640",
         owner="root",

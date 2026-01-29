@@ -63,7 +63,6 @@ def set_override_for_host(
         "actor": actor,
         "action": "host.set_override",
         "host": host,
-        "override_path": args.override_path,
         "ok": (rc == 0),
         "ssh_rc": rc,
         "stderr": err.strip(),
@@ -154,7 +153,6 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                 "host_count": len(hosts),
                 "host": None if is_batch else hosts[0],
                 "host_file": str(host_file) if is_batch else None,
-                "override_path": args.override_path,
                 "source": source,
                 "sha256": content_hash,
                 "mode": args.mode,
@@ -176,7 +174,6 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                 print(f"Host: {hosts[0]}")
             action_target = f"{len(hosts)} host(s)"
             print(f"Action: set override on {action_target}")
-            print(f"Override path: {args.override_path}")
             print(f"Override source: {source}")
             print(f"Override checksum: sha256={content_hash}")
             print(f"Mode: {args.mode} Owner: {args.owner} Group: {args.group}")
@@ -198,7 +195,6 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
     backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)
 
     remote_cmd = remote_set_script(
-        override_path=args.override_path,
         mode=args.mode,
         owner=args.owner,
         group=args.group,
@@ -233,10 +229,10 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
             )
             sys.exit(1)
 
-        print(f"[{args.host}] override written to {args.override_path}")
+        print(f"[{args.host}] override written")
         print(f"sha256={content_hash}")
         if not args.no_backup:
-            print(f"backup (if existed): {args.override_path}.bak.{backup_suffix}")
+            print("backup created (if file existed)")
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")
@@ -285,7 +281,6 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                         "actor": actor,
                         "action": "host.set_override",
                         "host": host,
-                        "override_path": args.override_path,
                         "ok": False,
                         "ssh_rc": None,
                         "stderr": "",

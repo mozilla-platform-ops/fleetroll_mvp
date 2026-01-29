@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-# Default paths
+# Linux paths (used when remote OS is Linux)
 DEFAULT_OVERRIDE_PATH = "/etc/puppet/ronin_settings"
 DEFAULT_ROLE_PATH = "/etc/puppet_role"
 DEFAULT_VAULT_PATH = "/root/vault.yaml"
 # DEFAULT_PUPPET_DONE_PATH = "/tmp/puppet_run_done" # only used on linux
 DEFAULT_PUPPET_LAST_RUN_PATH = "/opt/puppetlabs/puppet/cache/state/last_run_report.yaml"
 
-# os x paths
+# Darwin/OS X paths (used when remote OS is Darwin)
+# Paths are automatically selected based on OS detection in remote scripts
 OSX_OVERRIDE_PATH = "/opt/puppet_environments/ronin_settings"
-# OSX_ROLE_PATH: same on os x
+# OSX_ROLE_PATH: same as Linux (/etc/puppet_role)
 OSX_VAULT_PATH = "/var/root/vault.yaml"
-# OSX_PUPPET_DONE_PATH: not used os x yet
+# OSX_PUPPET_DONE_PATH: not used on OS X yet
 OSX_PUPPET_LAST_RUN_PATH = "TBD"
 
 # Internal constants

@@ -30,7 +30,7 @@ from ..constants import (
 from ..ssh import (
     build_ssh_options,
     remote_audit_script,
-    remote_read_file_script,
+    remote_read_vault_script,
     run_ssh,
 )
 from ..utils import (
@@ -168,7 +168,6 @@ def audit_single_host_with_retry(
                 rc=rc,
                 out=out,
                 err=err,
-                args=args,
                 audit_log=audit_log,
                 actor=actor,
                 overrides_dir=overrides_dir,
@@ -179,7 +178,7 @@ def audit_single_host_with_retry(
             vault_present = result.get("observed", {}).get("vault_present")
             if vault_present and vault_sha and vault_dir:
                 if not has_content_file(vault_sha, vault_dir):
-                    vault_cmd = remote_read_file_script(args.vault_path)
+                    vault_cmd = remote_read_vault_script()
                     v_rc, v_out, v_err = run_ssh(
                         host,
                         vault_cmd,
@@ -316,12 +315,7 @@ def cmd_host_audit_batch(hosts: list[str], args: HostAuditArgs) -> dict[str, Any
     vault_checksums = load_latest_vault_checksums(audit_log)
     vault_dir = audit_log.parent / VAULT_YAMLS_DIR_NAME
 
-    remote_cmd = remote_audit_script(
-        override_path=args.override_path,
-        role_path=args.role_path,
-        vault_path=args.vault_path,
-        include_content=not args.no_content,
-    )
+    remote_cmd = remote_audit_script(include_content=not args.no_content)
 
     results = []
     lock = threading.Lock()
@@ -440,7 +434,7 @@ def format_single_host_output(result: dict[str, Any], args: HostAuditArgs) -> No
 
     if override_present:
         meta = obs.get("override_meta") or {}
-        print(f"Override: PRESENT at {args.override_path}")
+        print("Override: PRESENT")
         print(
             f"  mode={meta.get('mode')} owner={meta.get('owner')} "
             f"group={meta.get('group')} size={meta.get('size')} "
@@ -461,12 +455,12 @@ def format_single_host_output(result: dict[str, Any], args: HostAuditArgs) -> No
         if "override_file_path" in obs:
             print(f"  stored: {obs['override_file_path']}")
     else:
-        print(f"Override: NOT PRESENT at {args.override_path}")
+        print("Override: NOT PRESENT")
     if vault_present is None:
         print("Vault: UNKNOWN (no data)")
     elif vault_present:
         meta = obs.get("vault_meta") or {}
-        print(f"Vault: PRESENT at {args.vault_path}")
+        print("Vault: PRESENT")
         print(
             f"  mode={meta.get('mode')} owner={meta.get('owner')} "
             f"group={meta.get('group')} size={meta.get('size')} "
@@ -479,7 +473,7 @@ def format_single_host_output(result: dict[str, Any], args: HostAuditArgs) -> No
         if "vault_fetch_error" in obs:
             print(f"  fetch_error: {obs['vault_fetch_error']}")
     else:
-        print(f"Vault: NOT PRESENT at {args.vault_path}")
+        print("Vault: NOT PRESENT")
 
 
 def cmd_host_audit(args: HostAuditArgs) -> None:

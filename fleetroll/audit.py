@@ -8,14 +8,11 @@ import tempfile
 import threading
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .constants import CONTENT_PREFIX_LEN, CONTENT_PREFIX_STEP, CONTENT_SENTINEL
 from .exceptions import FleetRollError
 from .utils import ensure_parent_dir, parse_kv_lines, sha256_hex, utc_now_iso
-
-if TYPE_CHECKING:
-    from .cli_types import HasAuditPaths
 
 
 def append_jsonl(path: Path, record: dict[str, Any]) -> None:
@@ -141,7 +138,6 @@ def process_audit_result(
     rc: int,
     out: str,
     err: str,
-    args: HasAuditPaths,
     audit_log: Path,
     actor: str,
     overrides_dir: Path | None = None,
@@ -210,9 +206,6 @@ def process_audit_result(
         "actor": actor,
         "action": "host.audit",
         "host": host,
-        "override_path": args.override_path,
-        "role_path": args.role_path,
-        "vault_path": getattr(args, "vault_path", None),
         "ok": (rc == 0),
         "ssh_rc": rc,
         "stderr": err.strip(),

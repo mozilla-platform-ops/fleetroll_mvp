@@ -16,9 +16,6 @@ class HostAuditArgs:
     timeout: int
     audit_log: str | None
     json: bool
-    override_path: str
-    role_path: str
-    vault_path: str
     no_content: bool
     workers: int
     batch_timeout: int
@@ -33,9 +30,6 @@ class HostMonitorArgs:
     host: str
     audit_log: str | None
     json: bool
-    override_path: str
-    role_path: str
-    vault_path: str
     once: bool
 
 
@@ -66,7 +60,6 @@ class HostSetOverrideArgs:
     audit_log: str | None
     json: bool
     workers: int
-    override_path: str
     from_file: str | None
     validate: bool
     mode: str
@@ -88,7 +81,6 @@ class HostSetVaultArgs:
     audit_log: str | None
     json: bool
     workers: int
-    vault_path: str
     from_file: str | None
     mode: str
     owner: str
@@ -109,7 +101,6 @@ class HostUnsetOverrideArgs:
     audit_log: str | None
     json: bool
     workers: int
-    override_path: str
     no_backup: bool
     reason: str | None
     confirm: bool
@@ -138,10 +129,3 @@ class HasSshOptions(Protocol):
 
     connect_timeout: int
     ssh_option: list[str] | None
-
-
-class HasAuditPaths(Protocol):
-    """Protocol for args that contain audit file paths."""
-
-    override_path: str
-    role_path: str

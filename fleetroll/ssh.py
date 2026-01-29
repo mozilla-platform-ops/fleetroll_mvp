@@ -79,13 +79,7 @@ def build_ssh_options(args: HasSshOptions) -> list[str]:
     return opts
 
 
-def audit_script_body(
-    override_path: str,
-    role_path: str,
-    vault_path: str,
-    *,
-    include_content: bool,
-) -> str:
+def audit_script_body(*, include_content: bool) -> str:
     """Return the remote shell script body for auditing a host."""
     # Remote output is line-oriented to make it easy to parse.
     # We intentionally avoid printing arbitrary separators in content output.
@@ -96,12 +90,31 @@ def audit_script_body(
     # We use sudo -n everywhere; failures will be visible.
     script = f"""
 set -eu
-op={shlex.quote(override_path)}
-rp={shlex.quote(role_path)}
-vp={shlex.quote(vault_path)}
+
+# Detect operating system
+os_type=$(uname -s)
+
+# Set paths based on OS
+if [ "$os_type" = "Darwin" ]; then
+  op="/opt/puppet_environments/ronin_settings"
+  vp="/var/root/vault.yaml"
+else
+  op="/etc/puppet/ronin_settings"
+  vp="/root/vault.yaml"
+fi
+rp="/etc/puppet_role"
 
 # Uptime (best effort)
-if [ -r /proc/uptime ]; then
+if [ "$os_type" = "Darwin" ]; then
+  # macOS: extract boot time from sysctl, calculate uptime
+  boot_epoch=$(sysctl -n kern.boottime 2>/dev/null | awk '{{print $4}}' | tr -d ',' || true)
+  if [ -n "$boot_epoch" ]; then
+    current_epoch=$(date +%s)
+    uptime_s=$((current_epoch - boot_epoch))
+    printf 'UPTIME_S=%s\\n' "$uptime_s"
+  fi
+elif [ -r /proc/uptime ]; then
+  # Linux: read from /proc/uptime
   uptime_s=$(awk '{{print int($1)}}' /proc/uptime 2>/dev/null || true)
   if [ -n "$uptime_s" ]; then
     printf 'UPTIME_S=%s\\n' "$uptime_s"
@@ -120,14 +133,30 @@ fi
 # Vault (best effort)
 if sudo -n test -e "$vp" 2>/dev/null; then
   printf 'VLT_PRESENT=1\\n'
-  stat_out=$(sudo -n stat -c '%a %U %G %s %Y' "$vp" 2>/dev/null || true)
-  if [ -n "$stat_out" ]; then
-    set -- $stat_out
-    printf 'VLT_MODE=%s\\n' "$1"
-    printf 'VLT_OWNER=%s\\n' "$2"
-    printf 'VLT_GROUP=%s\\n' "$3"
-    printf 'VLT_SIZE=%s\\n' "$4"
-    printf 'VLT_MTIME=%s\\n' "$5"
+  if [ "$os_type" = "Darwin" ]; then
+    # BSD stat: %p=full mode, %Su=owner name, %Sg=group name, %z=size, %m=mtime
+    stat_out=$(sudo -n stat -f '%p %Su %Sg %z %m' "$vp" 2>/dev/null || true)
+    if [ -n "$stat_out" ]; then
+      set -- $stat_out
+      # Extract last 4 chars of mode (e.g., 100644 -> 0644)
+      mode=$(printf '%s' "$1" | tail -c 4)
+      printf 'VLT_MODE=%s\\n' "$mode"
+      printf 'VLT_OWNER=%s\\n' "$2"
+      printf 'VLT_GROUP=%s\\n' "$3"
+      printf 'VLT_SIZE=%s\\n' "$4"
+      printf 'VLT_MTIME=%s\\n' "$5"
+    fi
+  else
+    # GNU stat: %a=octal mode, %U=owner, %G=group, %s=size, %Y=mtime
+    stat_out=$(sudo -n stat -c '%a %U %G %s %Y' "$vp" 2>/dev/null || true)
+    if [ -n "$stat_out" ]; then
+      set -- $stat_out
+      printf 'VLT_MODE=%s\\n' "$1"
+      printf 'VLT_OWNER=%s\\n' "$2"
+      printf 'VLT_GROUP=%s\\n' "$3"
+      printf 'VLT_SIZE=%s\\n' "$4"
+      printf 'VLT_MTIME=%s\\n' "$5"
+    fi
   fi
   if sudo -n test -r "$vp" 2>/dev/null; then
     if command -v sha256sum >/dev/null 2>&1; then
@@ -145,20 +174,22 @@ else
   printf 'VLT_PRESENT=0\\n'
 fi
 
-# Puppet last run state (best effort)
-# Try last_run_report.yaml first (Puppet 7+), then fall back to summary files
-pp_report="/opt/puppetlabs/puppet/cache/state/last_run_report.yaml"
-if sudo -n test -e "$pp_report" 2>/dev/null; then
-  # Parse report file (Puppet 7+): time is ISO timestamp, status indicates success
-  pp_time=$(sudo -n grep "^time:" "$pp_report" 2>/dev/null | head -1 | sed 's/^time: *//' | tr -d "\\\"\\'")
-  if [ -n "$pp_time" ]; then
-    # Convert ISO timestamp to epoch (strip nanoseconds for compatibility)
-    pp_time_clean=$(printf '%s' "$pp_time" | sed 's/\\.[0-9]*//; s/+00:00$/Z/')
-    pp_epoch=$(date -d "$pp_time_clean" +%s 2>/dev/null || true)
-    if [ -n "$pp_epoch" ]; then
-      printf 'PP_LAST_RUN_EPOCH=%s\\n' "$pp_epoch"
+# Puppet last run state (best effort) - Linux only for now
+if [ "$os_type" != "Darwin" ]; then
+  # Try last_run_report.yaml first (Puppet 7+), then fall back to summary files
+  pp_report="/opt/puppetlabs/puppet/cache/state/last_run_report.yaml"
+  if sudo -n test -e "$pp_report" 2>/dev/null; then
+    # Parse report file (Puppet 7+): time is ISO timestamp, status indicates success
+    pp_time=$(sudo -n grep "^time:" "$pp_report" 2>/dev/null | head -1 | sed 's/^time: *//' | tr -d "\\\"\\'")
+    if [ -n "$pp_time" ]; then
+      # Convert ISO timestamp to epoch (strip nanoseconds for compatibility)
+      pp_time_clean=$(printf '%s' "$pp_time" | sed 's/\\.[0-9]*//; s/+00:00$/Z/')
+      # GNU date: -d (parse date string)
+      pp_epoch=$(date -d "$pp_time_clean" +%s 2>/dev/null || true)
+      if [ -n "$pp_epoch" ]; then
+        printf 'PP_LAST_RUN_EPOCH=%s\\n' "$pp_epoch"
+      fi
     fi
-  fi
   pp_status=$(sudo -n awk '/^status:/ {{print $2; exit}}' "$pp_report" 2>/dev/null || true)
   if [ -n "$pp_status" ]; then
     if [ "$pp_status" = "failed" ]; then
@@ -194,20 +225,36 @@ else
       fi
     fi
   fi
+  fi
 fi
 
 # Override (best effort)
 if sudo -n test -e "$op" 2>/dev/null; then
   printf 'OVERRIDE_PRESENT=1\\n'
-  # stat fields: numeric mode, owner user, group, size, mtime epoch
-  stat_out=$(sudo -n stat -c '%a %U %G %s %Y' "$op" 2>/dev/null || true)
-  if [ -n "$stat_out" ]; then
-    set -- $stat_out
-    printf 'OVERRIDE_MODE=%s\\n' "$1"
-    printf 'OVERRIDE_OWNER=%s\\n' "$2"
-    printf 'OVERRIDE_GROUP=%s\\n' "$3"
-    printf 'OVERRIDE_SIZE=%s\\n' "$4"
-    printf 'OVERRIDE_MTIME=%s\\n' "$5"
+  if [ "$os_type" = "Darwin" ]; then
+    # BSD stat: %p=full mode, %Su=owner name, %Sg=group name, %z=size, %m=mtime
+    stat_out=$(sudo -n stat -f '%p %Su %Sg %z %m' "$op" 2>/dev/null || true)
+    if [ -n "$stat_out" ]; then
+      set -- $stat_out
+      # Extract last 4 chars of mode (e.g., 100644 -> 0644)
+      mode=$(printf '%s' "$1" | tail -c 4)
+      printf 'OVERRIDE_MODE=%s\\n' "$mode"
+      printf 'OVERRIDE_OWNER=%s\\n' "$2"
+      printf 'OVERRIDE_GROUP=%s\\n' "$3"
+      printf 'OVERRIDE_SIZE=%s\\n' "$4"
+      printf 'OVERRIDE_MTIME=%s\\n' "$5"
+    fi
+  else
+    # GNU stat: %a=octal mode, %U=owner, %G=group, %s=size, %Y=mtime
+    stat_out=$(sudo -n stat -c '%a %U %G %s %Y' "$op" 2>/dev/null || true)
+    if [ -n "$stat_out" ]; then
+      set -- $stat_out
+      printf 'OVERRIDE_MODE=%s\\n' "$1"
+      printf 'OVERRIDE_OWNER=%s\\n' "$2"
+      printf 'OVERRIDE_GROUP=%s\\n' "$3"
+      printf 'OVERRIDE_SIZE=%s\\n' "$4"
+      printf 'OVERRIDE_MTIME=%s\\n' "$5"
+    fi
   fi
   if {include_content_cmd}; then
     printf '{sentinel}\\n'
@@ -221,18 +268,9 @@ fi
     return script.strip("\n")
 
 
-def remote_audit_script(
-    override_path: str, role_path: str, vault_path: str, *, include_content: bool
-) -> str:
+def remote_audit_script(*, include_content: bool) -> str:
     """Generate remote shell script for auditing a host."""
-    return "sh -c " + shlex.quote(
-        audit_script_body(
-            override_path=override_path,
-            role_path=role_path,
-            vault_path=vault_path,
-            include_content=include_content,
-        )
-    )
+    return "sh -c " + shlex.quote(audit_script_body(include_content=include_content))
 
 
 def remote_read_file_script(path: str) -> str:
@@ -246,8 +284,25 @@ sudo -n cat "$fp"
     return "sh -c " + shlex.quote(script.strip("\n"))
 
 
+def remote_read_vault_script() -> str:
+    """Generate remote shell script to read vault.yaml with OS-appropriate path."""
+    script = """
+set -eu
+
+# Detect OS and set vault path
+os_type=$(uname -s)
+if [ "$os_type" = "Darwin" ]; then
+  vp="/var/root/vault.yaml"
+else
+  vp="/root/vault.yaml"
+fi
+
+sudo -n cat "$vp"
+"""
+    return "sh -c " + shlex.quote(script.strip("\n"))
+
+
 def remote_set_script(
-    override_path: str,
     *,
     mode: str,
     owner: str,
@@ -256,7 +311,6 @@ def remote_set_script(
     backup_suffix: str,
 ) -> str:
     """Generate remote shell script for setting override file."""
-    op = shlex.quote(override_path)
     m = shlex.quote(mode)
     og = shlex.quote(f"{owner}:{group}")
     b = "true" if backup else "false"
@@ -273,7 +327,14 @@ def remote_set_script(
     script = f"""
 set -eu
 trap 'sudo -n rm -f "$tmp" 2>/dev/null' EXIT
-op={op}
+
+# Detect OS and set override path
+os_type=$(uname -s)
+if [ "$os_type" = "Darwin" ]; then
+  op="/opt/puppet_environments/ronin_settings"
+else
+  op="/etc/puppet/ronin_settings"
+fi
 dir=$(dirname "$op")
 tmp=$(sudo -n mktemp "$dir/.ronin_settings.tmp.XXXXXX")
 
@@ -316,15 +377,88 @@ fi
     return "sh -c " + shlex.quote(script.strip("\n"))
 
 
-def remote_unset_script(override_path: str, *, backup: bool, backup_suffix: str) -> str:
-    """Generate remote shell script for unsetting (removing) override file."""
-    op = shlex.quote(override_path)
+def remote_set_vault_script(
+    *,
+    mode: str,
+    owner: str,
+    group: str,
+    backup: bool,
+    backup_suffix: str,
+) -> str:
+    """Generate remote shell script for setting vault.yaml file."""
+    m = shlex.quote(mode)
+    og = shlex.quote(f"{owner}:{group}")
     b = "true" if backup else "false"
     suf = shlex.quote(backup_suffix)
     script = f"""
 set -eu
 trap 'sudo -n rm -f "$tmp" 2>/dev/null' EXIT
-op={op}
+
+# Detect OS and set vault path
+os_type=$(uname -s)
+if [ "$os_type" = "Darwin" ]; then
+  vp="/var/root/vault.yaml"
+else
+  vp="/root/vault.yaml"
+fi
+
+dir=$(dirname "$vp")
+tmp=$(sudo -n mktemp "$dir/.vault.tmp.XXXXXX")
+
+# Write new contents
+sudo -n tee "$tmp" >/dev/null
+
+# Normalize perms/ownership
+sudo -n chmod {m} "$tmp"
+sudo -n chown {og} "$tmp"
+
+# Check if content is identical
+content_changed=1
+if sudo -n test -e "$vp" 2>/dev/null; then
+  if sudo -n cmp -s "$tmp" "$vp"; then
+    content_changed=0
+  fi
+fi
+
+if [ "$content_changed" = "0" ]; then
+  # Content identical - just ensure perms/ownership are correct
+  sudo -n chmod {m} "$vp"
+  sudo -n chown {og} "$vp"
+  echo "CONTENT_CHANGED=0"
+else
+  # Content changed - backup if requested, then replace
+  if {b}; then
+    if sudo -n test -e "$vp" 2>/dev/null; then
+      sudo -n cp -a "$vp" "$vp.bak.{suf}"
+    fi
+  fi
+  sudo -n mv -f "$tmp" "$vp"
+  echo "CONTENT_CHANGED=1"
+fi
+
+# Cleanup old backups (keep 30 most recent)
+if {b}; then
+  sudo -n sh -c 'ls -t "$vp".bak.* 2>/dev/null | tail -n +31 | xargs -r rm -f' || true
+fi
+"""
+    return "sh -c " + shlex.quote(script.strip("\n"))
+
+
+def remote_unset_script(*, backup: bool, backup_suffix: str) -> str:
+    """Generate remote shell script for unsetting (removing) override file."""
+    b = "true" if backup else "false"
+    suf = shlex.quote(backup_suffix)
+    script = f"""
+set -eu
+trap 'sudo -n rm -f "$tmp" 2>/dev/null' EXIT
+
+# Detect OS and set override path
+os_type=$(uname -s)
+if [ "$os_type" = "Darwin" ]; then
+  op="/opt/puppet_environments/ronin_settings"
+else
+  op="/etc/puppet/ronin_settings"
+fi
 if sudo -n test -e "$op" 2>/dev/null; then
   if {b}; then
     sudo -n cp -a "$op" "$op.bak.{suf}"

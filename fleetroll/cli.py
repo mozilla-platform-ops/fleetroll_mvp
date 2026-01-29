@@ -31,7 +31,6 @@ from .commands import (
     cmd_tc_fetch,
     cmd_vault_show,
 )
-from .constants import DEFAULT_OVERRIDE_PATH, DEFAULT_ROLE_PATH, DEFAULT_VAULT_PATH
 from .exceptions import FleetRollError, UserError
 from .ssh import audit_script_body
 
@@ -109,24 +108,6 @@ def cli(ctx: click.Context, debug: bool):
 @click.argument("host", metavar="HOST_OR_FILE")
 @common_options
 @click.option(
-    "--override-path",
-    default=DEFAULT_OVERRIDE_PATH,
-    show_default=True,
-    help="Override file path on remote host.",
-)
-@click.option(
-    "--role-path",
-    default=DEFAULT_ROLE_PATH,
-    show_default=True,
-    help="Role file path on remote host.",
-)
-@click.option(
-    "--vault-path",
-    default=DEFAULT_VAULT_PATH,
-    show_default=True,
-    help="Vault file path on remote host.",
-)
-@click.option(
     "--no-content",
     is_flag=True,
     help="Do not print override contents (still prints presence + metadata).",
@@ -163,9 +144,6 @@ def host_audit(
     timeout: int,
     audit_log: str | None,
     json_output: bool,
-    override_path: str,
-    role_path: str,
-    vault_path: str,
     no_content: bool,
     workers: int,
     batch_timeout: int,
@@ -187,9 +165,6 @@ def host_audit(
         timeout=timeout,
         audit_log=audit_log,
         json=json_output,
-        override_path=override_path,
-        role_path=role_path,
-        vault_path=vault_path,
         no_content=no_content,
         workers=workers,
         batch_timeout=batch_timeout,
@@ -213,24 +188,6 @@ def host_audit(
     help="Emit machine-readable JSON to stdout.",
 )
 @click.option(
-    "--override-path",
-    default=DEFAULT_OVERRIDE_PATH,
-    show_default=True,
-    help="Override file path to match in audit log records.",
-)
-@click.option(
-    "--role-path",
-    default=DEFAULT_ROLE_PATH,
-    show_default=True,
-    help="Role file path to match in audit log records.",
-)
-@click.option(
-    "--vault-path",
-    default=DEFAULT_VAULT_PATH,
-    show_default=True,
-    help="Vault file path to match in audit log records.",
-)
-@click.option(
     "--once",
     is_flag=True,
     help="Print the latest record and exit (no follow).",
@@ -239,9 +196,6 @@ def host_monitor(
     host: str,
     audit_log: str | None,
     json_output: bool,
-    override_path: str,
-    role_path: str,
-    vault_path: str,
     once: bool,
 ):
     """Monitor the latest audit record for a host (follows the audit log)."""
@@ -249,9 +203,6 @@ def host_monitor(
         host=host,
         audit_log=audit_log,
         json=json_output,
-        override_path=override_path,
-        role_path=role_path,
-        vault_path=vault_path,
         once=once,
     )
     cmd_host_monitor(args)
@@ -291,24 +242,6 @@ def vault_show(sha_prefix: str, audit_log: str | None):
 
 @cli.command("debug-host-script")
 @click.option(
-    "--override-path",
-    default=DEFAULT_OVERRIDE_PATH,
-    show_default=True,
-    help="Override file path on remote host.",
-)
-@click.option(
-    "--role-path",
-    default=DEFAULT_ROLE_PATH,
-    show_default=True,
-    help="Role file path on remote host.",
-)
-@click.option(
-    "--vault-path",
-    default=DEFAULT_VAULT_PATH,
-    show_default=True,
-    help="Vault file path on remote host.",
-)
-@click.option(
     "--no-content",
     is_flag=True,
     help="Do not include override contents in the script output.",
@@ -319,19 +252,11 @@ def vault_show(sha_prefix: str, audit_log: str | None):
     help="Wrap output as a 'sh -c' command (ssh-ready).",
 )
 def debug_host_script(
-    override_path: str,
-    role_path: str,
-    vault_path: str,
     no_content: bool,
     wrap: bool,
 ):
     """Print the remote host audit script used by host-audit."""
-    body = audit_script_body(
-        override_path=override_path,
-        role_path=role_path,
-        vault_path=vault_path,
-        include_content=not no_content,
-    )
+    body = audit_script_body(include_content=not no_content)
     if wrap:
         print("sh -c " + shlex.quote(body))
     else:
@@ -347,12 +272,6 @@ def debug_host_script(
     default=10,
     show_default=True,
     help="Number of parallel workers for batch mode.",
-)
-@click.option(
-    "--override-path",
-    default=DEFAULT_OVERRIDE_PATH,
-    show_default=True,
-    help="Override file path on remote host.",
 )
 @click.option(
     "--from-file",
@@ -405,7 +324,6 @@ def host_set_override(
     audit_log: str | None,
     json_output: bool,
     workers: int,
-    override_path: str,
     from_file: str | None,
     no_validate: bool,
     mode: str,
@@ -427,7 +345,6 @@ def host_set_override(
         audit_log=audit_log,
         json=json_output,
         workers=workers,
-        override_path=override_path,
         from_file=from_file,
         validate=(not no_validate),
         mode=mode,
@@ -449,13 +366,6 @@ def host_set_override(
     default=10,
     show_default=True,
     help="Number of parallel workers for batch mode.",
-)
-@click.option(
-    "--path",
-    "vault_path",
-    default=DEFAULT_VAULT_PATH,
-    show_default=True,
-    help="Vault file path on remote host.",
 )
 @click.option(
     "--from-file",
@@ -502,7 +412,6 @@ def host_set_vault(
     audit_log: str | None,
     json_output: bool,
     workers: int,
-    vault_path: str,
     from_file: str | None,
     mode: str,
     owner: str,
@@ -520,7 +429,6 @@ def host_set_vault(
         audit_log=audit_log,
         json=json_output,
         workers=workers,
-        vault_path=vault_path,
         from_file=from_file,
         mode=mode,
         owner=owner,
@@ -541,12 +449,6 @@ def host_set_vault(
     default=10,
     show_default=True,
     help="Number of parallel workers for batch mode.",
-)
-@click.option(
-    "--override-path",
-    default=DEFAULT_OVERRIDE_PATH,
-    show_default=True,
-    help="Override file path on remote host.",
 )
 @click.option(
     "--no-backup",
@@ -570,7 +472,6 @@ def host_unset_override(
     audit_log: str | None,
     json_output: bool,
     workers: int,
-    override_path: str,
     no_backup: bool,
     reason: str | None,
     confirm: bool,
@@ -584,7 +485,6 @@ def host_unset_override(
         audit_log=audit_log,
         json=json_output,
         workers=workers,
-        override_path=override_path,
         no_backup=no_backup,
         reason=reason,
         confirm=confirm,

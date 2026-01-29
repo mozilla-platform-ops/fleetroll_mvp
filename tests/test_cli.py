@@ -41,9 +41,7 @@ class TestCliHelp:
         """host-audit --help shows command options."""
         result = runner.invoke(cli, ["host-audit", "--help"])
         assert result.exit_code == 0
-        assert "--override-path" in result.output
-        assert "--role-path" in result.output
-        assert "--vault-path" in result.output
+        # Path options removed - OS detection automatic
         assert "--workers" in result.output
         assert "--json" in result.output
 
@@ -72,7 +70,7 @@ class TestCliHelp:
         assert result.exit_code == 0
         assert "--from-file" in result.output
         assert "--confirm" in result.output
-        assert "--path" in result.output
+        # --path removed - OS detection automatic
         assert "--mode" in result.output
         assert "--owner" in result.output
         assert "--workers" in result.output
@@ -81,9 +79,7 @@ class TestCliHelp:
         """debug-host-script --help shows command options."""
         result = runner.invoke(cli, ["debug-host-script", "--help"])
         assert result.exit_code == 0
-        assert "--override-path" in result.output
-        assert "--role-path" in result.output
-        assert "--vault-path" in result.output
+        # Path options removed - OS detection automatic
         assert "--no-content" in result.output
         assert "--wrap" in result.output
 

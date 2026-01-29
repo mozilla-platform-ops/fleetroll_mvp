@@ -136,7 +136,6 @@ key=value
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -159,7 +158,6 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -186,7 +184,6 @@ content
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -220,7 +217,6 @@ secret=abc123
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -248,7 +244,6 @@ ROLE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -269,7 +264,6 @@ test content
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -287,7 +281,6 @@ test content
             rc=255,
             out="",
             err="Connection refused",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -309,7 +302,6 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -327,7 +319,6 @@ OVERRIDE_PRESENT=0
             rc=0,
             out="ROLE_PRESENT=0\nOVERRIDE_PRESENT=0\n",
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -354,7 +345,6 @@ OVERRIDE_PRESENT=0
             rc=0,
             out="ROLE_PRESENT=0\nOVERRIDE_PRESENT=0\n",
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
             log_lock=log_lock,
@@ -387,7 +377,6 @@ stored content
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
             overrides_dir=overrides_dir,
@@ -413,7 +402,6 @@ PP_SUCCESS=1
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -435,7 +423,6 @@ PP_SUCCESS=0
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )
@@ -455,7 +442,6 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            args=mock_args_audit,
             audit_log=audit_log,
             actor="test-actor",
         )

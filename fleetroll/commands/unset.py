@@ -50,7 +50,6 @@ def unset_override_for_host(
         "actor": actor,
         "action": "host.unset_override",
         "host": host,
-        "override_path": args.override_path,
         "ok": (rc == 0),
         "ssh_rc": rc,
         "stderr": err.strip(),
@@ -110,7 +109,6 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
                 "host_count": len(hosts),
                 "host": None if is_batch else hosts[0],
                 "host_file": str(host_file) if is_batch else None,
-                "override_path": args.override_path,
                 "backup": (not args.no_backup),
                 "backup_suffix_format": BACKUP_TIME_FORMAT,
                 "reason": args.reason,
@@ -126,7 +124,6 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
                 print(f"Host: {hosts[0]}")
             action_target = f"{len(hosts)} host(s)"
             print(f"Action: unset override on {action_target}")
-            print(f"Override path: {args.override_path}")
             print(f"Backup: {'yes' if not args.no_backup else 'no'}")
             if args.reason:
                 print(f"Reason: {args.reason}")
@@ -136,7 +133,6 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
 
     backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)
     remote_cmd = remote_unset_script(
-        override_path=args.override_path,
         backup=not args.no_backup,
         backup_suffix=backup_suffix,
     )
@@ -168,11 +164,11 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
             sys.exit(1)
 
         if removed:
-            print(f"[{args.host}] override removed from {args.override_path}")
+            print(f"[{args.host}] override removed")
             if not args.no_backup:
-                print(f"backup: {args.override_path}.bak.{backup_suffix}")
+                print("backup created")
         else:
-            print(f"[{args.host}] override did not exist at {args.override_path} (no change)")
+            print(f"[{args.host}] override did not exist (no change)")
 
         if args.reason:
             print(f"reason: {args.reason}")
@@ -219,7 +215,6 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
                         "actor": actor,
                         "action": "host.unset_override",
                         "host": host,
-                        "override_path": args.override_path,
                         "ok": False,
                         "ssh_rc": None,
                         "stderr": "",
