@@ -1120,21 +1120,55 @@ class MonitorDisplay:
             self.latest_ok[record["host"]] = record
         self.last_updated = record.get("ts", "unknown")
 
-    def draw_screen(self) -> None:
-        self.stdscr.erase()
+    def _compute_screen_metrics(self) -> dict[str, Any]:
+        """Compute screen dimensions and pagination metrics.
+
+        Returns:
+            Dictionary containing:
+            - height: Terminal height
+            - width: Terminal width
+            - usable_width: Width minus 1 for margin
+            - page_size: Number of host rows per page
+            - total_pages: Total pagination pages
+            - current_page: Current page number (1-indexed)
+            - updated: Human-readable last updated time
+        """
         height, width = self.stdscr.getmaxyx()
         usable_width = max(width - 1, 0)
         page_size = max(height - 2, 0)
         self.page_step = max(page_size, 1)
         self.max_offset = max(len(self.hosts) - page_size, 0)
         self.offset = min(self.offset, self.max_offset)
-        sorted_hosts = sorted(self.hosts)
         total_pages = max((len(self.hosts) + self.page_step - 1) // self.page_step, 1)
         current_page = min(((self.offset + self.page_step - 1) // self.page_step) + 1, total_pages)
         updated_age = age_seconds(self.last_updated) if self.last_updated else None
         updated = humanize_duration(updated_age) if updated_age is not None else "never"
 
-        # Compute all columns without dropping any (moved up to calculate scroll indicator)
+        return {
+            "height": height,
+            "width": width,
+            "usable_width": usable_width,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "current_page": current_page,
+            "updated": updated,
+        }
+
+    def _compute_column_widths(
+        self,
+        sorted_hosts: list[str],
+    ) -> tuple[list[str], dict[str, str], dict[str, int]]:
+        """Compute column labels and widths based on host data.
+
+        Args:
+            sorted_hosts: List of hostnames in display order
+
+        Returns:
+            Tuple of (all_columns, labels_dict, widths_dict) where:
+            - all_columns is the canonical list of column names
+            - labels_dict maps column name to header label
+            - widths_dict maps column name to computed width
+        """
         all_columns = [
             "host",
             "role",
@@ -1150,7 +1184,6 @@ class MonitorDisplay:
             "healthy",
         ]
 
-        # Calculate widths for all columns
         labels = {
             "host": "HOST",
             "uptime": "UPTIME",
@@ -1185,7 +1218,100 @@ class MonitorDisplay:
             if col in widths:
                 widths[col] += 2
 
-        # Determine visible columns with horizontal scrolling
+        return all_columns, labels, widths
+
+    def _prepare_categorical_colors(
+        self,
+        sorted_hosts: list[str],
+    ) -> dict[str, dict[str, int]]:
+        """Build color maps for categorical columns (role, sha, vlt_sha).
+
+        Args:
+            sorted_hosts: List of hostnames to analyze
+
+        Returns:
+            Dictionary mapping column name to color map:
+            {
+                "sha": {value: curses_attr, ...},
+                "vlt_sha": {value: curses_attr, ...},
+                "role": {value: curses_attr, ...}
+            }
+        """
+        sha_values = set()
+        vlt_sha_values = set()
+        role_values = set()
+        for host in sorted_hosts:
+            short_host = strip_fqdn(host)
+            tc_worker_data = self.tc_data.get(short_host)
+            values = build_row_values(
+                host,
+                self.latest.get(host),
+                last_ok=self.latest_ok.get(host),
+                tc_data=tc_worker_data,
+                fqdn_suffix=self.fqdn_suffix,
+            )
+            sha = values.get("sha", "")
+            vlt_sha = values.get("vlt_sha", "")
+            role = values.get("role", "")
+            if sha and sha not in ("-", "?"):
+                sha_values.add(sha)
+            if vlt_sha and vlt_sha not in ("-", "?"):
+                vlt_sha_values.add(vlt_sha)
+            if role and role not in ("-", "?", "missing"):
+                role_values.add(role)
+
+        sha_palette = [
+            self.curses_mod.color_pair(7),  # blue
+            self.curses_mod.color_pair(8),  # cyan
+            self.curses_mod.color_pair(9),  # green
+            self.curses_mod.color_pair(10),  # magenta
+            self.curses_mod.color_pair(11),  # yellow
+            self.curses_mod.color_pair(1),  # cyan (header color but ok for SHA)
+            self.curses_mod.color_pair(2),  # yellow
+            self.curses_mod.color_pair(3),  # magenta
+        ]
+        role_palette = [
+            self.curses_mod.color_pair(12),  # red
+            self.curses_mod.color_pair(13),  # yellow
+            self.curses_mod.color_pair(14),  # magenta
+            self.curses_mod.color_pair(7),  # blue
+            self.curses_mod.color_pair(8),  # cyan
+            self.curses_mod.color_pair(9),  # green
+            self.curses_mod.color_pair(10),  # magenta
+            self.curses_mod.color_pair(11),  # yellow
+        ]
+
+        sha_colors = self.build_color_map(sha_values, palette=sha_palette, seed=0)
+        vlt_sha_colors = self.build_color_map(vlt_sha_values, palette=sha_palette, seed=4)
+        role_colors = self.build_color_map(
+            role_values, palette=role_palette, base_attr=self.curses_mod.A_BOLD, seed=0
+        )
+
+        return {
+            "sha": sha_colors,
+            "vlt_sha": vlt_sha_colors,
+            "role": role_colors,
+        }
+
+    def _compute_visible_columns(
+        self,
+        all_columns: list[str],
+        *,
+        widths: dict[str, int],
+        usable_width: int,
+    ) -> tuple[list[str], str]:
+        """Determine which columns fit on screen with horizontal scrolling.
+
+        Args:
+            all_columns: Complete list of column names
+            widths: Column name to width mapping
+            usable_width: Available screen width
+
+        Returns:
+            Tuple of (visible_columns, scroll_indicator) where:
+            - visible_columns: List of column names to display (includes frozen "host")
+            - scroll_indicator: String showing scroll arrows and position
+        """
         # HOST is frozen (always visible), other columns scroll
         frozen_col = "host"
         scrollable_cols = [c for c in all_columns if c != frozen_col]
@@ -1237,7 +1363,56 @@ class MonitorDisplay:
                 arrows += "▶"
             scroll_indicator = f" [{arrows.strip()} cols {first_visible_idx}-{last_visible_idx}/{total_scrollable}]"
 
-        # Render top header with scroll indicator
+        return columns, scroll_indicator
+
+    def _draw_column_header(
+        self,
+        *,
+        labels: dict[str, str],
+        columns: list[str],
+        widths: dict[str, int],
+    ) -> None:
+        """Render the column header labels with separators.
+
+        Args:
+            labels: Column name to label text mapping
+            columns: Ordered list of columns to display
+            widths: Column name to width mapping
+        """
+        header_parts = render_row_cells(
+            labels, columns=columns, widths=widths, include_marker=False
+        )
+        header_line = " | ".join(header_parts)
+        if " | " in header_line:
+            parts = header_line.split(" | ")
+            col = 0
+            for idx, part in enumerate(parts):
+                if idx:
+                    self.safe_addstr(1, col, " | ")
+                    col += 3
+                self.safe_addstr(1, col, part, self.column_attr)
+                col += len(part)
+        else:
+            self.safe_addstr(1, 0, header_line, self.column_attr)
+
+    def _draw_top_header(
+        self,
+        *,
+        total_pages: int,
+        current_page: int,
+        scroll_indicator: str,
+        updated: str,
+        usable_width: int,
+    ) -> None:
+        """Render the top information banner with metadata.
+
+        Args:
+            total_pages: Total number of pagination pages
+            current_page: Current page number (1-indexed)
+            scroll_indicator: Column scroll status text
+            updated: Human-readable last update time
+            usable_width: Available screen width
+        """
         left = "fleetroll: host-monitor [? for help]"
         if total_pages > 1:
             left = f"{left}, page={current_page}/{total_pages}"
@@ -1272,220 +1447,252 @@ class MonitorDisplay:
         else:
             self.safe_addstr(0, 0, header)
 
-        # Render column header
-        header_parts = render_row_cells(
-            labels, columns=columns, widths=widths, include_marker=False
+    def _compute_row_render_data(
+        self,
+        host: str,
+    ) -> dict[str, Any]:
+        """Compute all data needed to render a single host row.
+
+        Args:
+            host: Hostname to render
+
+        Returns:
+            Dictionary containing:
+            - values: Cell values from build_row_values()
+            - ts_value: Timestamp for coloring DATA column
+            - tc_ts_value: TC timestamp for coloring
+            - tc_worker_data: TC worker data dict
+            - uptime_s: Uptime in seconds for coloring
+            - tc_last_s: TC last active in seconds for coloring
+            - pp_age_s: Puppet age in seconds for coloring
+            - pp_failed: Whether puppet run failed
+        """
+        short_host = strip_fqdn(host)
+        tc_worker_data = self.tc_data.get(short_host)
+        values = build_row_values(
+            host,
+            self.latest.get(host),
+            last_ok=self.latest_ok.get(host),
+            tc_data=tc_worker_data,
+            fqdn_suffix=self.fqdn_suffix,
         )
-        header_line = " | ".join(header_parts)
-        if " | " in header_line:
-            parts = header_line.split(" | ")
-            col = 0
-            for idx, part in enumerate(parts):
-                if idx:
-                    self.safe_addstr(1, col, " | ")
-                    col += 3
-                self.safe_addstr(1, col, part, self.column_attr)
-                col += len(part)
-        else:
-            self.safe_addstr(1, 0, header_line, self.column_attr)
+        ts_value = resolve_last_ok_ts(self.latest.get(host), last_ok=self.latest_ok.get(host))
+        tc_ts_value = tc_worker_data.get("ts") if tc_worker_data else None
+        uptime_value = values.get("uptime")
+        uptime_s = None
+        if uptime_value and uptime_value not in ("-", "?"):
+            observed = (self.latest_ok.get(host) or self.latest.get(host) or {}).get("observed", {})
+            uptime_s = observed.get("uptime_s")
+
+        # Calculate TC_LAST in seconds for coloring
+        tc_last_s = None
+        if tc_worker_data:
+            last_date_active = tc_worker_data.get("last_date_active")
+            scan_ts = tc_worker_data.get("ts")
+            if last_date_active and scan_ts:
+                try:
+                    scan_dt = dt.datetime.fromisoformat(scan_ts)
+                    if scan_dt.tzinfo is None:
+                        scan_dt = scan_dt.replace(tzinfo=dt.UTC)
+                    last_active_dt = dt.datetime.fromisoformat(last_date_active)
+                    if last_active_dt.tzinfo is None:
+                        last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
+                    tc_last_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
+                except (ValueError, AttributeError):
+                    pass
+
+        # Calculate puppet data for coloring (relative to audit time)
+        host_record = self.latest_ok.get(host) or self.latest.get(host) or {}
+        observed = host_record.get("observed", {})
+        pp_epoch = observed.get("puppet_last_run_epoch")
+        pp_success = observed.get("puppet_success")
+        pp_age_s = None
+        if pp_epoch is not None:
+            audit_ts = host_record.get("ts")
+            if audit_ts:
+                try:
+                    audit_dt = dt.datetime.fromisoformat(audit_ts)
+                    audit_epoch = int(audit_dt.timestamp())
+                    pp_age_s = max(audit_epoch - pp_epoch, 0)
+                except (ValueError, AttributeError):
+                    pass
+
+        return {
+            "host": host,
+            "values": values,
+            "ts_value": ts_value,
+            "tc_ts_value": tc_ts_value,
+            "tc_worker_data": tc_worker_data,
+            "uptime_s": uptime_s,
+            "tc_last_s": tc_last_s,
+            "pp_age_s": pp_age_s,
+            "pp_failed": pp_success is False,
+        }
+
+    def _draw_host_row(
+        self,
+        row: int,
+        *,
+        render_data: dict[str, Any],
+        columns: list[str],
+        widths: dict[str, int],
+        color_maps: dict[str, dict[str, int]],
+    ) -> None:
+        """Draw a single host row with appropriate coloring.
+
+        Args:
+            row: Screen row number to draw at
+            render_data: Pre-computed render data from _compute_row_render_data()
+            columns: Ordered list of columns to display
+            widths: Column name to width mapping
+            color_maps: Categorical color mappings from _prepare_categorical_colors()
+        """
+        values = render_data["values"]
+        ts_value = render_data["ts_value"]
+        tc_ts_value = render_data["tc_ts_value"]
+        uptime_s = render_data["uptime_s"]
+        tc_last_s = render_data["tc_last_s"]
+        pp_age_s = render_data["pp_age_s"]
+        pp_failed = render_data["pp_failed"]
+
+        sha_colors = color_maps["sha"]
+        vlt_sha_colors = color_maps["vlt_sha"]
+        role_colors = color_maps["role"]
+
+        row_cells = render_row_cells(values, columns=columns, widths=widths)
+        col = 0
+        for col_name, cell in zip(columns, row_cells):
+            if col_name != columns[0]:
+                self.safe_addstr(row, col, " | ")
+                col += 3
+            if col_name == "data":
+                # Color DATA based on the older of the two ages
+                audit_age_s = age_seconds(ts_value) if ts_value else None
+                tc_age_s = age_seconds(tc_ts_value) if tc_ts_value else None
+                # Use the older (larger) age for coloring
+                if audit_age_s is not None and tc_age_s is not None:
+                    max_age_s = max(audit_age_s, tc_age_s)
+                elif audit_age_s is not None:
+                    max_age_s = audit_age_s
+                elif tc_age_s is not None:
+                    max_age_s = tc_age_s
+                else:
+                    max_age_s = None
+                attr = self.last_ok_attr(max_age_s)
+                self.safe_addstr(row, col, cell, attr)
+                col += len(cell)
+                continue
+            if col_name == "tc_last":
+                # Apply color based on TC last active time
+                attr = self.tc_last_attr(tc_last_s)
+                self.safe_addstr(row, col, cell, attr)
+                col += len(cell)
+                continue
+            if col_name == "pp_last":
+                attr = self.pp_last_attr(pp_age_s, failed=pp_failed)
+                self.safe_addstr(row, col, cell, attr)
+                col += len(cell)
+                continue
+            if col_name == "applied":
+                attr = self.applied_attr(values.get("applied", "-"))
+                self.safe_addstr(row, col, cell, attr)
+                col += len(cell)
+                continue
+            if col_name == "healthy":
+                attr = self.healthy_attr(values.get("healthy", "-"))
+                self.safe_addstr(row, col, cell, attr)
+                col += len(cell)
+                continue
+            if col_name == "tc_quar":
+                attr = self.tc_quar_attr(values.get("tc_quar", "-"))
+                self.safe_addstr(row, col, cell, attr)
+                col += len(cell)
+                continue
+            if col_name == "uptime":
+                attr = self.uptime_attr(uptime_s)
+            else:
+                attr = 0
+            if col_name == "role" and cell.startswith("# "):
+                marker_attr = role_colors.get(values.get("role", ""), 0)
+                self.safe_addstr(row, col, "#", marker_attr)
+                col += 1
+                self.safe_addstr(row, col, cell[1:])
+                col += len(cell) - 1
+            elif col_name in ("sha", "vlt_sha"):
+                full_value = values.get(col_name, "")
+                width = widths.get(col_name, 0)
+                if (
+                    full_value
+                    and full_value not in ("-", "?")
+                    and " " in full_value
+                    and len(full_value) <= width
+                ):
+                    marker_attr = (
+                        sha_colors.get(values.get("sha", ""), 0)
+                        if col_name == "sha"
+                        else vlt_sha_colors.get(values.get("vlt_sha", ""), 0)
+                    )
+                    split_idx = full_value.rfind(" ")
+                    prefix = full_value[: split_idx + 1]
+                    suffix = full_value[split_idx + 1 :]
+                    padding = " " * (width - len(full_value))
+                    self.safe_addstr(row, col, prefix)
+                    col += len(prefix)
+                    self.safe_addstr(row, col, suffix, marker_attr)
+                    col += len(suffix)
+                    if padding:
+                        self.safe_addstr(row, col, padding)
+                        col += len(padding)
+                else:
+                    self.safe_addstr(row, col, cell, attr)
+                    col += len(cell)
+            else:
+                self.safe_addstr(row, col, cell, attr)
+                col += len(cell)
+
+    def draw_screen(self) -> None:
+        self.stdscr.erase()
+
+        # Compute screen metrics
+        metrics = self._compute_screen_metrics()
+        sorted_hosts = sorted(self.hosts)
+
+        # Compute column configuration
+        all_columns, labels, widths = self._compute_column_widths(sorted_hosts)
+
+        # Determine visible columns
+        columns, scroll_indicator = self._compute_visible_columns(
+            all_columns, widths=widths, usable_width=metrics["usable_width"]
+        )
+
+        # Draw headers
+        self._draw_top_header(
+            total_pages=metrics["total_pages"],
+            current_page=metrics["current_page"],
+            scroll_indicator=scroll_indicator,
+            updated=metrics["updated"],
+            usable_width=metrics["usable_width"],
+        )
+        self._draw_column_header(labels=labels, columns=columns, widths=widths)
+
+        # Prepare categorical colors
+        color_maps = self._prepare_categorical_colors(sorted_hosts)
 
         host_slice = (
             sorted_hosts[self.offset :]
-            if page_size <= 0
-            else sorted_hosts[self.offset : self.offset + page_size]
-        )
-        sha_values = set()
-        vlt_sha_values = set()
-        role_values = set()
-        for host in sorted_hosts:
-            short_host = strip_fqdn(host)
-            tc_worker_data = self.tc_data.get(short_host)
-            values = build_row_values(
-                host,
-                self.latest.get(host),
-                last_ok=self.latest_ok.get(host),
-                tc_data=tc_worker_data,
-                fqdn_suffix=self.fqdn_suffix,
-            )
-            sha = values.get("sha", "")
-            vlt_sha = values.get("vlt_sha", "")
-            role = values.get("role", "")
-            if sha and sha not in ("-", "?"):
-                sha_values.add(sha)
-            if vlt_sha and vlt_sha not in ("-", "?"):
-                vlt_sha_values.add(vlt_sha)
-            if role and role not in ("-", "?", "missing"):
-                role_values.add(role)
-        sha_palette = [
-            self.curses_mod.color_pair(7),  # blue
-            self.curses_mod.color_pair(8),  # cyan
-            self.curses_mod.color_pair(9),  # green
-            self.curses_mod.color_pair(10),  # magenta
-            self.curses_mod.color_pair(11),  # yellow
-            self.curses_mod.color_pair(1),  # cyan (header color but ok for SHA)
-            self.curses_mod.color_pair(2),  # yellow
-            self.curses_mod.color_pair(3),  # magenta
-        ]
-        role_palette = [
-            self.curses_mod.color_pair(12),  # red
-            self.curses_mod.color_pair(13),  # yellow
-            self.curses_mod.color_pair(14),  # magenta
-            self.curses_mod.color_pair(7),  # blue
-            self.curses_mod.color_pair(8),  # cyan
-            self.curses_mod.color_pair(9),  # green
-            self.curses_mod.color_pair(10),  # magenta
-            self.curses_mod.color_pair(11),  # yellow
-        ]
-        sha_colors = self.build_color_map(sha_values, palette=sha_palette, seed=0)
-        vlt_sha_colors = self.build_color_map(vlt_sha_values, palette=sha_palette, seed=4)
-        role_colors = self.build_color_map(
-            role_values, palette=role_palette, base_attr=self.curses_mod.A_BOLD, seed=0
+            if metrics["page_size"] <= 0
+            else sorted_hosts[self.offset : self.offset + metrics["page_size"]]
         )
 
+        # Draw host rows
         for idx, host in enumerate(host_slice, start=1):
             row = idx + 1
-            if row >= height:
+            if row >= metrics["height"]:
                 break
-            short_host = strip_fqdn(host)
-            tc_worker_data = self.tc_data.get(short_host)
-            values = build_row_values(
-                host,
-                self.latest.get(host),
-                last_ok=self.latest_ok.get(host),
-                tc_data=tc_worker_data,
-                fqdn_suffix=self.fqdn_suffix,
+            render_data = self._compute_row_render_data(host)
+            self._draw_host_row(
+                row, render_data=render_data, columns=columns, widths=widths, color_maps=color_maps
             )
-            ts_value = resolve_last_ok_ts(self.latest.get(host), last_ok=self.latest_ok.get(host))
-            tc_ts_value = tc_worker_data.get("ts") if tc_worker_data else None
-            uptime_value = values.get("uptime")
-            uptime_s = None
-            if uptime_value and uptime_value not in ("-", "?"):
-                observed = (self.latest_ok.get(host) or self.latest.get(host) or {}).get(
-                    "observed", {}
-                )
-                uptime_s = observed.get("uptime_s")
-
-            # Calculate TC_LAST in seconds for coloring
-            tc_last_s = None
-            if tc_worker_data:
-                last_date_active = tc_worker_data.get("last_date_active")
-                scan_ts = tc_worker_data.get("ts")
-                if last_date_active and scan_ts:
-                    try:
-                        scan_dt = dt.datetime.fromisoformat(scan_ts)
-                        if scan_dt.tzinfo is None:
-                            scan_dt = scan_dt.replace(tzinfo=dt.UTC)
-                        last_active_dt = dt.datetime.fromisoformat(last_date_active)
-                        if last_active_dt.tzinfo is None:
-                            last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
-                        tc_last_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
-                    except (ValueError, AttributeError):
-                        pass
-            row_cells = render_row_cells(values, columns=columns, widths=widths)
-            col = 0
-            for col_name, cell in zip(columns, row_cells):
-                if col_name != columns[0]:
-                    self.safe_addstr(row, col, " | ")
-                    col += 3
-                if col_name == "data":
-                    # Color DATA based on the older of the two ages
-                    audit_age_s = age_seconds(ts_value) if ts_value else None
-                    tc_age_s = age_seconds(tc_ts_value) if tc_ts_value else None
-                    # Use the older (larger) age for coloring
-                    if audit_age_s is not None and tc_age_s is not None:
-                        max_age_s = max(audit_age_s, tc_age_s)
-                    elif audit_age_s is not None:
-                        max_age_s = audit_age_s
-                    elif tc_age_s is not None:
-                        max_age_s = tc_age_s
-                    else:
-                        max_age_s = None
-                    attr = self.last_ok_attr(max_age_s)
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
-                    continue
-                if col_name == "tc_last":
-                    # Apply color based on TC last active time
-                    attr = self.tc_last_attr(tc_last_s)
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
-                    continue
-                if col_name == "pp_last":
-                    # Get puppet data for coloring (relative to audit time)
-                    host_record = self.latest_ok.get(host) or self.latest.get(host) or {}
-                    observed = host_record.get("observed", {})
-                    pp_epoch = observed.get("puppet_last_run_epoch")
-                    pp_success = observed.get("puppet_success")
-                    pp_age_s = None
-                    if pp_epoch is not None:
-                        audit_ts = host_record.get("ts")
-                        if audit_ts:
-                            try:
-                                audit_dt = dt.datetime.fromisoformat(audit_ts)
-                                audit_epoch = int(audit_dt.timestamp())
-                                pp_age_s = max(audit_epoch - pp_epoch, 0)
-                            except (ValueError, AttributeError):
-                                pass
-                    attr = self.pp_last_attr(pp_age_s, failed=(pp_success is False))
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
-                    continue
-                if col_name == "applied":
-                    attr = self.applied_attr(values.get("applied", "-"))
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
-                    continue
-                if col_name == "healthy":
-                    attr = self.healthy_attr(values.get("healthy", "-"))
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
-                    continue
-                if col_name == "tc_quar":
-                    attr = self.tc_quar_attr(values.get("tc_quar", "-"))
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
-                    continue
-                if col_name == "uptime":
-                    attr = self.uptime_attr(uptime_s)
-                else:
-                    attr = 0
-                if col_name == "role" and cell.startswith("# "):
-                    marker_attr = role_colors.get(values.get("role", ""), 0)
-                    self.safe_addstr(row, col, "#", marker_attr)
-                    col += 1
-                    self.safe_addstr(row, col, cell[1:])
-                    col += len(cell) - 1
-                elif col_name in ("sha", "vlt_sha"):
-                    full_value = values.get(col_name, "")
-                    width = widths.get(col_name, 0)
-                    if (
-                        full_value
-                        and full_value not in ("-", "?")
-                        and " " in full_value
-                        and len(full_value) <= width
-                    ):
-                        marker_attr = (
-                            sha_colors.get(values.get("sha", ""), 0)
-                            if col_name == "sha"
-                            else vlt_sha_colors.get(values.get("vlt_sha", ""), 0)
-                        )
-                        split_idx = full_value.rfind(" ")
-                        prefix = full_value[: split_idx + 1]
-                        suffix = full_value[split_idx + 1 :]
-                        padding = " " * (width - len(full_value))
-                        self.safe_addstr(row, col, prefix)
-                        col += len(prefix)
-                        self.safe_addstr(row, col, suffix, marker_attr)
-                        col += len(suffix)
-                        if padding:
-                            self.safe_addstr(row, col, padding)
-                            col += len(padding)
-                    else:
-                        self.safe_addstr(row, col, cell, attr)
-                        col += len(cell)
-                else:
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
 
         # Draw help popup if active
         if self.show_help:
