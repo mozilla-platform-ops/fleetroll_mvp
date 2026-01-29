@@ -232,6 +232,11 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             continue
 
         provisioner, worker_type = ROLE_TO_TASKCLUSTER[role]
+
+        # Auto-convert role name to workerType if specified
+        if worker_type == "AUTO_under_to_dash":
+            worker_type = role.replace("_", "-")
+
         role_to_worker_type[role] = (provisioner, worker_type)
         worker_type_key = (provisioner, worker_type)
         worker_type_to_hosts[worker_type_key].extend(role_hosts)
