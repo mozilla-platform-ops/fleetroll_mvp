@@ -1,0 +1,367 @@
+#!/bin/bash
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# ==============================================================================
+# FLEETROLL INTEGRATION: Source state writing function
+# ==============================================================================
+# This script integrates with fleetroll's puppet state tracking feature.
+# The write_puppet_state function writes metadata to /etc/puppet/last_run_metadata.json
+# after each puppet run, enabling ground-truth tracking of applied configuration.
+#
+# See: docs/puppet-state-tracking.md for details
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${SCRIPT_DIR}/write_puppet_state.sh" ]; then
+    # shellcheck disable=SC1091
+    source "${SCRIPT_DIR}/write_puppet_state.sh"
+else
+    echo "WARNING: Could not load state writing function from ${SCRIPT_DIR}/write_puppet_state.sh" >&2
+fi
+
+# ==============================================================================
+# Original run-puppet.sh script follows
+# ==============================================================================
+
+function fail {
+    # TODO: report failure to ext service
+    echo "${@}"
+    exit 1
+}
+
+function extract_username() {
+    local url="$1"
+    if [[ "$url" =~ git@github.com:([^/]+)/.* ]]; then
+        echo "${BASH_REMATCH[1]}"
+    elif [[ "$url" =~ https://github.com/([^/]+)/.* ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        echo "Invalid URL format"
+        exit 1
+    fi
+}
+
+# Return true is valid IP and not APIPA address
+function valid_ip {
+    local IP=$1
+    local STAT=1
+    if [[ $IP =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        OIFS=$IFS
+        IFS='.'
+        IP=($IP)
+        IFS=$OIFS
+        ( ! [[ ${IP[0]} -eq 169 && ${IP[1]} -eq 254 ]]) && \
+        (   [[ ${IP[0]} -le 255 && ${IP[1]} -le 255 && \
+               ${IP[2]} -le 255 && ${IP[3]} -le 255 ]])
+        STAT=$?
+    fi
+    return $STAT
+}
+
+function block_on_network {
+    local delay=1
+    while true; do
+        interface=$(route get 1.1.1.1 | grep interface | cut -d\: -f2)
+        ifconfig $interface 2>&1 >/dev/null || interface="en0"
+        IP=$(ipconfig getifaddr $interface)
+        if valid_ip $IP; then
+            echo "Network connectivity check passed $IP"
+            break
+        else
+            echo "Network connectivity failed; retry in ${delay}s"
+            sleep $delay
+            (( delay *= delay<60?2:1 ))
+        fi
+    done
+}
+
+function email_report {
+    ERR_SUBJECT=$1
+    ERR_MSG=$2
+
+    SENDER="root@${FQDN}"
+    RECEIVER="${PUPPET_MAIL}"
+    $PYTHON_BIN <<EOF
+import smtplib
+
+msg = """From: ${SENDER}
+To: ${RECEIVER}
+Subject: ${ERR_SUBJECT}
+
+${ERR_MSG}
+"""
+
+try:
+   smtpObj = smtplib.SMTP('smtp1.mail.mdc1.mozilla.com')
+   smtpObj.sendmail("${SENDER}", "${RECEIVER}", msg)
+   print("Successfully sent email")
+except smtplib.SMTPException as e:
+   print("Error: unable to send email")
+   print(e)
+EOF
+}
+
+function notify_telegraf {
+    TELEGRAF_TABLE=$1
+    TELEGRAF_VALUE=$2
+    META_DATA=",workerType=gecko-t-linux-talos-1804,workerGroup=mdc1,provisionerId=releng-hardware,workerId=t-linux64-ms-003"
+    CURL_OPTIONS=('--user' 'REDACTED_USER:REDACTED_TOKEN' '-i' '-XPOST' "REDACTED_ENDPOINT" '--data-binary' "${TELEGRAF_TABLE}${META_DATA} value=${TELEGRAF_VALUE}")
+    # Print the metrics post output only if there is an error.
+    out=$(curl --fail --silent --show-error "${CURL_OPTIONS[@]}" 2>&1) || echo "${out}"
+}
+
+function update_puppet {
+    # Initialize working dir if dir is empty
+    if [ ! "$(find "$WORKING_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+        git init || return 1
+        git remote add origin "${PUPPET_REPO}" || return 1
+    fi
+
+    # TODO: authenticate the remote actions
+
+    # Fetch and checkout production branch
+    git fetch --all --prune || return 1
+    git checkout --force "origin/${PUPPET_BRANCH}" \
+      || (
+      git remote rm upstream
+      git remote rename origin upstream
+      git remote add origin "${PUPPET_REPO}"
+      git checkout --force "origin/${PUPPET_BRANCH}"
+    ) || return 1
+
+    # Copy secrets
+    mkdir -p "${WORKING_DIR}/data/secrets"
+    cp /root/vault.yaml "${WORKING_DIR}/data/secrets/vault.yaml"
+    chmod 0600 "${WORKING_DIR}/data/secrets/vault.yaml"
+
+    cat <<EOF > "${WORKING_DIR}/manifests/nodes/nodes.pp"
+node '${FQDN}' {
+    include ::roles_profiles::roles::${ROLE}
+}
+EOF
+
+    return 0
+}
+
+function run_puppet {
+
+    echo "current directory is: $(pwd)"
+
+    # Always bring the puppet git up-to-sync before executing puppet
+    if ! update_puppet; then
+        echo "Failed to update puppet"
+        return 1
+    fi
+    echo ""
+
+    TMP_LOG=$(mktemp /tmp/puppet-output.XXXXXX)
+    [ -f "${TMP_LOG}" ] || fail "Failed to mktemp puppet log file"
+
+    PUPPET_OPTIONS=("--modulepath=${WORKING_DIR}/modules:${WORKING_DIR}/r10k_modules" '--hiera_config=./hiera.yaml' '--logdest=console' '--color=false' '--detailed-exitcodes' './manifests/')
+    SECONDS=0
+
+    # debugging
+    PUPPET_CMD="${PUPPET_BIN} apply ${PUPPET_OPTIONS[*]}"
+    echo "puppet command to run is: ${PUPPET_CMD}"
+
+    echo "running puppet command..."
+    echo ""
+    # START: don't separate these two commands
+    $PUPPET_CMD 2>&1 | tee "${TMP_LOG}"
+    retval=${PIPESTATUS[0]}  # use pipestatus because tee masks the return value otherwise
+    # END: don't separate these two commands
+    PUPPET_RUN_DURATION=$SECONDS
+    case $retval in
+        0) explanation="(success. no changes needed)" ;;
+        2) explanation="(success. changes applied)" ;;
+        *)
+            explanation="(unknown/failure)" ;;
+    esac
+    echo "puppet command done. retval is $retval ${explanation}"
+    # if retval is zero, check the logs for errors
+    if [ $retval -eq 0 ]; then
+        # just in case, if there were any errors logged, flag it as an error run
+        if grep -q "^Error:" "${TMP_LOG}"
+        then
+            echo "Error found in puppet log, setting retval to 1"
+            retval=1
+        fi
+    fi
+    LOG_OUT=$(cat "${TMP_LOG}")
+    rm "${TMP_LOG}"
+
+    # ==============================================================================
+    # FLEETROLL INTEGRATION: Write puppet state metadata
+    # ==============================================================================
+    # Write metadata about this puppet run to /etc/puppet/last_run_metadata.json
+    # This provides ground truth for fleetroll's host monitoring.
+    # The function is designed to never fail the puppet run.
+    if type write_puppet_state >/dev/null 2>&1; then
+        write_puppet_state "$WORKING_DIR" "$ROLE" "$retval" "$PUPPET_RUN_DURATION" \
+            "/etc/puppet/ronin_settings" "/root/vault.yaml"
+    else
+        echo "WARNING: write_puppet_state function not available, skipping state file write" >&2
+    fi
+    # ==============================================================================
+
+    case $retval in
+        0|2)
+            # notify_telegraf "puppet_ronin_apply_success" "1"
+            # If puppet run is successful, report puppet run duration metric
+            # notify_telegraf "puppet_ronin_apply_durations" $PUPPET_RUN_DURATION
+            return 0
+            ;;
+        *)
+            # notify_telegraf "puppet_ronin_apply_failure" "1"
+            email_report "Puppet apply failed on ${FQDN}" "${LOG_OUT}"
+            return 1
+            ;;
+    esac
+}
+
+
+# Main script starts here
+PUPPET_REPO="${PUPPET_REPO:-https://github.com/mozilla-platform-ops/ronin_puppet.git}"
+PUPPET_BRANCH="${PUPPET_BRANCH:-master}"
+PUPPET_MAIL="${PUPPET_MAIL:-puppet-ronin-reports@mozilla.com}"
+
+# detect if python3 is available and set it to PYTHON_BIN
+if command -v python3 &> /dev/null; then
+    PYTHON_BIN=$(command -v python3)
+else
+    PYTHON_BIN=$(command -v python)
+fi
+
+# check if yq is installed
+if command -v yq-er &> /dev/null; then
+    YQ_PRESENT=1
+    YQ_BIN=$(command -v yq-er)
+else
+    YQ_PRESENT=0
+    YQ_BIN=""
+    # echo "yq command not found"
+fi
+
+# show header (send to stderr to avoid appearing in log output?)
+# pyfiglet font is cricket
+cat <<'EOF' >&2
+                                                         __
+  .----.--.--.-----.______.-----.--.--.-----.-----.-----|  |_
+  |   _|  |  |     |______|  _  |  |  |  _  |  _  |  -__|   _|
+  |__| |_____|__|__|      |   __|_____|   __|   __|_____|____|
+                          |__|        |__|  |__|
+EOF
+
+# Override defaults with values from /etc/puppet/ronin_settings if the file exists
+if [ -f "/etc/puppet/ronin_settings" ]; then
+    # ascii art heredoc
+    cat <<'EOF' >&2
+                                     __    __
+        .-----.--.--.-----.----.----|__.--|  .-----.
+        |  _  |  |  |  -__|   _|   _|  |  _  |  -__|
+        |_____|\___/|_____|__| |__| |__|_____|_____|
+
+EOF
+    echo "Loading settings from /etc/puppet/ronin_settings..."
+    source /etc/puppet/ronin_settings
+    # show env vars of interest
+    echo "  PUPPET_BRANCH=$PUPPET_BRANCH"
+    echo "  PUPPET_REPO=$PUPPET_REPO"
+    echo "  PUPPET_MAIL=$PUPPET_MAIL"
+    echo "  WORKER_TYPE_OVERRIDE=$WORKER_TYPE_OVERRIDE"
+fi
+
+# Extract username from puppet_repo
+puppet_env=$(extract_username "${PUPPET_REPO}")
+
+WORKING_DIR="/etc/puppet/environments/${puppet_env}/code"
+ROLE_FILE='/etc/puppet_role'
+PUPPET_BIN='/opt/puppetlabs/bin/puppet'
+FACTER_BIN='/opt/puppetlabs/bin/facter'
+FQDN=$(${FACTER_BIN} networking.fqdn)
+
+export LANG=en_US.UTF-8
+
+# Create working dir if it doesn't exist and cd into it
+mkdir -p "${WORKING_DIR}" || fail
+cd "${WORKING_DIR}" || fail
+
+# Make dir world writable for puppet homebrew bug workaround
+chmod 777 .
+
+# Set role or fail if file not found
+if [ -f "${ROLE_FILE}" ]; then
+    ROLE=$(<${ROLE_FILE})
+else
+    fail "Failed to find puppet role file ${ROLE_FILE}"
+fi
+
+[ -f '/root/vault.yaml' ] || fail "Secrets file not found"
+
+echo "ROLE: ${ROLE}"
+echo ""
+
+# GitHub PAT authentication setup
+#
+# GH PAT auth defaults to enabled
+GH_PAT_AUTH=1
+# if YQ_PRESENT=0, disable GH PAT auth
+if [ "$YQ_PRESENT" = "0" ]; then
+    echo "yq-er not present, disabling GH PAT auth configuration"
+    GH_PAT_AUTH=0
+fi
+# add a way of disabling GH PAT AUTH (even if yq-er is present)
+SKIP_GH_PAT_AUTH=${SKIP_GH_PAT_AUTH:-0}
+if [ "$SKIP_GH_PAT_AUTH" = "1" ]; then
+    echo "SKIP_GH_PAT_AUTH is set to 1, skipping GH PAT auth configuration"
+    # disable gh pat auth
+    GH_PAT_AUTH=0
+    # for this repo, unset any existing git config for extraHeader
+    git config --unset-all http.https://github.com/.extraHeader 2>/dev/null
+fi
+# if GH_PAT_AUTH=1, proceed with configuring GH PAT auth
+if [ "$GH_PAT_AUTH" = "1" ]; then
+    # check if keys are present in config file
+    # TODO: add actual key checking logic here
+    GH_PAT=$($YQ_BIN .github.pat /root/vault.yaml 2>/dev/null)
+    GH_PAT_USER=$($YQ_BIN .github.pat_user /root/vault.yaml 2>/dev/null)
+    # if they're both non-empty, set the extraHeader config
+    if [ -n "$GH_PAT" ] && [ -n "$GH_PAT_USER" ]; then
+        # base64 encode the credentials
+        b64=$(printf '%s:%s' "$GH_PAT_USER" "$GH_PAT" | base64 -w0 2>/dev/null || printf '%s:%s' "$GH_PAT_USER" "$GH_PAT" | base64)
+        # for this repo, set the git config for extraHeader
+        git config http.https://github.com/.extraHeader "Authorization: Basic $b64"
+        echo "GitHub PAT authentication is enabled."
+    else
+        echo "GitHub PAT or PAT_USER is empty; skipping GH PAT auth configuration"
+    fi
+fi
+
+# block_on_network
+
+# Call the run_puppet function in a endless loop
+while ! run_puppet; do
+    echo "Puppet run failed; re-trying after 10m"
+    sleep 600
+done
+
+# Touch the semaphore to allow launchd to start generic worker (if applicable)
+# mkdir -p "/var/tmp/semaphore"
+# chmod 0777 "/var/tmp/semaphore"
+# touch "/var/tmp/semaphore/run-buildbot"
+
+# override worker type with value defined in /etc/puppet/ronin_settings
+if [ -n "$WORKER_TYPE_OVERRIDE" ]; then
+    # mention that we're overriding the worker type
+    echo "Overriding worker type with value from /etc/puppet/ronin_settings"
+    echo "  WORKER_TYPE_OVERRIDE: $WORKER_TYPE_OVERRIDE"
+
+    # rewrite the config
+    /usr/local/bin/change_workertype.py -t "${WORKER_TYPE_OVERRIDE}"
+fi
+
+# touch the semaphore to let run-start-worker know it can start start-worker
+touch "/tmp/puppet_run_done"
+
+exit 0

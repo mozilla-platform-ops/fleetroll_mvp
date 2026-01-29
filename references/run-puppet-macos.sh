@@ -5,6 +5,27 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+# ==============================================================================
+# FLEETROLL INTEGRATION: Source state writing function
+# ==============================================================================
+# This script integrates with fleetroll's puppet state tracking feature.
+# The write_puppet_state function writes metadata to /etc/puppet/last_run_metadata.json
+# after each puppet run, enabling ground-truth tracking of applied configuration.
+#
+# See: docs/puppet-state-tracking.md for details
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${SCRIPT_DIR}/write_puppet_state.sh" ]; then
+    # shellcheck disable=SC1091
+    source "${SCRIPT_DIR}/write_puppet_state.sh"
+else
+    echo "WARNING: Could not load state writing function from ${SCRIPT_DIR}/write_puppet_state.sh" >&2
+fi
+
+# ==============================================================================
+# Original run-puppet.mac.sh script follows
+# ==============================================================================
+
 ### ---------------------------------------------
 ### 1. Constants & Variable Definitions
 ### ---------------------------------------------
@@ -137,8 +158,10 @@ run_puppet() {
     TMP_LOG=$(mktemp /tmp/puppet-outputXXXXXX)
     [ -f "$TMP_LOG" ] || fail "Failed to create temp Puppet log file."
 
+    SECONDS=0
     $PUPPET_BIN apply "${PUPPET_OPTIONS[@]}" 2>&1 | tee "$TMP_LOG"
     retval=$?
+    PUPPET_RUN_DURATION=$SECONDS
 
     if grep -q "unable to open database \"/Users/cltbld/Library/Application Support/com.apple.TCC/TCC.db" "$TMP_LOG"; then
         echo "Detected TCC.db issue. A reboot is required."
@@ -156,6 +179,21 @@ run_puppet() {
     fi
 
     rm "$TMP_LOG"
+
+    # ==============================================================================
+    # FLEETROLL INTEGRATION: Write puppet state metadata
+    # ==============================================================================
+    # Write metadata about this puppet run to /etc/puppet/last_run_metadata.json
+    # This provides ground truth for fleetroll's host monitoring.
+    # The function is designed to never fail the puppet run.
+    # Note: macOS-specific paths for override and vault files
+    if type write_puppet_state >/dev/null 2>&1; then
+        write_puppet_state "$LOCAL_PUPPET_REPO" "$ROLE" "$retval" "$PUPPET_RUN_DURATION" \
+            "/opt/puppet_environments/ronin_settings" "/var/root/vault.yaml"
+    else
+        echo "WARNING: write_puppet_state function not available, skipping state file write" >&2
+    fi
+    # ==============================================================================
 
     case $retval in
         0|2) return 0;;
