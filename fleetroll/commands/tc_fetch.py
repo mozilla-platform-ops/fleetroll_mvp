@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 import click
 
 from ..audit import iter_audit_records
-from ..constants import ROLE_TO_TASKCLUSTER, TC_WORKERS_FILE_NAME
+from ..constants import HOST_OBSERVATIONS_FILE_NAME, ROLE_TO_TASKCLUSTER, TC_WORKERS_FILE_NAME
 from ..exceptions import FleetRollError
 from ..taskcluster import fetch_workers, load_tc_credentials
 from ..utils import (
@@ -62,11 +62,11 @@ def format_tc_fetch_quiet(
 
 
 def get_host_roles_bulk(hosts: set[str], audit_log_path: Path) -> dict[str, str | None]:
-    """Get the most recent role for multiple hosts from the audit log in a single pass.
+    """Get the most recent role for multiple hosts from the observations log in a single pass.
 
     Args:
         hosts: Set of hostnames to look up
-        audit_log_path: Path to the audit log
+        audit_log_path: Path to the observations log (host_observations.jsonl)
 
     Returns:
         Dict mapping hostname to role string (or None if not found)
@@ -198,13 +198,14 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     if not quiet:
         click.echo(f"Fetching TaskCluster data for {len(hosts)} host(s)...")
 
-    # Get audit log path
+    # Get observations log path
     audit_log_path = default_audit_log_path()
+    observations_log_path = audit_log_path.parent / HOST_OBSERVATIONS_FILE_NAME
     if verbose >= 1 and not quiet:
-        click.echo(f"Reading audit log from: {audit_log_path}")
+        click.echo(f"Reading observations log from: {observations_log_path}")
 
-    # Map hosts to roles (single pass through audit log)
-    host_to_role = get_host_roles_bulk(set(hosts), audit_log_path)
+    # Map hosts to roles (single pass through observations log)
+    host_to_role = get_host_roles_bulk(set(hosts), observations_log_path)
     role_to_hosts: dict[str, list[str]] = defaultdict(list)
 
     for host, role in host_to_role.items():
