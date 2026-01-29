@@ -2,6 +2,6 @@
 set -e
 set -x
 
-host_list="host-lists/all.list"
+host_list="host-lists/all_moonshots.list"
 options=""
 uv run fleetroll host-monitor $host_list "$options" "$@"

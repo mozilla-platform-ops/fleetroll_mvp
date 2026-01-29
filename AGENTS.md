@@ -44,6 +44,24 @@ uv run verify-imports \
 
 **NEVER** use `uv run python -c "from ... import ..."` for import verification - always use `verify-imports`.
 
+## Pre-commit Checks
+
+This project uses `prek` (a faster alternative to `pre-commit run --all-files`) for running pre-commit hooks:
+
+```bash
+# Run all pre-commit checks
+prek
+
+# This runs:
+# - ruff format/check (Python formatting and linting)
+# - shellcheck (shell script linting)
+# - trailing whitespace, end of files, etc.
+```
+
+**IMPORTANT**: Always use `prek` instead of `pre-commit run --all-files` for better performance.
+
+Run `prek` before suggesting commits to ensure all checks pass.
+
 ## Git Operations
 
 The user handles all git operations (staging, committing, pushing). When changes are ready to commit:
