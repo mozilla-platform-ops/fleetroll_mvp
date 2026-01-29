@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 def rotate_log_file(
-    log_path: Path, *, dry_run: bool = False, threshold_mb: int = 100
+    log_path: Path, *, dry_run: bool = False, threshold_mb: int = 100, force: bool = False
 ) -> tuple[bool, str]:
     """Rotate a single log file by renaming it with timestamp.
 
@@ -29,6 +29,7 @@ def rotate_log_file(
         log_path: Path to log file to rotate
         dry_run: If True, don't actually rotate
         threshold_mb: Only rotate files >= this size in MB
+        force: If True, rotate regardless of size
 
     Returns:
         Tuple of (rotated, message) where rotated is True if file was/would be rotated
@@ -38,7 +39,7 @@ def rotate_log_file(
 
     size_mb = log_path.stat().st_size / (1024 * 1024)
 
-    if size_mb < threshold_mb:
+    if not force and size_mb < threshold_mb:
         return (
             False,
             f"SKIP {log_path.name}: {size_mb:.1f} MB (below {threshold_mb} MB threshold)",
@@ -84,7 +85,7 @@ def cmd_rotate_logs(args: RotateLogsArgs) -> None:
 
     results = []
     for log_path in log_files:
-        rotated, message = rotate_log_file(log_path, dry_run=not args.confirm)
+        rotated, message = rotate_log_file(log_path, dry_run=not args.confirm, force=args.force)
         results.append((rotated, message))
         click.echo(message)
 

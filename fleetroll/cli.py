@@ -626,14 +626,19 @@ def tc_fetch(host: str, verbose: int, quiet: bool):
     is_flag=True,
     help="Actually rotate logs (without this, shows dry-run).",
 )
-def rotate_logs(audit_log: str | None, confirm: bool):
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Rotate logs regardless of size threshold.",
+)
+def rotate_logs(audit_log: str | None, confirm: bool, force: bool):
     """Rotate FleetRoll log files to prevent unbounded growth.
 
     Archives current logs with timestamp suffix and starts fresh.
     Does NOT backfill - new logs start empty on next write.
-    Only rotates files >= 100 MB threshold.
+    Only rotates files >= 100 MB threshold (unless --force is used).
     """
-    args = RotateLogsArgs(audit_log=audit_log, confirm=confirm)
+    args = RotateLogsArgs(audit_log=audit_log, confirm=confirm, force=force)
     try:
         cmd_rotate_logs(args)
     except (FleetRollError, UserError) as e:

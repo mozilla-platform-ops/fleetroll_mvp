@@ -130,6 +130,7 @@ class RotateLogsArgs:
 
     audit_log: str | None
     confirm: bool
+    force: bool
 
 
 class HasSshOptions(Protocol):
