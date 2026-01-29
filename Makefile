@@ -1,4 +1,4 @@
-.PHONY: dev lint format test test-watch test-coverageaudit ci clean-bytecode clean
+.PHONY: dev lint format test test-watch test-watch-coverage test-coverageaudit ci clean-bytecode clean
 
 dev:
 	uv sync --all-groups
@@ -19,6 +19,9 @@ test:
 test-watch:
 	uv run ptw .
 
+test-watch-coverage:
+	uv run ptw -- --cov=fleetroll --cov-report=html --cov-report=term-missing
+
 test-coverage:
 	uv run pytest --cov=fleetroll --cov-report=html --cov-report=term-missing
 
@@ -26,7 +29,7 @@ audit:
 	uv run pip-audit
 
 # Simulate CI pipeline locally
-ci: lint test audit
+ci: lint test test-coverage audit
 	@echo "✅ All CI checks passed!"
 
 clean-bytecode:
