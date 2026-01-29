@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+# set -e
 # set -x
 
 host_list="host-lists/all_macminis.list"

@@ -10,11 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from ...constants import HOST_OBSERVATIONS_FILE_NAME, TC_WORKERS_FILE_NAME
-from ...utils import get_log_file_size, natural_sort_key
+from ...utils import get_log_file_size
 from .data import (
     age_seconds,
     build_row_values,
     detect_common_fqdn_suffix,
+    get_host_sort_key,
     humanize_duration,
     load_tc_worker_data,
     resolve_last_ok_ts,
@@ -55,6 +56,7 @@ class MonitorDisplay:
         self.last_updated = max(timestamps, default=None) if timestamps else None
         self.fqdn_suffix = detect_common_fqdn_suffix(hosts)
         self.show_help = False
+        self.sort_field = "host"  # Current sort field: "host" or "role"
         self.curses_mod = None
         self.color_enabled = False
         self.extended_colors = False
@@ -333,6 +335,12 @@ class MonitorDisplay:
             self.draw_screen()
         elif key == ord("r"):
             # Reload will be handled later if needed
+            self.draw_screen()
+        elif key in (ord("s"), ord("S")):
+            # Toggle between host and role sort
+            self.sort_field = "role" if self.sort_field == "host" else "host"
+            self.offset = 0  # Reset to first page on sort change
+            self.needs_redraw = True
             self.draw_screen()
         return False
 
@@ -709,7 +717,7 @@ class MonitorDisplay:
             updated: Human-readable last update time
             usable_width: Available screen width
         """
-        left = "fleetroll: host-monitor [? for help]"
+        left = f"fleetroll: host-monitor [? for help], sort={self.sort_field}"
         if total_pages > 1:
             left = f"{left}, page={current_page}/{total_pages}"
         if scroll_indicator:
@@ -861,6 +869,16 @@ class MonitorDisplay:
             "pp_failed": pp_success is False,
         }
 
+    def _get_sort_key(self, hostname: str) -> tuple:
+        """Extract sort key for a host based on current sort field.
+
+        Returns tuple for stable multi-level sorting.
+        Always includes hostname as secondary sort.
+        """
+        return get_host_sort_key(
+            hostname, sort_field=self.sort_field, latest=self.latest, latest_ok=self.latest_ok
+        )
+
     def _draw_host_row(
         self,
         row: int,
@@ -987,7 +1005,7 @@ class MonitorDisplay:
 
         # Compute screen metrics
         metrics = self._compute_screen_metrics()
-        sorted_hosts = sorted(self.hosts, key=natural_sort_key)
+        sorted_hosts = sorted(self.hosts, key=self._get_sort_key)
 
         # Compute column configuration
         all_columns, labels, widths = self._compute_column_widths(sorted_hosts)

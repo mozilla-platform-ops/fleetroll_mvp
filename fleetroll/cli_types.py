@@ -31,6 +31,7 @@ class HostMonitorArgs:
     audit_log: str | None
     json: bool
     once: bool
+    sort: str
 
 
 @dataclass

@@ -18,6 +18,7 @@ from ...utils import (
 )
 from .data import (
     AuditLogTailer,
+    get_host_sort_key,
     load_latest_records,
     load_tc_worker_data,
     strip_fqdn,
@@ -61,12 +62,20 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
     tc_data = load_tc_worker_data(tc_workers_path)
 
     if args.once:
+        # Sort hosts according to --sort option
+        sorted_hosts = sorted(
+            hosts,
+            key=lambda h: get_host_sort_key(
+                h, sort_field=args.sort, latest=latest, latest_ok=latest_ok
+            ),
+        )
+
         if args.json:
-            payload = {host: latest.get(host) for host in hosts}
+            payload = {host: latest.get(host) for host in sorted_hosts}
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
             header, lines = render_monitor_lines(
-                hosts=hosts,
+                hosts=sorted_hosts,
                 latest=latest,
                 latest_ok=latest_ok,
                 tc_data=tc_data,
@@ -80,14 +89,22 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         return
 
     if args.json or not sys.stdout.isatty():
+        # Sort hosts for non-interactive display
+        sorted_hosts = sorted(
+            hosts,
+            key=lambda h: get_host_sort_key(
+                h, sort_field=args.sort, latest=latest, latest_ok=latest_ok
+            ),
+        )
+
         columns = None
         widths = None
         if args.json:
-            payload = {host: latest.get(host) for host in hosts}
+            payload = {host: latest.get(host) for host in sorted_hosts}
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
             columns, widths = compute_columns_and_widths(
-                hosts=hosts,
+                hosts=sorted_hosts,
                 latest=latest,
                 latest_ok=latest_ok,
                 tc_data=tc_data,
@@ -96,7 +113,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 sep_len=2,
             )
             header, lines = render_monitor_lines(
-                hosts=hosts,
+                hosts=sorted_hosts,
                 latest=latest,
                 latest_ok=latest_ok,
                 tc_data=tc_data,

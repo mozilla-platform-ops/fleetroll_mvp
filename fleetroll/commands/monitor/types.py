@@ -12,6 +12,10 @@ FLEETROLL_MASCOT = [
 COLUMN_GUIDE_TEXT = """\
 Column Guide (press q or Esc to close)
 
+Keybindings:
+  s, S        Toggle sort order (host ↔ role)
+
+Columns:
 HOST      Hostname (FQDN suffix stripped if common)
 ROLE      Puppet role assigned to host
 OVR_SHA   Override file SHA256 hash

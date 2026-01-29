@@ -12,6 +12,7 @@ from typing import Any
 from ...audit import iter_audit_records
 from ...constants import HOST_OBSERVATIONS_FILE_NAME
 from ...humanhash import humanize
+from ...utils import natural_sort_key
 
 
 def record_matches(
@@ -28,6 +29,51 @@ def record_matches(
 def strip_fqdn(hostname: str) -> str:
     """Strip FQDN to get short hostname."""
     return hostname.split(".")[0]
+
+
+def get_host_sort_key(
+    hostname: str,
+    *,
+    sort_field: str,
+    latest: dict[str, dict[str, Any]],
+    latest_ok: dict[str, dict[str, Any]] | None = None,
+) -> tuple:
+    """Generate sort key for a host based on sort field.
+
+    Args:
+        hostname: Hostname to generate key for
+        sort_field: Sort field ("host" or "role")
+        latest: Dictionary of latest records by hostname
+        latest_ok: Dictionary of last successful records (fallback for failed audits)
+
+    Returns:
+        Sort key tuple for stable multi-level sorting
+    """
+    if sort_field == "host":
+        return (natural_sort_key(hostname),)
+
+    # Sort by role - use same fallback logic as build_row_values
+    host_data = latest.get(hostname, {})
+
+    # If current record failed, fall back to last_ok (matches display logic)
+    if host_data and not host_data.get("ok"):
+        if latest_ok:
+            last_ok_data = latest_ok.get(hostname)
+            if last_ok_data and last_ok_data.get("ok"):
+                host_data = last_ok_data
+
+    observed = host_data.get("observed", {}) if host_data else {}
+
+    # Extract role from observed data (same logic as build_row_values)
+    role_present = observed.get("role_present")
+    role = observed.get("role", "") if role_present else "missing"
+
+    # Sort hosts with roles first (0), then hosts without roles (1)
+    # Treat special values ("-", "?", "missing", "") as no role
+    # This puts hosts without roles at the end
+    has_role = 0 if (role and role not in ("-", "?", "missing")) else 1
+
+    return (has_role, role, natural_sort_key(hostname))
 
 
 def detect_common_fqdn_suffix(hosts: list[str]) -> str | None:

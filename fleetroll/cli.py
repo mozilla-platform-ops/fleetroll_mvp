@@ -192,11 +192,18 @@ def host_audit(
     is_flag=True,
     help="Print the latest record and exit (no follow).",
 )
+@click.option(
+    "--sort",
+    type=click.Choice(["host", "role"], case_sensitive=False),
+    default="host",
+    help="Sort order for display (default: host).",
+)
 def host_monitor(
     host: str,
     audit_log: str | None,
     json_output: bool,
     once: bool,
+    sort: str,
 ):
     """Monitor the latest audit record for a host (follows the audit log)."""
     args = HostMonitorArgs(
@@ -204,6 +211,7 @@ def host_monitor(
         audit_log=audit_log,
         json=json_output,
         once=once,
+        sort=sort.lower(),
     )
     cmd_host_monitor(args)
 
