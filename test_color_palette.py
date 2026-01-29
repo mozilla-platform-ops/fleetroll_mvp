@@ -64,10 +64,11 @@ def build_color_map(
     Returns list of (label, ansi_code) tuples.
     """
     # Build basic palette (matches monitor display.py order)
-    basic_colors = ["blue", "cyan", "green", "magenta", "yellow", "red", "white", "green"]
-    palette_size = len(basic_colors)
-    fg_bg_count = len(FG_BG_COMBOS)
-    total_capacity = palette_size * 2 + fg_bg_count
+    # Only 7 truly unique visible colors (BLACK doesn't work on dark terminals)
+    basic_colors = ["blue", "cyan", "green", "magenta", "yellow", "red", "white"]
+    palette_size = len(basic_colors)  # 7
+    fg_bg_count = len(FG_BG_COMBOS)  # 18
+    total_capacity = palette_size * 2 + fg_bg_count  # 7*2 + 18 = 32
 
     # Spread adjacent seeds for maximum visual distinction (matches display.py)
     spread_factor = 11
@@ -161,7 +162,11 @@ def main():
         print("  ".join(row_parts))
 
     print("\n" + "=" * 100)
-    print(f"Total capacity: {len(FG_BG_COMBOS) + 16} distinct appearances\n")
+    total = 7 * 2 + len(FG_BG_COMBOS)
+    print(
+        f"Total capacity: {total} distinct appearances "
+        f"(7 normal + 7 reverse + {len(FG_BG_COMBOS)} fg/bg)\n"
+    )
 
 
 if __name__ == "__main__":

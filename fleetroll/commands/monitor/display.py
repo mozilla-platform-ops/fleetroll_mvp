@@ -530,8 +530,9 @@ class MonitorDisplay:
             if role and role not in ("-", "?", "missing"):
                 role_values.add(role)
 
-        # Use basic 8-color palette with attribute combinations
-        # This gives 8 colors x 6 attribute combos = 48 distinct appearances
+        # Use basic 7-color palette (all visible colors except black)
+        # This gives 7 normal + 7 reverse + 18 fg/bg = 32 distinct appearances
+        # Use 7 truly unique colors (all visible terminal colors except black)
         sha_palette = [
             self.curses_mod.color_pair(7),  # blue
             self.curses_mod.color_pair(8),  # cyan
@@ -540,7 +541,6 @@ class MonitorDisplay:
             self.curses_mod.color_pair(11),  # yellow
             self.curses_mod.color_pair(6),  # red
             self.curses_mod.color_pair(15),  # white
-            self.curses_mod.color_pair(4),  # green (dim - different than pair 9)
         ]
         role_palette = [
             self.curses_mod.color_pair(12),  # red
