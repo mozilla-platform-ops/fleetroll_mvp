@@ -7,6 +7,7 @@
       "Bash(br list:*)",
       "Bash(br ready:*)",
       "Bash(br show:*)",
+      "Bash(br sync:*)",
       "Bash(br update:*)",
       "Bash(python3 -m py_compile:*)",
       "Bash(uv run fleetroll --help:*)",
@@ -20,7 +21,9 @@
       "Bash(make test:*)",
       "Bash(make test-coverage:*)",
       "Bash(prek run:*)",
-      "Bash(pytest:*)"
+      "Bash(pytest:*)",
+      "Bash(grep:*)",
+      "Bash(br dep list:*)"
     ]
   }
 }
