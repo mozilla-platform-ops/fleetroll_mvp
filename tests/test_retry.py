@@ -6,7 +6,6 @@ import threading
 import time
 from pathlib import Path
 
-import pytest
 from fleetroll.cli_types import HostAuditArgs
 from fleetroll.commands.audit import audit_single_host_with_retry
 
@@ -210,8 +209,43 @@ class TestRetryLogic:
 
     def test_exponential_backoff(self, mocker, tmp_dir: Path):
         """Uses exponential backoff between retries."""
-        # Skip test when AUDIT_MAX_RETRIES=1 (no retries to test backoff)
-        pytest.skip("Exponential backoff not applicable with AUDIT_MAX_RETRIES=1")
+        # Temporarily override AUDIT_MAX_RETRIES to test backoff behavior
+        mocker.patch("fleetroll.commands.audit.AUDIT_MAX_RETRIES", 4)
+
+        mock_run_ssh = mocker.patch("fleetroll.commands.audit.run_ssh")
+        # Always fail with connection error to trigger retries
+        mock_run_ssh.return_value = (255, "", "Connection refused")
+
+        # Mock and track sleep calls
+        mock_sleep = mocker.patch("fleetroll.commands.audit.time.sleep")
+
+        args = self._make_args(tmp_dir)
+
+        result = audit_single_host_with_retry(
+            "test.example.com",
+            args=args,
+            ssh_opts=[],
+            remote_cmd="test",
+            audit_log=tmp_dir / "audit.jsonl",
+            actor="test",
+            retry_budget={"deadline": time.time() + 600},
+            lock=threading.Lock(),
+            log_lock=threading.Lock(),
+        )
+
+        # Should have made 4 attempts (max retries = 4)
+        assert mock_run_ssh.call_count == 4
+        assert result["attempts"] == 4
+
+        # Verify exponential backoff: delay = AUDIT_RETRY_DELAY_S * (2 ** attempt)
+        # AUDIT_RETRY_DELAY_S = 2 seconds
+        # After attempt 0 (1st try): sleep(2 * 2^0) = sleep(2)
+        # After attempt 1 (2nd try): sleep(2 * 2^1) = sleep(4)
+        # After attempt 2 (3rd try): sleep(2 * 2^2) = sleep(8)
+        # No sleep after attempt 3 (4th try, last attempt)
+        assert mock_sleep.call_count == 3
+        sleep_delays = [call[0][0] for call in mock_sleep.call_args_list]
+        assert sleep_delays == [2, 4, 8]
 
     def test_result_includes_attempts_count(self, mocker, tmp_dir: Path):
         """Result includes number of attempts made."""
