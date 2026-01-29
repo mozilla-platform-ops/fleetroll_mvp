@@ -106,7 +106,7 @@ br ready              # Show issues ready to work (no blockers)
 br list --status=open # All open issues
 br show <id>          # Full issue details with dependencies
 # valid types:     Task, Bug, Feature, Epic, Chore, Docs, Question.
-br create -type task -priority 2 -description "Description text" "Issue Title"
+br create --type task --priority 2 --description "Description text" "Issue Title"
 br update <id> --status=in_progress
 br update <id> --description="..."  # Update description
 br dep add <id> <depends_on>
