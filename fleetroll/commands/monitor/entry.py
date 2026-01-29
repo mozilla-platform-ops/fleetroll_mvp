@@ -8,7 +8,7 @@ from curses import wrapper as curses_wrapper
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ...constants import TC_WORKERS_FILE_NAME
+from ...constants import HOST_OBSERVATIONS_FILE_NAME, TC_WORKERS_FILE_NAME
 from ...exceptions import FleetRollError
 from ...utils import (
     default_audit_log_path,
@@ -46,9 +46,10 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         host_source = args.host
 
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
+    observations_log = audit_log.parent / HOST_OBSERVATIONS_FILE_NAME
 
-    if args.once and not audit_log.exists():
-        raise FleetRollError(f"Audit log not found: {audit_log}")
+    if args.once and not observations_log.exists():
+        raise FleetRollError(f"Observations log not found: {observations_log}")
 
     latest, latest_ok = load_latest_records(
         audit_log,
