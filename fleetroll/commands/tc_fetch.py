@@ -397,7 +397,7 @@ def cmd_tc_fetch(args: Args) -> None:
     if quiet:
         warning_list = []
         if hosts_without_roles > 0:
-            warning_list.append(f"{hosts_without_roles} hosts without roles")
+            warning_list.append(f"{hosts_without_roles} hosts without role data")
         if api_errors > 0:
             warning_list.append(f"{api_errors} API errors" if api_errors > 1 else "1 API error")
 
