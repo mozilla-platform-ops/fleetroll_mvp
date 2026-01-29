@@ -53,9 +53,6 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
     latest, latest_ok = load_latest_records(
         audit_log,
         hosts=hosts,
-        override_path=args.override_path,
-        role_path=args.role_path,
-        vault_path=args.vault_path,
     )
 
     # Load TaskCluster worker data
@@ -110,9 +107,6 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         for record in tail_audit_log(
             audit_log,
             hosts=hosts,
-            override_path=args.override_path,
-            role_path=args.role_path,
-            vault_path=args.vault_path,
             start_at_end=True,
         ):
             if args.json:
@@ -151,9 +145,6 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         tailer = AuditLogTailer(
             audit_log,
             hosts=hosts,
-            override_path=args.override_path,
-            role_path=args.role_path,
-            vault_path=args.vault_path,
             start_at_end=True,
         )
         while True:

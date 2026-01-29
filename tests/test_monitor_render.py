@@ -9,7 +9,6 @@ from fleetroll.commands.monitor import (
     format_ts_with_age,
     humanize_age,
     humanize_duration,
-    record_matches,
     render_monitor_lines,
     render_row_cells,
 )
@@ -159,41 +158,8 @@ def test_render_monitor_lines_sorted_and_sliced() -> None:
     assert "host-b" in lines[0]
 
 
-def test_record_matches_vault_path() -> None:
-    record = {
-        "action": "host.audit",
-        "host": "h1",
-        "override_path": "/etc/override",
-        "role_path": "/etc/role",
-        "vault_path": "/root/vault.yaml",
-    }
-    assert record_matches(
-        record,
-        hosts={"h1"},
-        override_path="/etc/override",
-        role_path="/etc/role",
-        vault_path="/root/vault.yaml",
-    )
-    assert not record_matches(
-        record,
-        hosts={"h1"},
-        override_path="/etc/override",
-        role_path="/etc/role",
-        vault_path="/root/other.yaml",
-    )
-    legacy = {
-        "action": "host.audit",
-        "host": "h1",
-        "override_path": "/etc/override",
-        "role_path": "/etc/role",
-    }
-    assert record_matches(
-        legacy,
-        hosts={"h1"},
-        override_path="/etc/override",
-        role_path="/etc/role",
-        vault_path="/root/vault.yaml",
-    )
+# test_record_matches_vault_path removed - path filtering no longer exists
+# Records no longer contain path fields after CLI path arguments were removed
 
 
 def test_quarantine_status_checks_future():

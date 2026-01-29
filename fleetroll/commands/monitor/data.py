@@ -18,24 +18,11 @@ def record_matches(
     record: dict[str, Any],
     *,
     hosts: set[str],
-    override_path: str,
-    role_path: str,
-    vault_path: str,
 ) -> bool:
-    """Return True if record is a host audit for the requested host/path."""
+    """Return True if record is a host audit for the requested host."""
     if record.get("action") != "host.audit":
         return False
-    if record.get("host") not in hosts:
-        return False
-    if record.get("override_path") != override_path:
-        return False
-    if record.get("role_path") != role_path:
-        return False
-    if "vault_path" in record:
-        record_vault = record.get("vault_path")
-        if record_vault and record_vault != vault_path:
-            return False
-    return True
+    return record.get("host") in hosts
 
 
 def strip_fqdn(hostname: str) -> str:
@@ -458,7 +445,7 @@ def resolve_last_ok_ts(
 
 
 def load_latest_records(
-    path: Path, *, hosts: list[str], override_path: str, role_path: str, vault_path: str
+    path: Path, *, hosts: list[str]
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     """Load the latest matching audit record per host.
 
@@ -472,13 +459,7 @@ def load_latest_records(
     observations_log = path.parent / HOST_OBSERVATIONS_FILE_NAME
 
     for record in iter_audit_records(observations_log):
-        if record_matches(
-            record,
-            hosts=host_set,
-            override_path=override_path,
-            role_path=role_path,
-            vault_path=vault_path,
-        ):
+        if record_matches(record, hosts=host_set):
             latest[record["host"]] = record
             if record.get("ok"):
                 latest_ok[record["host"]] = record
@@ -489,9 +470,6 @@ def tail_audit_log(
     path: Path,
     *,
     hosts: list[str],
-    override_path: str,
-    role_path: str,
-    vault_path: str,
     start_at_end: bool = False,
     poll_interval_s: float = 0.5,
 ) -> Iterable[dict[str, Any]]:
@@ -539,13 +517,7 @@ def tail_audit_log(
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if record_matches(
-            record,
-            hosts=host_set,
-            override_path=override_path,
-            role_path=role_path,
-            vault_path=vault_path,
-        ):
+        if record_matches(record, hosts=host_set):
             yield record
 
 
@@ -560,18 +532,12 @@ class AuditLogTailer:
         path: Path,
         *,
         hosts: list[str],
-        override_path: str,
-        role_path: str,
-        vault_path: str,
         start_at_end: bool = False,
     ) -> None:
         # Read from observations log
         observations_log = path.parent / HOST_OBSERVATIONS_FILE_NAME
         self.path = observations_log
         self.host_set = set(hosts)
-        self.override_path = override_path
-        self.role_path = role_path
-        self.vault_path = vault_path
         self.start_at_end = start_at_end
         self.file_obj = None
         self.inode = None
@@ -608,11 +574,5 @@ class AuditLogTailer:
                 record = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if record_matches(
-                record,
-                hosts=self.host_set,
-                override_path=self.override_path,
-                role_path=self.role_path,
-                vault_path=self.vault_path,
-            ):
+            if record_matches(record, hosts=self.host_set):
                 return record
