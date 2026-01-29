@@ -1,9 +1,14 @@
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 
 from fleetroll.commands.monitor import (
+    age_seconds,
     build_row_values,
     clip_cell,
     compute_columns_and_widths,
+    detect_common_fqdn_suffix,
+    format_ts_with_age,
+    humanize_age,
+    humanize_duration,
     record_matches,
     render_monitor_lines,
     render_row_cells,
@@ -333,3 +338,231 @@ def _sep_positions(line: str) -> list[int]:
             return positions
         positions.append(idx)
         idx += 3
+
+
+def test_detect_common_fqdn_suffix_all_same():
+    """All hosts share the same FQDN suffix."""
+    hosts = [
+        "host1.example.com",
+        "host2.example.com",
+        "host3.example.com",
+    ]
+    assert detect_common_fqdn_suffix(hosts) == ".example.com"
+
+
+def test_detect_common_fqdn_suffix_different():
+    """Hosts have different FQDN suffixes."""
+    hosts = [
+        "host1.example.com",
+        "host2.different.org",
+    ]
+    assert detect_common_fqdn_suffix(hosts) is None
+
+
+def test_detect_common_fqdn_suffix_no_fqdn():
+    """Hosts without FQDN (no dots)."""
+    hosts = ["host1", "host2", "host3"]
+    assert detect_common_fqdn_suffix(hosts) is None
+
+
+def test_detect_common_fqdn_suffix_mixed():
+    """Mix of FQDN and non-FQDN hosts."""
+    hosts = ["host1.example.com", "host2"]
+    assert detect_common_fqdn_suffix(hosts) is None
+
+
+def test_detect_common_fqdn_suffix_empty():
+    """Empty host list."""
+    assert detect_common_fqdn_suffix([]) is None
+
+
+def test_detect_common_fqdn_suffix_single():
+    """Single host with FQDN."""
+    assert detect_common_fqdn_suffix(["host.example.com"]) == ".example.com"
+
+
+def test_detect_common_fqdn_suffix_long():
+    """Long FQDN suffix."""
+    hosts = [
+        "host1.test.releng.mdc1.mozilla.com",
+        "host2.test.releng.mdc1.mozilla.com",
+    ]
+    assert detect_common_fqdn_suffix(hosts) == ".test.releng.mdc1.mozilla.com"
+
+
+def test_humanize_age_recent():
+    """Recent timestamps (less than 1 minute)."""
+    now = datetime.now(UTC)
+    recent = (now - timedelta(seconds=30)).isoformat()
+    assert humanize_age(recent) == "<1m ago"
+
+
+def test_humanize_age_minutes():
+    """Timestamps in minutes range."""
+    now = datetime.now(UTC)
+    two_min = (now - timedelta(minutes=2)).isoformat()
+    four_min = (now - timedelta(minutes=4)).isoformat()
+    ten_min = (now - timedelta(minutes=10)).isoformat()
+
+    assert humanize_age(two_min) == "<3m ago"
+    assert humanize_age(four_min) == "<5m ago"
+    assert humanize_age(ten_min) == "<15m ago"
+
+
+def test_humanize_age_hours():
+    """Timestamps in hours range."""
+    now = datetime.now(UTC)
+    one_hour = (now - timedelta(hours=1)).isoformat()
+    three_hours = (now - timedelta(hours=3)).isoformat()
+    six_hours = (now - timedelta(hours=6)).isoformat()
+
+    assert humanize_age(one_hour) == "<2h ago"
+    assert humanize_age(three_hours) == "<4h ago"
+    assert humanize_age(six_hours) == "<8h ago"
+
+
+def test_humanize_age_days():
+    """Timestamps in days range."""
+    now = datetime.now(UTC)
+    one_day = (now - timedelta(days=1)).isoformat()
+    two_days = (now - timedelta(days=2)).isoformat()
+    five_days = (now - timedelta(days=5)).isoformat()
+
+    assert humanize_age(one_day) == "<2d ago"
+    assert humanize_age(two_days) == "<3d ago"
+    assert humanize_age(five_days) == "<1w ago"
+
+
+def test_humanize_age_weeks():
+    """Timestamps in weeks range."""
+    now = datetime.now(UTC)
+    ten_days = (now - timedelta(days=10)).isoformat()
+    twenty_days = (now - timedelta(days=20)).isoformat()
+
+    assert humanize_age(ten_days) == "<2w ago"
+    assert humanize_age(twenty_days) == "<1mo ago"
+
+
+def test_humanize_age_months():
+    """Timestamps in months range."""
+    now = datetime.now(UTC)
+    two_months = (now - timedelta(days=60)).isoformat()
+    four_months = (now - timedelta(days=120)).isoformat()
+    seven_months = (now - timedelta(days=210)).isoformat()
+
+    assert humanize_age(two_months) == "<3mo ago"
+    assert humanize_age(four_months) == "<6mo ago"
+    assert humanize_age(seven_months) == "<1y ago"
+
+
+def test_humanize_age_year():
+    """Timestamps over a year old."""
+    now = datetime.now(UTC)
+    two_years = (now - timedelta(days=730)).isoformat()
+    assert humanize_age(two_years) == ">=1y ago"
+
+
+def test_humanize_age_empty():
+    """Empty or missing timestamp."""
+    assert humanize_age("") == "?"
+    assert humanize_age("?") == "?"
+
+
+def test_humanize_age_invalid():
+    """Invalid timestamp format."""
+    assert humanize_age("invalid-timestamp") == "invalid-timestamp"
+    assert humanize_age("2024-13-45") == "2024-13-45"
+
+
+def test_age_seconds_valid():
+    """Calculate age in seconds for valid timestamp."""
+    now = datetime.now(UTC)
+    past = (now - timedelta(seconds=120)).isoformat()
+    age = age_seconds(past)
+    assert age is not None
+    assert 118 <= age <= 122  # Allow small timing variance
+
+
+def test_age_seconds_recent():
+    """Age should never be negative (clamped to 0)."""
+    # Future timestamp should return 0
+    now = datetime.now(UTC)
+    # The function clamps to 0, but for past times it should be positive
+    past = (now - timedelta(seconds=5)).isoformat()
+    age = age_seconds(past)
+    assert age is not None
+    assert age >= 0
+
+
+def test_age_seconds_empty():
+    """Empty or missing timestamp."""
+    assert age_seconds("") is None
+    assert age_seconds("?") is None
+
+
+def test_age_seconds_invalid():
+    """Invalid timestamp format."""
+    assert age_seconds("invalid") is None
+
+
+def test_format_ts_with_age():
+    """Format timestamp with age."""
+    now = datetime.now(UTC)
+    recent = (now - timedelta(minutes=2)).isoformat()
+    result = format_ts_with_age(recent)
+    assert recent in result
+    assert "<3m ago" in result
+    assert "(" in result
+    assert ")" in result
+
+
+def test_format_ts_with_age_empty():
+    """Empty timestamp."""
+    assert format_ts_with_age("") == "?"
+    assert format_ts_with_age("?") == "?"
+
+
+def test_humanize_duration_seconds():
+    """Durations in seconds."""
+    assert humanize_duration(0) == "0s"
+    assert humanize_duration(30) == "30s"
+    assert humanize_duration(59) == "59s"
+
+
+def test_humanize_duration_minutes():
+    """Durations in minutes."""
+    assert humanize_duration(60) == "1m"
+    assert humanize_duration(120) == "2m"
+    assert humanize_duration(3599) == "59m"
+
+
+def test_humanize_duration_hours():
+    """Durations in hours."""
+    assert humanize_duration(3600) == "1h 00m"
+    assert humanize_duration(7325) == "2h 02m"
+    assert humanize_duration(86399) == "23h 59m"
+
+
+def test_humanize_duration_days():
+    """Durations in days."""
+    assert humanize_duration(86400) == "1d 00h"
+    assert humanize_duration(172800) == "2d 00h"
+    assert humanize_duration(90061) == "1d 01h"
+
+
+def test_humanize_duration_none():
+    """None duration."""
+    assert humanize_duration(None) == "-"
+
+
+def test_humanize_duration_min_unit_minutes():
+    """Duration with min_unit='m' shows '<1m' for values under 60s."""
+    assert humanize_duration(30, min_unit="m") == "<1m"
+    assert humanize_duration(59, min_unit="m") == "<1m"
+    assert humanize_duration(60, min_unit="m") == "1m"
+    assert humanize_duration(120, min_unit="m") == "2m"
+
+
+def test_humanize_duration_negative_clamped():
+    """Negative durations are clamped to 0."""
+    assert humanize_duration(-10) == "0s"
