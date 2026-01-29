@@ -58,6 +58,7 @@ repos:
       - id: shellcheck
         name: shellcheck
         args: [-x]
+        exclude: ^examples/
 
   # Security: GitHub Actions workflow linting
   - repo: https://github.com/rhysd/actionlint
