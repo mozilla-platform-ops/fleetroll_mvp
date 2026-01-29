@@ -32,9 +32,7 @@ Fleetroll MVP currently provides the ability to:
 
 Because puppet changes can affect the system under test, we only run puppet when tests aren't running (either via Taskcluster quarantine or when the generic-worker process isn't running).
 
-The easy way to enforce this and run puppet regularly, is to run puppet at boot and then start the Taskcluster worker (generic-worker).
-
-For hosts being used with the tool, hosts do and should run Puppet at boot (before starting the Taskcluster client).
+For the Linux workers, we do puppet runs at boot and then start the Taskcluster worker (generic-worker).
 
 TODO: move this section lower once fully implemented/thought out.
 
