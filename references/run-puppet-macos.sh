@@ -6,11 +6,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # ==============================================================================
-# FLEETROLL INTEGRATION: Source state writing function
+# PUPPET RUN METADATA: Source state writing function
 # ==============================================================================
-# This script integrates with fleetroll's puppet state tracking feature.
-# The write_puppet_state function writes metadata to /etc/puppet/last_run_metadata.json
+# This script writes puppet run metadata to /etc/puppet/last_run_metadata.json
 # after each puppet run, enabling ground-truth tracking of applied configuration.
+# The metadata includes git SHA, success status, duration, and file checksums.
 #
 # See: docs/puppet-state-tracking.md for details
 
@@ -181,10 +181,10 @@ run_puppet() {
     rm "$TMP_LOG"
 
     # ==============================================================================
-    # FLEETROLL INTEGRATION: Write puppet state metadata
+    # PUPPET RUN METADATA: Write state metadata
     # ==============================================================================
     # Write metadata about this puppet run to /etc/puppet/last_run_metadata.json
-    # This provides ground truth for fleetroll's host monitoring.
+    # This provides ground truth for monitoring and tracking applied configuration.
     # The function is designed to never fail the puppet run.
     # Note: macOS-specific paths for override and vault files
     if type write_puppet_state >/dev/null 2>&1; then
