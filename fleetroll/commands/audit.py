@@ -28,6 +28,7 @@ from ..constants import (
     OVERRIDES_DIR_NAME,
     VAULT_YAMLS_DIR_NAME,
 )
+from ..exceptions import CommandFailureError
 from ..ssh import (
     build_ssh_options,
     remote_audit_script,
@@ -511,22 +512,22 @@ def cmd_host_audit(args: HostAuditArgs) -> None:
         if is_batch:
             print(json.dumps(summary, indent=2, sort_keys=True))
             if summary["failed"] > 0:
-                sys.exit(1)
+                raise CommandFailureError
         else:
             # For single host JSON, return just the result (not wrapped in summary)
             print(json.dumps(summary["results"][0], indent=2, sort_keys=True))
             if not summary["results"][0].get("ok", False):
-                sys.exit(1)
+                raise CommandFailureError
     elif quiet:
         # Quiet mode: single-line output
         if is_batch:
             print(format_batch_quiet(summary, elapsed_seconds))
             if summary["failed"] > 0:
-                sys.exit(1)
+                raise CommandFailureError
         else:
             print(format_single_host_quiet(summary["results"][0], elapsed_seconds))
             if not summary["results"][0].get("ok", False):
-                sys.exit(1)
+                raise CommandFailureError
     elif is_batch:
         # Batch mode: show summary table
         print(format_summary_table(summary, verbose=args.verbose))

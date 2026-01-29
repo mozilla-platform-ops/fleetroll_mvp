@@ -305,11 +305,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     api_errors = 0
 
     # Load credentials
-    try:
-        credentials = load_tc_credentials()
-    except FleetRollError as e:
-        click.echo(f"ERROR: {e}", err=True)
-        raise SystemExit(1)
+    credentials = load_tc_credentials()
 
     # Parse host list
     hosts = []

@@ -31,7 +31,7 @@ from .commands import (
     cmd_tc_fetch,
     cmd_vault_show,
 )
-from .exceptions import FleetRollError, UserError
+from .exceptions import CommandFailureError, FleetRollError, UserError
 from .ssh import audit_script_body
 
 # Module logger
@@ -558,6 +558,9 @@ def main():
     """Main entry point for the CLI."""
     try:
         cli()
+    except CommandFailureError as e:
+        # Command already printed its error message, just exit
+        sys.exit(e.rc)
     except UserError as e:
         click.echo(f"ERROR: {e}", err=True)
         sys.exit(e.rc)

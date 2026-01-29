@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from fleetroll.cli_types import HostUnsetOverrideArgs
 from fleetroll.commands.unset import cmd_host_unset
+from fleetroll.exceptions import CommandFailureError
 
 
 class TestCmdHostUnset:
@@ -132,9 +133,9 @@ class TestCmdHostUnset:
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
 
-        with pytest.raises(SystemExit) as excinfo:
+        with pytest.raises(CommandFailureError) as excinfo:
             cmd_host_unset(mock_args_unset)
-        assert excinfo.value.code == 1
+        assert excinfo.value.rc == 1
 
         output = json.loads(captured[0])
         assert output["ok"] is False

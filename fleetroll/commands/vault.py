@@ -16,7 +16,7 @@ import click
 
 from ..audit import append_jsonl, store_content_file
 from ..constants import BACKUP_TIME_FORMAT, VAULT_YAMLS_DIR_NAME
-from ..exceptions import UserError
+from ..exceptions import CommandFailureError, UserError
 from ..humanhash import humanize
 from ..ssh import build_ssh_options, run_ssh
 from ..utils import (
@@ -255,7 +255,7 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
             if rc != 0:
-                sys.exit(1)
+                raise CommandFailureError
             return
 
         if rc != 0:
@@ -263,7 +263,7 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
                 f"[{args.host}] set vault FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
                 file=sys.stderr,
             )
-            sys.exit(1)
+            raise CommandFailureError
 
         print(f"[{args.host}] vault written")
         print(f"sha256={content_hash}")
@@ -358,4 +358,4 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
         print(f"Audit log: {audit_log}")
 
     if any(not r.get("ok") for r in results):
-        sys.exit(1)
+        raise CommandFailureError

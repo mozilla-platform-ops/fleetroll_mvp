@@ -16,6 +16,7 @@ import click
 
 from ..audit import append_jsonl
 from ..constants import BACKUP_TIME_FORMAT
+from ..exceptions import CommandFailureError
 from ..ssh import build_ssh_options, remote_unset_script, run_ssh
 from ..utils import (
     default_audit_log_path,
@@ -153,7 +154,7 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
             if rc != 0:
-                sys.exit(1)
+                raise CommandFailureError
             return
 
         if rc != 0:
@@ -161,7 +162,7 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
                 f"[{args.host}] unset override FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
                 file=sys.stderr,
             )
-            sys.exit(1)
+            raise CommandFailureError
 
         if removed:
             print(f"[{args.host}] override removed")
@@ -251,4 +252,4 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
         print(f"Audit log: {audit_log}")
 
     if any(not r.get("ok") for r in results):
-        sys.exit(1)
+        raise CommandFailureError

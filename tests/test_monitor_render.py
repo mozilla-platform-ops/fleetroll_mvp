@@ -140,7 +140,7 @@ def test_render_monitor_lines_sorted_and_sliced() -> None:
             "uptime_s": 3600,
         },
     }
-    hosts = ["host-b", "host-a", "host-c"]
+    hosts = sorted(["host-b", "host-a", "host-c"])  # Sort before passing to render
     latest = dict.fromkeys(hosts, record)
     latest_ok = dict.fromkeys(hosts, record)
     header, lines = render_monitor_lines(

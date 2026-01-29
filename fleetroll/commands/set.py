@@ -19,7 +19,7 @@ import click
 
 from ..audit import append_jsonl
 from ..constants import BACKUP_TIME_FORMAT
-from ..exceptions import UserError
+from ..exceptions import CommandFailureError, UserError
 from ..ssh import build_ssh_options, remote_set_script, run_ssh
 from ..utils import (
     default_audit_log_path,
@@ -219,7 +219,7 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
             if rc != 0:
-                sys.exit(1)
+                raise CommandFailureError
             return
 
         if rc != 0:
@@ -227,7 +227,7 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                 f"[{args.host}] set override FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
                 file=sys.stderr,
             )
-            sys.exit(1)
+            raise CommandFailureError
 
         print(f"[{args.host}] override written")
         print(f"sha256={content_hash}")
@@ -319,4 +319,4 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
         print(f"Audit log: {audit_log}")
 
     if any(not r.get("ok") for r in results):
-        sys.exit(1)
+        raise CommandFailureError
