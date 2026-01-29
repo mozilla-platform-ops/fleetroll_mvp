@@ -266,8 +266,10 @@ def remote_set_script(
     # 1) mktemp in same dir (atomic mv)
     # 2) write via tee
     # 3) chmod/chown
-    # 4) optional backup
-    # 5) mv into place
+    # 4) check if content changed
+    # 5) optional backup (only if content changed)
+    # 6) mv into place or just fix perms
+    # 7) cleanup old backups (keep 30 most recent)
     script = f"""
 set -eu
 trap 'sudo -n rm -f "$tmp" 2>/dev/null' EXIT
@@ -282,15 +284,34 @@ sudo -n tee "$tmp" >/dev/null
 sudo -n chmod {m} "$tmp"
 sudo -n chown {og} "$tmp"
 
-# Backup existing if requested
-if {b}; then
-  if sudo -n test -e "$op" 2>/dev/null; then
-    sudo -n cp -a "$op" "$op.bak.{suf}"
+# Check if content is identical
+content_changed=1
+if sudo -n test -e "$op" 2>/dev/null; then
+  if sudo -n cmp -s "$tmp" "$op"; then
+    content_changed=0
   fi
 fi
 
-# Atomic replace
-sudo -n mv -f "$tmp" "$op"
+if [ "$content_changed" = "0" ]; then
+  # Content identical - just ensure perms/ownership are correct
+  sudo -n chmod {m} "$op"
+  sudo -n chown {og} "$op"
+  echo "CONTENT_CHANGED=0"
+else
+  # Content changed - backup if requested, then replace
+  if {b}; then
+    if sudo -n test -e "$op" 2>/dev/null; then
+      sudo -n cp -a "$op" "$op.bak.{suf}"
+    fi
+  fi
+  sudo -n mv -f "$tmp" "$op"
+  echo "CONTENT_CHANGED=1"
+fi
+
+# Cleanup old backups (keep 30 most recent)
+if {b}; then
+  sudo -n sh -c 'ls -t "$op".bak.* 2>/dev/null | tail -n +31 | xargs -r rm -f' || true
+fi
 """
     return "sh -c " + shlex.quote(script.strip("\n"))
 
@@ -312,6 +333,11 @@ if sudo -n test -e "$op" 2>/dev/null; then
   echo "REMOVED=1"
 else
   echo "REMOVED=0"
+fi
+
+# Cleanup old backups (keep 30 most recent)
+if {b}; then
+  sudo -n sh -c 'ls -t "$op".bak.* 2>/dev/null | tail -n +31 | xargs -r rm -f' || true
 fi
 """
     return "sh -c " + shlex.quote(script.strip("\n"))
