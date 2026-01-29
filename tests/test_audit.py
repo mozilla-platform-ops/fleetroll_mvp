@@ -226,7 +226,9 @@ secret=abc123
         )
 
         assert result["observed"]["override_sha256"]
-        log_record = json.loads(audit_log.read_text().strip())
+        # Now writes to host_observations.jsonl instead of audit.jsonl
+        observations_log = tmp_dir / "host_observations.jsonl"
+        log_record = json.loads(observations_log.read_text().strip())
         observed = log_record["observed"]
         assert "override_contents_for_display" not in observed
         assert "override_contents" not in observed
@@ -316,7 +318,7 @@ OVERRIDE_PRESENT=0
         assert result["observed"]["override_sha256"] is None
 
     def test_writes_to_audit_log(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
-        """Appends result to audit log file."""
+        """Appends result to observations log file."""
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -329,14 +331,16 @@ OVERRIDE_PRESENT=0
             audit_log=audit_log,
             actor="test-actor",
         )
-        assert audit_log.exists()
-        record = json.loads(audit_log.read_text().strip())
+        # Now writes to host_observations.jsonl instead of audit.jsonl
+        observations_log = tmp_dir / "host_observations.jsonl"
+        assert observations_log.exists()
+        record = json.loads(observations_log.read_text().strip())
         assert record["host"] == "test.example.com"
 
     def test_writes_to_audit_log_with_lock(
         self, tmp_dir: Path, mock_args_audit: HostAuditArgs, mocker
     ):
-        """Appends result to audit log file while holding lock."""
+        """Appends result to observations log file while holding lock."""
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -360,7 +364,9 @@ OVERRIDE_PRESENT=0
         log_lock.__exit__.assert_called_once()
         mock_append.assert_called_once()
         args, _ = mock_append.call_args
-        assert args[0] == audit_log
+        # Now writes to host_observations.jsonl instead of audit.jsonl
+        observations_log = tmp_dir / "host_observations.jsonl"
+        assert args[0] == observations_log
         assert args[1]["host"] == "test.example.com"
 
     def test_stores_override_file_when_dir_provided(

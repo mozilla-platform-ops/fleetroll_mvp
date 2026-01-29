@@ -26,6 +26,7 @@ CONTENT_PREFIX_LEN = 12
 CONTENT_PREFIX_STEP = 4
 AUDIT_DIR_NAME = ".fleetroll"
 AUDIT_FILE_NAME = "audit.jsonl"
+HOST_OBSERVATIONS_FILE_NAME = "host_observations.jsonl"
 OVERRIDES_DIR_NAME = "overrides"
 VAULT_YAMLS_DIR_NAME = "vault_yamls"
 TC_WORKERS_FILE_NAME = "taskcluster_workers.jsonl"

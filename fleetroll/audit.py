@@ -253,9 +253,15 @@ def process_audit_result(
     log_record["observed"] = dict(result["observed"])
     log_record["observed"].pop("override_contents_for_display", None)
     log_record["observed"].pop("override_contents", None)
+
+    # Write observation to host_observations.jsonl instead of audit.jsonl
+    from .constants import HOST_OBSERVATIONS_FILE_NAME
+
+    observations_log = audit_log.parent / HOST_OBSERVATIONS_FILE_NAME
+
     if log_lock:
         with log_lock:
-            append_jsonl(audit_log, log_record)
+            append_jsonl(observations_log, log_record)
     else:
-        append_jsonl(audit_log, log_record)
+        append_jsonl(observations_log, log_record)
     return result

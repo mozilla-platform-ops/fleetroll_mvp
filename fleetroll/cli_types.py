@@ -124,6 +124,14 @@ class TcFetchArgs:
     quiet: bool
 
 
+@dataclass
+class RotateLogsArgs:
+    """Arguments for rotate-logs command."""
+
+    audit_log: str | None
+    confirm: bool
+
+
 class HasSshOptions(Protocol):
     """Protocol for args that contain SSH connection options."""
 

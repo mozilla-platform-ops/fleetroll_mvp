@@ -16,6 +16,7 @@ from .cli_types import (
     HostSetVaultArgs,
     HostUnsetOverrideArgs,
     OverrideShowArgs,
+    RotateLogsArgs,
     TcFetchArgs,
     VaultShowArgs,
 )
@@ -26,6 +27,7 @@ from .commands import (
     cmd_host_set_vault,
     cmd_host_unset,
     cmd_override_show,
+    cmd_rotate_logs,
     cmd_tc_fetch,
     cmd_vault_show,
 )
@@ -611,6 +613,32 @@ def tc_fetch(host: str, verbose: int, quiet: bool):
 
     args = TcFetchArgs(host=host, verbose=verbose, quiet=quiet)
     cmd_tc_fetch(args)
+
+
+@cli.command("rotate-logs")
+@click.option(
+    "--audit-log",
+    type=click.Path(),
+    help="Path to FleetRoll directory (default: ~/.fleetroll/).",
+)
+@click.option(
+    "--confirm",
+    is_flag=True,
+    help="Actually rotate logs (without this, shows dry-run).",
+)
+def rotate_logs(audit_log: str | None, confirm: bool):
+    """Rotate FleetRoll log files to prevent unbounded growth.
+
+    Archives current logs with timestamp suffix and starts fresh.
+    Does NOT backfill - new logs start empty on next write.
+    Only rotates files >= 100 MB threshold.
+    """
+    args = RotateLogsArgs(audit_log=audit_log, confirm=confirm)
+    try:
+        cmd_rotate_logs(args)
+    except (FleetRollError, UserError) as e:
+        click.echo(f"ERROR: {e}", err=True)
+        sys.exit(1)
 
 
 def main():

@@ -9,6 +9,8 @@ from importlib.metadata import version as get_version
 from pathlib import Path
 from typing import Any
 
+from ...constants import HOST_OBSERVATIONS_FILE_NAME, TC_WORKERS_FILE_NAME
+from ...utils import get_log_file_size
 from .data import (
     age_seconds,
     build_row_values,
@@ -60,8 +62,10 @@ class MonitorDisplay:
         self.fleetroll_attr = 0
         self.header_data_attr = 0
         self.column_attr = 0
+        self.warning_attr = 0
         self._init_curses()
         self._update_tc_mtime()
+        self.log_size_warnings = self._check_log_sizes()
 
     def _init_curses(self) -> None:
         try:
@@ -96,6 +100,7 @@ class MonitorDisplay:
             )
             self.header_data_attr = curses.color_pair(2) if self.color_enabled else 0
             self.column_attr = curses.A_BOLD | (curses.color_pair(3) if self.color_enabled else 0)
+            self.warning_attr = curses.color_pair(5) if self.color_enabled else 0
         except curses_error:
             return
 
@@ -246,6 +251,38 @@ class MonitorDisplay:
             self.tc_file_mtime = stat.st_mtime
         except FileNotFoundError:
             self.tc_file_mtime = None
+
+    def _check_log_sizes(self) -> list[str]:
+        """Check log file sizes and return warnings for files over threshold.
+
+        Returns:
+            List of warning strings, e.g., ["audit: 120M", "obs: 105M"]
+        """
+        warn_threshold_mb = 100
+        bytes_per_mb = 1024 * 1024
+
+        warnings = []
+        fleetroll_dir = Path.home() / ".fleetroll"
+
+        # Check audit.jsonl
+        audit_path = fleetroll_dir / "audit.jsonl"
+        audit_size_mb = get_log_file_size(audit_path) / bytes_per_mb
+        if audit_size_mb >= warn_threshold_mb:
+            warnings.append(f"audit: {audit_size_mb:.0f}M")
+
+        # Check host_observations.jsonl
+        obs_path = fleetroll_dir / HOST_OBSERVATIONS_FILE_NAME
+        obs_size_mb = get_log_file_size(obs_path) / bytes_per_mb
+        if obs_size_mb >= warn_threshold_mb:
+            warnings.append(f"obs: {obs_size_mb:.0f}M")
+
+        # Check taskcluster_workers.jsonl
+        tc_path = fleetroll_dir / TC_WORKERS_FILE_NAME
+        tc_size_mb = get_log_file_size(tc_path) / bytes_per_mb
+        if tc_size_mb >= warn_threshold_mb:
+            warnings.append(f"tc: {tc_size_mb:.0f}M")
+
+        return warnings
 
     def poll_tc_data(self) -> bool:
         """Check if TC data file changed and reload if needed. Returns True if reloaded."""
@@ -569,8 +606,13 @@ class MonitorDisplay:
             left = f"{left}, page={current_page}/{total_pages}"
         if scroll_indicator:
             left = f"{left}{scroll_indicator}"
+
+        # Build right section with optional log size warning
         fqdn_part = f"fqdn={self.fqdn_suffix}, " if self.fqdn_suffix else ""
         right = f"{fqdn_part}source={self.host_source}, hosts={len(self.hosts)}, updated={updated}"
+        if self.log_size_warnings:
+            warnings_text = ", ".join(self.log_size_warnings)
+            right = f"⚠ Large logs: {warnings_text} (run 'fleetroll rotate-logs') | {right}"
         if usable_width > 0:
             if len(left) + 1 + len(right) > usable_width:
                 left_max = max(usable_width - len(right) - 1, 0)
@@ -581,20 +623,51 @@ class MonitorDisplay:
             header = left
         if header.startswith("fleetroll"):
             self.safe_addstr(0, 0, "fleetroll", self.fleetroll_attr)
-            # Find where the right-side data starts (fqdn= or source=)
-            right_start = "fqdn=" if "fqdn=" in header else "source="
-            if right_start in header:
-                left_part, right_part = header[9:].rsplit(right_start, 1)
-                self.safe_addstr(0, 9, left_part)
-                self.safe_addstr(0, 9 + len(left_part), right_start, self.header_data_attr)
-                self.safe_addstr(
-                    0,
-                    9 + len(left_part) + len(right_start),
-                    right_part,
-                    self.header_data_attr,
-                )
+            # Handle warning section separately if present
+            if self.log_size_warnings and "⚠ Large logs:" in header:
+                # Split into left part, warning, and data part
+                middle = header[9:]  # After "fleetroll"
+                if " | " in middle:
+                    warning_part, data_part = middle.split(" | ", 1)
+                    # Find where data starts (fqdn= or source=)
+                    right_start = "fqdn=" if "fqdn=" in data_part else "source="
+                    if right_start in data_part:
+                        before_data, after_data = data_part.split(right_start, 1)
+                        col = 9
+                        # Write left part before warning
+                        if warning_part:
+                            self.safe_addstr(0, col, before_data)
+                            col += len(before_data)
+                        # Write warning in yellow
+                        warning_text = warning_part.strip()
+                        if warning_text:
+                            self.safe_addstr(0, col, warning_text, self.warning_attr)
+                            col += len(warning_text)
+                            self.safe_addstr(0, col, " | ")
+                            col += 3
+                        # Write data part in header color
+                        self.safe_addstr(0, col, right_start, self.header_data_attr)
+                        col += len(right_start)
+                        self.safe_addstr(0, col, after_data, self.header_data_attr)
+                    else:
+                        self.safe_addstr(0, 9, middle)
+                else:
+                    self.safe_addstr(0, 9, middle)
             else:
-                self.safe_addstr(0, 9, header[9:])
+                # No warning, original logic
+                right_start = "fqdn=" if "fqdn=" in header else "source="
+                if right_start in header:
+                    left_part, right_part = header[9:].rsplit(right_start, 1)
+                    self.safe_addstr(0, 9, left_part)
+                    self.safe_addstr(0, 9 + len(left_part), right_start, self.header_data_attr)
+                    self.safe_addstr(
+                        0,
+                        9 + len(left_part) + len(right_start),
+                        right_part,
+                        self.header_data_attr,
+                    )
+                else:
+                    self.safe_addstr(0, 9, header[9:])
         else:
             self.safe_addstr(0, 0, header)
 
