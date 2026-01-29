@@ -1,4 +1,15 @@
-"""FleetRoll host monitor command implementation."""
+"""FleetRoll host monitor command implementation.
+
+This package provides the host-monitor command with clear separation of concerns:
+
+- types.py: Shared constants and type definitions
+- data.py: Data loading, filtering, and aggregation (pure functions, easily testable)
+- formatting.py: Text rendering and layout (no curses dependencies)
+- display.py: Curses-based interactive UI
+- entry.py: Command entry point and orchestration
+
+All public functions are re-exported from this module for backward compatibility.
+"""
 
 from __future__ import annotations
 
