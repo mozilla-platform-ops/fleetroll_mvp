@@ -36,9 +36,10 @@ python_functions = ["test_*"]
 addopts = [
     "-v",
     "--tb=short",
-    "--cov=fleetroll",
-    "--cov-report=term-missing",
-    "--cov-report=html",
+    # TODO: do these in `make coverage`, it blows out ptw output if enabled here
+    #"--cov=fleetroll",
+    #"--cov-report=term-missing",
+    #"--cov-report=html",
     "--cov-fail-under=45",
 ]
 markers = ["allow_validation: allow override syntax validation in tests"]

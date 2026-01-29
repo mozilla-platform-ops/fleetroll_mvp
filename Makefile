@@ -1,4 +1,4 @@
-.PHONY: dev lint format test audit ci clean-bytecode clean
+.PHONY: dev lint format test test-watch audit ci clean-bytecode clean
 
 dev:
 	uv sync --all-groups
@@ -15,6 +15,9 @@ format:
 
 test:
 	uv run pytest
+
+test-watch:
+	uv run ptw .
 
 audit:
 	uv run pip-audit
