@@ -26,11 +26,12 @@ This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) 
 
 ### Best Practices
 
-- Check `br ready` at session start to find available work
-- Update status as you work (in_progress → closed)
-- Create new issues with `br create` when you discover tasks, and always include `--description`
-- When asked to close a bead and files changed during the work, suggest a git commit message that mentions any relevant beads
-- Use descriptive titles and set appropriate priority/type
+- **Session start**: Check `br ready` at session start to find available work
+- **Starting work on a bead**: Set the bead's status to in_progress.
+- **Creating new beads**: Use descriptive titles, descriptions, and set appropriate priority and type.
+- **Closing beads**: When asked to close a bead and files have changed during the
+  work, suggest a git commit message that mentions any relevant beads (e.g. `Refactor draw_screen into 8 focused methods (mvp-5jc)`)
+- U
 - Always `br sync` before ending session
 
 
@@ -43,9 +44,13 @@ br
 br ready              # Show issues ready to work (no blockers)
 br list --status=open # All open issues
 br show <id>          # Full issue details with dependencies
-br create -t task -p 2 -d "Description text" "Issue Title"
+# valid types:     Task, Bug, Feature, Epic, Chore, Docs, Question.
+br create -type task -priority 2 -description "Description text" "Issue Title"
 br update <id> --status=in_progress
 br update <id> --description="..."  # Update description
+br dep add <id> <depends_on>
+br dep remove <id> <depends_on>
+br dep list
 br close <id> --reason="Completed"
 br close <id1> <id2>  # Close multiple issues at once
 br sync               # Commit and push changes
