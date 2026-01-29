@@ -1,4 +1,4 @@
-.PHONY: dev lint format test test-watch audit ci clean-bytecode clean
+.PHONY: dev lint format test test-watch test-coverageaudit ci clean-bytecode clean
 
 dev:
 	uv sync --all-groups
@@ -18,6 +18,9 @@ test:
 
 test-watch:
 	uv run ptw .
+
+test-coverage:
+	uv run pytest --cov=fleetroll --cov-report=html --cov-report=term-missing
 
 audit:
 	uv run pip-audit

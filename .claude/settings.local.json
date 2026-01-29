@@ -17,6 +17,7 @@
       "Bash(uv run ruff check:*)",
       "Bash(uv run ruff format:*)",
       "Bash(make lint:*)",
+      "Bash(make test-coverage:*)",
       "Bash(prek run:*)"
     ]
   }
