@@ -443,7 +443,9 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                     worker_data = workers_map.get(short_host)
                     click.echo(f"    Worker data: {json.dumps(worker_data, indent=4)}")
 
-            write_worker_record(f, **record)
+            # Exclude 'type' field as write_worker_record sets it internally
+            record_params = {k: v for k, v in record.items() if k != "type"}
+            write_worker_record(f, **record_params)
             worker_records_written += 1
 
             if verbose >= 1 and not quiet:
