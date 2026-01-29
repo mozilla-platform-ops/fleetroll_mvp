@@ -7,8 +7,11 @@ from io import StringIO
 from pathlib import Path
 
 from fleetroll.commands.tc_fetch import (
+    build_role_to_hosts_mapping,
     format_tc_fetch_quiet,
     get_host_roles_bulk,
+    map_roles_to_worker_types,
+    match_workers_to_hosts,
     strip_fqdn,
     tc_workers_file_path,
     write_scan_record,
@@ -370,3 +373,328 @@ class TestGetHostRolesBulk:
         result = get_host_roles_bulk({"host1", "host2"}, audit_log)
         assert result["host1"] is None
         assert result["host2"] is None
+
+
+class TestBuildRoleToHostsMapping:
+    """Tests for build_role_to_hosts_mapping function."""
+
+    def test_builds_inverted_mapping(self):
+        """Should invert host-to-role mapping."""
+        host_to_role = {
+            "host1": "gecko_t_linux",
+            "host2": "gecko_t_linux",
+            "host3": "gecko_t_win",
+        }
+
+        result = build_role_to_hosts_mapping(host_to_role)
+
+        assert result["gecko_t_linux"] == ["host1", "host2"]
+        assert result["gecko_t_win"] == ["host3"]
+
+    def test_ignores_none_roles(self):
+        """Should skip hosts with None roles."""
+        host_to_role = {
+            "host1": "gecko_t_linux",
+            "host2": None,
+            "host3": "gecko_t_win",
+        }
+
+        result = build_role_to_hosts_mapping(host_to_role)
+
+        assert result["gecko_t_linux"] == ["host1"]
+        assert result["gecko_t_win"] == ["host3"]
+        assert None not in result
+
+    def test_empty_input(self):
+        """Should return empty dict for empty input."""
+        result = build_role_to_hosts_mapping({})
+        assert result == {}
+
+    def test_all_none_roles(self):
+        """Should return empty dict when all roles are None."""
+        host_to_role = {
+            "host1": None,
+            "host2": None,
+        }
+
+        result = build_role_to_hosts_mapping(host_to_role)
+        assert result == {}
+
+
+class TestMapRolesToWorkerTypes:
+    """Tests for map_roles_to_worker_types function."""
+
+    def test_maps_roles_to_worker_types(self):
+        """Should map roles to worker types using lookup table."""
+        role_to_hosts = {
+            "gecko_t_linux": ["host1", "host2"],
+            "gecko_t_win": ["host3"],
+        }
+        role_lookup = {
+            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+            "gecko_t_win": ("releng-hardware", "gecko-t-win"),
+        }
+
+        role_to_worker_type, worker_type_to_hosts, unmapped = map_roles_to_worker_types(
+            role_to_hosts, role_lookup
+        )
+
+        assert role_to_worker_type["gecko_t_linux"] == ("releng-hardware", "gecko-t-linux")
+        assert role_to_worker_type["gecko_t_win"] == ("releng-hardware", "gecko-t-win")
+        assert worker_type_to_hosts[("releng-hardware", "gecko-t-linux")] == ["host1", "host2"]
+        assert worker_type_to_hosts[("releng-hardware", "gecko-t-win")] == ["host3"]
+        assert unmapped == []
+
+    def test_auto_converts_worker_type(self):
+        """Should convert role name to worker type when AUTO_under_to_dash is specified."""
+        role_to_hosts = {
+            "gecko_t_linux_large": ["host1"],
+        }
+        role_lookup = {
+            "gecko_t_linux_large": ("releng-hardware", "AUTO_under_to_dash"),
+        }
+
+        role_to_worker_type, worker_type_to_hosts, unmapped = map_roles_to_worker_types(
+            role_to_hosts, role_lookup
+        )
+
+        assert role_to_worker_type["gecko_t_linux_large"] == (
+            "releng-hardware",
+            "gecko-t-linux-large",
+        )
+        assert worker_type_to_hosts[("releng-hardware", "gecko-t-linux-large")] == ["host1"]
+
+    def test_tracks_unmapped_roles(self):
+        """Should track roles not in lookup table."""
+        role_to_hosts = {
+            "gecko_t_linux": ["host1", "host2"],
+            "unknown_role": ["host3"],
+            "another_unknown": ["host4", "host5", "host6"],
+        }
+        role_lookup = {
+            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+        }
+
+        role_to_worker_type, worker_type_to_hosts, unmapped = map_roles_to_worker_types(
+            role_to_hosts, role_lookup
+        )
+
+        assert "unknown_role" not in role_to_worker_type
+        assert "another_unknown" not in role_to_worker_type
+        assert len(unmapped) == 2
+        assert ("unknown_role", 1) in unmapped
+        assert ("another_unknown", 3) in unmapped
+
+    def test_empty_input(self):
+        """Should handle empty input."""
+        role_to_worker_type, worker_type_to_hosts, unmapped = map_roles_to_worker_types({}, {})
+
+        assert role_to_worker_type == {}
+        assert worker_type_to_hosts == {}
+        assert unmapped == []
+
+    def test_combines_hosts_for_same_worker_type(self):
+        """Should combine hosts when multiple roles map to same worker type."""
+        role_to_hosts = {
+            "role_a": ["host1", "host2"],
+            "role_b": ["host3"],
+        }
+        role_lookup = {
+            "role_a": ("provisioner", "worker-type"),
+            "role_b": ("provisioner", "worker-type"),
+        }
+
+        role_to_worker_type, worker_type_to_hosts, unmapped = map_roles_to_worker_types(
+            role_to_hosts, role_lookup
+        )
+
+        assert worker_type_to_hosts[("provisioner", "worker-type")] == ["host1", "host2", "host3"]
+
+
+class TestMatchWorkersToHosts:
+    """Tests for match_workers_to_hosts function."""
+
+    def test_matches_workers_to_hosts(self):
+        """Should match worker data to hosts by short hostname."""
+        hosts = ["host1.example.com", "host2.example.com"]
+        host_to_role = {
+            "host1.example.com": "gecko_t_linux",
+            "host2.example.com": "gecko_t_linux",
+        }
+        role_to_worker_type = {
+            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+        }
+        worker_type_to_workers = {
+            ("releng-hardware", "gecko-t-linux"): {
+                "host1": {
+                    "workerId": "host1",
+                    "state": "running",
+                    "lastDateActive": "2024-01-15T10:00:00Z",
+                    "quarantineUntil": None,
+                    "latestTask": {
+                        "run": {
+                            "started": "2024-01-15T09:00:00Z",
+                            "resolved": "2024-01-15T09:30:00Z",
+                        }
+                    },
+                },
+                "host2": {
+                    "workerId": "host2",
+                    "state": "stopped",
+                    "lastDateActive": "2024-01-14T10:00:00Z",
+                    "quarantineUntil": None,
+                    "latestTask": None,
+                },
+            }
+        }
+
+        records = match_workers_to_hosts(
+            hosts,
+            host_to_role=host_to_role,
+            role_to_worker_type=role_to_worker_type,
+            worker_type_to_workers=worker_type_to_workers,
+            ts="2024-01-15T12:00:00Z",
+        )
+
+        assert len(records) == 2
+
+        # Check first record
+        record1 = records[0]
+        assert record1["type"] == "worker"
+        assert record1["ts"] == "2024-01-15T12:00:00Z"
+        assert record1["host"] == "host1.example.com"
+        assert record1["worker_id"] == "host1"
+        assert record1["provisioner"] == "releng-hardware"
+        assert record1["worker_type"] == "gecko-t-linux"
+        assert record1["state"] == "running"
+        assert record1["last_date_active"] == "2024-01-15T10:00:00Z"
+        assert record1["task_started"] == "2024-01-15T09:00:00Z"
+        assert record1["task_resolved"] == "2024-01-15T09:30:00Z"
+        assert record1["quarantine_until"] is None
+
+        # Check second record
+        record2 = records[1]
+        assert record2["host"] == "host2.example.com"
+        assert record2["state"] == "stopped"
+        assert record2["task_started"] is None
+        assert record2["task_resolved"] is None
+
+    def test_skips_hosts_without_role(self):
+        """Should skip hosts with no role."""
+        hosts = ["host1.example.com", "host2.example.com"]
+        host_to_role = {
+            "host1.example.com": "gecko_t_linux",
+            "host2.example.com": None,
+        }
+        role_to_worker_type = {
+            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+        }
+        worker_type_to_workers = {
+            ("releng-hardware", "gecko-t-linux"): {
+                "host1": {"workerId": "host1", "state": "running"},
+            }
+        }
+
+        records = match_workers_to_hosts(
+            hosts,
+            host_to_role=host_to_role,
+            role_to_worker_type=role_to_worker_type,
+            worker_type_to_workers=worker_type_to_workers,
+            ts="2024-01-15T12:00:00Z",
+        )
+
+        assert len(records) == 1
+        assert records[0]["host"] == "host1.example.com"
+
+    def test_skips_hosts_with_unmapped_role(self):
+        """Should skip hosts whose role is not in worker type mapping."""
+        hosts = ["host1.example.com"]
+        host_to_role = {
+            "host1.example.com": "unknown_role",
+        }
+        role_to_worker_type = {}
+        worker_type_to_workers = {}
+
+        records = match_workers_to_hosts(
+            hosts,
+            host_to_role=host_to_role,
+            role_to_worker_type=role_to_worker_type,
+            worker_type_to_workers=worker_type_to_workers,
+            ts="2024-01-15T12:00:00Z",
+        )
+
+        assert len(records) == 0
+
+    def test_skips_hosts_without_worker_data(self):
+        """Should skip hosts with no matching worker data."""
+        hosts = ["host1.example.com", "host2.example.com"]
+        host_to_role = {
+            "host1.example.com": "gecko_t_linux",
+            "host2.example.com": "gecko_t_linux",
+        }
+        role_to_worker_type = {
+            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+        }
+        worker_type_to_workers = {
+            ("releng-hardware", "gecko-t-linux"): {
+                "host1": {"workerId": "host1", "state": "running"},
+                # host2 not in worker data
+            }
+        }
+
+        records = match_workers_to_hosts(
+            hosts,
+            host_to_role=host_to_role,
+            role_to_worker_type=role_to_worker_type,
+            worker_type_to_workers=worker_type_to_workers,
+            ts="2024-01-15T12:00:00Z",
+        )
+
+        assert len(records) == 1
+        assert records[0]["host"] == "host1.example.com"
+
+    def test_handles_missing_optional_fields(self):
+        """Should handle missing optional fields in worker data."""
+        hosts = ["host1.example.com"]
+        host_to_role = {
+            "host1.example.com": "gecko_t_linux",
+        }
+        role_to_worker_type = {
+            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+        }
+        worker_type_to_workers = {
+            ("releng-hardware", "gecko-t-linux"): {
+                "host1": {
+                    "workerId": "host1",
+                    # Missing most fields
+                },
+            }
+        }
+
+        records = match_workers_to_hosts(
+            hosts,
+            host_to_role=host_to_role,
+            role_to_worker_type=role_to_worker_type,
+            worker_type_to_workers=worker_type_to_workers,
+            ts="2024-01-15T12:00:00Z",
+        )
+
+        assert len(records) == 1
+        record = records[0]
+        assert record["state"] is None
+        assert record["last_date_active"] is None
+        assert record["task_started"] is None
+        assert record["task_resolved"] is None
+        assert record["quarantine_until"] is None
+
+    def test_empty_hosts_list(self):
+        """Should return empty list for empty hosts input."""
+        records = match_workers_to_hosts(
+            [],
+            host_to_role={},
+            role_to_worker_type={},
+            worker_type_to_workers={},
+            ts="2024-01-15T12:00:00Z",
+        )
+
+        assert records == []

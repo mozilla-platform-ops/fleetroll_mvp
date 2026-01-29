@@ -164,6 +164,129 @@ def write_scan_record(
     f.write(json.dumps(record) + "\n")
 
 
+def build_role_to_hosts_mapping(host_to_role: dict[str, str | None]) -> dict[str, list[str]]:
+    """Build inverted mapping from roles to lists of hosts.
+
+    Args:
+        host_to_role: Mapping of hostname to role (or None if no role found)
+
+    Returns:
+        Dictionary mapping each role to list of hosts with that role
+    """
+    role_to_hosts: dict[str, list[str]] = defaultdict(list)
+    for host, role in host_to_role.items():
+        if role:
+            role_to_hosts[role].append(host)
+    return dict(role_to_hosts)
+
+
+def map_roles_to_worker_types(
+    role_to_hosts: dict[str, list[str]],
+    role_lookup: dict[str, tuple[str, str]],
+) -> tuple[dict[str, tuple[str, str]], dict[tuple[str, str], list[str]], list[tuple[str, int]]]:
+    """Map roles to TaskCluster worker types.
+
+    Args:
+        role_to_hosts: Mapping of role to list of hosts
+        role_lookup: Role to (provisioner, worker_type) lookup table
+
+    Returns:
+        Tuple of:
+        - role_to_worker_type: Mapping of role to (provisioner, worker_type)
+        - worker_type_to_hosts: Mapping of (provisioner, worker_type) to list of hosts
+        - unmapped_roles: List of (role, host_count) tuples for roles not in lookup table
+    """
+    role_to_worker_type: dict[str, tuple[str, str]] = {}
+    worker_type_to_hosts: dict[tuple[str, str], list[str]] = defaultdict(list)
+    unmapped_roles: list[tuple[str, int]] = []
+
+    for role, role_hosts in role_to_hosts.items():
+        if role not in role_lookup:
+            unmapped_roles.append((role, len(role_hosts)))
+            continue
+
+        provisioner, worker_type = role_lookup[role]
+
+        # Auto-convert role name to workerType if specified
+        if worker_type == "AUTO_under_to_dash":
+            worker_type = role.replace("_", "-")
+
+        role_to_worker_type[role] = (provisioner, worker_type)
+        worker_type_key = (provisioner, worker_type)
+        worker_type_to_hosts[worker_type_key].extend(role_hosts)
+
+    return role_to_worker_type, dict(worker_type_to_hosts), unmapped_roles
+
+
+def match_workers_to_hosts(
+    hosts: list[str],
+    *,
+    host_to_role: dict[str, str | None],
+    role_to_worker_type: dict[str, tuple[str, str]],
+    worker_type_to_workers: dict[tuple[str, str], dict[str, Any]],
+    ts: str,
+) -> list[dict[str, Any]]:
+    """Match TaskCluster worker data to hosts and build worker records.
+
+    Args:
+        hosts: List of hostnames to match
+        host_to_role: Mapping of hostname to role
+        role_to_worker_type: Mapping of role to (provisioner, worker_type)
+        worker_type_to_workers: Mapping of (provisioner, worker_type) to worker data
+        ts: Timestamp for the records
+
+    Returns:
+        List of worker record dictionaries ready to write to JSONL
+    """
+    records = []
+
+    for host in hosts:
+        role = host_to_role.get(host)
+        if not role or role not in role_to_worker_type:
+            continue
+
+        provisioner, worker_type = role_to_worker_type[role]
+        worker_type_key = (provisioner, worker_type)
+        workers_map = worker_type_to_workers.get(worker_type_key, {})
+
+        # Match by short hostname
+        short_host = strip_fqdn(host)
+        worker_data = workers_map.get(short_host)
+
+        if worker_data:
+            # Extract fields from GraphQL response
+            state = worker_data.get("state")
+            last_date_active = worker_data.get("lastDateActive")
+            quarantine_until = worker_data.get("quarantineUntil")
+
+            # Extract task data from latestTask.run (GraphQL structure)
+            task_started = None
+            task_resolved = None
+            latest_task = worker_data.get("latestTask")
+            if latest_task:
+                run = latest_task.get("run")
+                if run:
+                    task_started = run.get("started")
+                    task_resolved = run.get("resolved")
+
+            record = {
+                "type": "worker",
+                "ts": ts,
+                "host": host,
+                "worker_id": short_host,
+                "provisioner": provisioner,
+                "worker_type": worker_type,
+                "state": state,
+                "last_date_active": last_date_active,
+                "task_started": task_started,
+                "task_resolved": task_resolved,
+                "quarantine_until": quarantine_until,
+            }
+            records.append(record)
+
+    return records
+
+
 def cmd_tc_fetch(args: TcFetchArgs) -> None:
     """Fetch TaskCluster worker data for hosts.
 
@@ -206,11 +329,10 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
 
     # Map hosts to roles (single pass through observations log)
     host_to_role = get_host_roles_bulk(set(hosts), observations_log_path)
-    role_to_hosts: dict[str, list[str]] = defaultdict(list)
 
+    # Track hosts without roles for logging
     for host, role in host_to_role.items():
         if role:
-            role_to_hosts[role].append(host)
             if verbose >= 1 and not quiet:
                 click.echo(f"  {host} -> role: {role}")
         else:
@@ -218,28 +340,21 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             if verbose >= 1 and not quiet:
                 click.echo(f"  {host} -> role: NOT FOUND")
 
+    # Build role to hosts mapping
+    role_to_hosts = build_role_to_hosts_mapping(host_to_role)
+
     # Map roles to workerTypes
-    role_to_worker_type: dict[str, tuple[str, str]] = {}
-    worker_type_to_hosts: dict[tuple[str, str], list[str]] = defaultdict(list)
+    role_to_worker_type, worker_type_to_hosts, unmapped_roles = map_roles_to_worker_types(
+        role_to_hosts, ROLE_TO_TASKCLUSTER
+    )
 
-    for role, role_hosts in role_to_hosts.items():
-        if role not in ROLE_TO_TASKCLUSTER:
-            if not quiet:
-                click.echo(
-                    f"WARNING: Role '{role}' not found in lookup table, skipping {len(role_hosts)} host(s)",
-                    err=True,
-                )
-            continue
-
-        provisioner, worker_type = ROLE_TO_TASKCLUSTER[role]
-
-        # Auto-convert role name to workerType if specified
-        if worker_type == "AUTO_under_to_dash":
-            worker_type = role.replace("_", "-")
-
-        role_to_worker_type[role] = (provisioner, worker_type)
-        worker_type_key = (provisioner, worker_type)
-        worker_type_to_hosts[worker_type_key].extend(role_hosts)
+    # Display warnings for unmapped roles
+    for role, host_count in unmapped_roles:
+        if not quiet:
+            click.echo(
+                f"WARNING: Role '{role}' not found in lookup table, skipping {host_count} host(s)",
+                err=True,
+            )
 
     if not worker_type_to_hosts:
         if not quiet:
@@ -303,68 +418,53 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     worker_records_written = 0
     scan_records_written = 0
 
+    # Match workers to hosts
+    worker_records = match_workers_to_hosts(
+        hosts,
+        host_to_role=host_to_role,
+        role_to_worker_type=role_to_worker_type,
+        worker_type_to_workers=worker_type_to_workers,
+        ts=ts,
+    )
+
+    # Write results to file
     with output_path.open("a", encoding="utf-8") as f:
-        # Write worker records
-        for host in hosts:
+        # Write worker records with verbose logging
+        for record in worker_records:
+            host = record["host"]
+            short_host = record["worker_id"]
             role = host_to_role.get(host)
-            if not role or role not in role_to_worker_type:
-                if verbose >= 1 and not quiet:
-                    click.echo(f"  Skipping {host}: no role or role not in worker type mapping")
-                continue
-
-            provisioner, worker_type = role_to_worker_type[role]
-            worker_type_key = (provisioner, worker_type)
-            workers_map = worker_type_to_workers.get(worker_type_key, {})
-
-            # Match by short hostname
-            short_host = strip_fqdn(host)
-            worker_data = workers_map.get(short_host)
 
             if verbose >= 1 and not quiet:
+                provisioner = record["provisioner"]
+                worker_type = record["worker_type"]
+                worker_type_key = (provisioner, worker_type)
+                workers_map = worker_type_to_workers.get(worker_type_key, {})
+
                 click.echo(f"  Matching {host} (short: {short_host})...")
-                if short_host in workers_map:
-                    click.echo(f"    Found worker data for {short_host}")
-                    if verbose >= 2:
-                        click.echo(f"    Worker data: {json.dumps(worker_data, indent=4)}")
-                else:
-                    click.echo(
-                        f"    No worker data found for {short_host} in {len(workers_map)} workers"
-                    )
-                    if workers_map and len(workers_map) <= 10:
-                        click.echo(f"    Available worker IDs: {', '.join(workers_map.keys())}")
+                click.echo(f"    Found worker data for {short_host}")
+                if verbose >= 2:
+                    worker_data = workers_map.get(short_host)
+                    click.echo(f"    Worker data: {json.dumps(worker_data, indent=4)}")
 
-            if worker_data:
-                # Extract fields from GraphQL response
-                state = worker_data.get("state")
-                last_date_active = worker_data.get("lastDateActive")
-                quarantine_until = worker_data.get("quarantineUntil")
+            write_worker_record(f, **record)
+            worker_records_written += 1
 
-                # Extract task data from latestTask.run (GraphQL structure)
-                task_started = None
-                task_resolved = None
-                latest_task = worker_data.get("latestTask")
-                if latest_task:
-                    run = latest_task.get("run")
-                    if run:
-                        task_started = run.get("started")
-                        task_resolved = run.get("resolved")
+            if verbose >= 1 and not quiet:
+                state = record["state"]
+                quarantine = record["quarantine_until"]
+                click.echo(f"    Wrote record: state={state}, quarantine={quarantine}")
 
-                write_worker_record(
-                    f,
-                    ts=ts,
-                    host=host,
-                    worker_id=short_host,
-                    provisioner=provisioner,
-                    worker_type=worker_type,
-                    state=state,
-                    last_date_active=last_date_active,
-                    task_started=task_started,
-                    task_resolved=task_resolved,
-                    quarantine_until=quarantine_until,
-                )
-                worker_records_written += 1
-                if verbose >= 1 and not quiet:
-                    click.echo(f"    Wrote record: state={state}, quarantine={quarantine_until}")
+        # Write skipped hosts logging
+        if verbose >= 1 and not quiet:
+            written_hosts = {r["host"] for r in worker_records}
+            for host in hosts:
+                if host not in written_hosts:
+                    role = host_to_role.get(host)
+                    if not role or role not in role_to_worker_type:
+                        click.echo(f"  Skipping {host}: no role or role not in worker type mapping")
+                    else:
+                        click.echo(f"  Skipping {host}: no worker data found")
 
         # Write scan records
         for (provisioner, worker_type), wt_hosts in worker_type_to_hosts.items():
