@@ -109,8 +109,8 @@ br show <id>          # Full issue details with dependencies
 # --type <TYPE>  # valid types:  task, bug, feature, epic, chore
 # --parent <PARENT>  # parent issue (epics usually)
 br create --type task --priority 2 --description "Description text" "Issue Title"
-br update <id> --status=in_progress
-br update <id> --description="..."  # Update description
+br update <id> --description="..."  # Update description, priority, type, etc
+br update --claim <id> --actor <cli-agent/model> # sets assignee=actor + `status=in_progress`
 br dep add <id> <depends_on>
 br dep remove <id> <depends_on>
 br dep list
