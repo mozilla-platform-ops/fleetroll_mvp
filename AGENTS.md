@@ -22,6 +22,28 @@ uv run python -m module            # Run a module
 
 **NEVER** use `pytest`, `python`, `python3`, or `python -m` directly - always prefix with `uv run`.
 
+## Import Verification
+
+For verifying Python imports, use the safe `verify-imports` tool instead of `uv run python -c`:
+
+```bash
+# Verify module imports
+uv run verify-imports fleetroll.commands.monitor
+
+# Verify multiple modules/objects
+uv run verify-imports \
+  fleetroll.commands.monitor \
+  fleetroll.commands.monitor.MonitorDisplay \
+  fleetroll.commands.monitor.build_row_values
+```
+
+**Why use verify-imports:**
+- **Safe for bulk-allow**: Only performs imports, never executes arbitrary Python code
+- **Security**: Input validation prevents code injection
+- **Clear output**: Shows ✓ for successful imports, errors for failures
+
+**NEVER** use `uv run python -c "from ... import ..."` for import verification - always use `verify-imports`.
+
 ## Git Operations
 
 The user handles all git operations (staging, committing, pushing). When changes are ready to commit:
