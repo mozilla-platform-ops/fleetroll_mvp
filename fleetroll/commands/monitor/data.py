@@ -462,18 +462,16 @@ def load_latest_records(
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     """Load the latest matching audit record per host.
 
-    Reads from host_observations.jsonl if it exists, otherwise falls back
-    to audit.jsonl for backward compatibility.
+    Reads from host_observations.jsonl.
     """
     host_set = set(hosts)
     latest: dict[str, dict[str, Any]] = {}
     latest_ok: dict[str, dict[str, Any]] = {}
 
-    # Try new observations file first
+    # Read from observations log
     observations_log = path.parent / HOST_OBSERVATIONS_FILE_NAME
-    read_path = observations_log if observations_log.exists() else path
 
-    for record in iter_audit_records(read_path):
+    for record in iter_audit_records(observations_log):
         if record_matches(
             record,
             hosts=host_set,
@@ -499,21 +497,19 @@ def tail_audit_log(
 ) -> Iterable[dict[str, Any]]:
     """Yield matching audit records appended to the log.
 
-    Reads from host_observations.jsonl if it exists, otherwise falls back
-    to audit.jsonl for backward compatibility.
+    Reads from host_observations.jsonl.
     """
     host_set = set(hosts)
     file_obj = None
     inode = None
     position = 0
 
-    # Try new observations file first
+    # Read from observations log
     observations_log = path.parent / HOST_OBSERVATIONS_FILE_NAME
-    read_path = observations_log if observations_log.exists() else path
 
     while True:
         try:
-            stat = read_path.stat()
+            stat = observations_log.stat()
         except FileNotFoundError:
             time.sleep(poll_interval_s)
             continue
@@ -521,7 +517,7 @@ def tail_audit_log(
         if inode != stat.st_ino:
             if file_obj:
                 file_obj.close()
-            file_obj = read_path.open("r", encoding="utf-8")
+            file_obj = observations_log.open("r", encoding="utf-8")
             inode = stat.st_ino
             position = stat.st_size if start_at_end else 0
             file_obj.seek(position)
@@ -556,8 +552,7 @@ def tail_audit_log(
 class AuditLogTailer:
     """Non-blocking tailer for the audit log.
 
-    Reads from host_observations.jsonl if it exists, otherwise falls back
-    to audit.jsonl for backward compatibility.
+    Reads from host_observations.jsonl.
     """
 
     def __init__(
@@ -570,9 +565,9 @@ class AuditLogTailer:
         vault_path: str,
         start_at_end: bool = False,
     ) -> None:
-        # Try new observations file first
+        # Read from observations log
         observations_log = path.parent / HOST_OBSERVATIONS_FILE_NAME
-        self.path = observations_log if observations_log.exists() else path
+        self.path = observations_log
         self.host_set = set(hosts)
         self.override_path = override_path
         self.role_path = role_path
