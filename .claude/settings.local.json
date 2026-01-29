@@ -18,6 +18,7 @@
       "Bash(uv run ruff check:*)",
       "Bash(uv run ruff format:*)",
       "Bash(uv run verify-imports:*)",
+      "Bash(uv run ty check:*)",
       "Bash(make lint:*)",
       "Bash(make test:*)",
       "Bash(make test-coverage:*)",

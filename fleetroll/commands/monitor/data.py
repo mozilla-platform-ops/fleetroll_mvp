@@ -340,10 +340,15 @@ def build_ok_row_values(
     tc_str = humanize_duration(tc_ts_age, min_unit="m") if tc_ts_age is not None else "-"
     data = f"{audit_str}/{tc_str}"
 
-    return {
+    uptime_s = observed.get("uptime_s")
+    uptime: str = humanize_duration(uptime_s if isinstance(uptime_s, int) else None)
+
+    # Dict values are strings at runtime (validated by tests), but type checker
+    # sees some as potentially Any due to dict.get() returning Any type
+    return {  # type: ignore[invalid-return-type]
         "status": "OK",
         "host": display_host,
-        "uptime": humanize_duration(observed.get("uptime_s")),
+        "uptime": uptime,
         "override": override_state,
         "role": role,
         "sha": sha,
@@ -376,8 +381,10 @@ def build_row_values(
 
     if record is None:
         tc_str = "-"
-        if tc_data and tc_data.get("ts"):
-            tc_str = humanize_duration(age_seconds(tc_data.get("ts")), min_unit="m")
+        if tc_data:
+            tc_ts = tc_data.get("ts")
+            if tc_ts and isinstance(tc_ts, str):
+                tc_str = humanize_duration(age_seconds(tc_ts), min_unit="m")
         return {
             "status": "UNK",
             "host": display_host,
@@ -405,8 +412,10 @@ def build_row_values(
             values["err"] = err
             return values
         tc_str = "-"
-        if tc_data and tc_data.get("ts"):
-            tc_str = humanize_duration(age_seconds(tc_data.get("ts")), min_unit="m")
+        if tc_data:
+            tc_ts = tc_data.get("ts")
+            if tc_ts and isinstance(tc_ts, str):
+                tc_str = humanize_duration(age_seconds(tc_ts), min_unit="m")
         audit_age = age_seconds(record.get("ts", "?"))
         audit_str = humanize_duration(audit_age, min_unit="m") if audit_age is not None else "-"
         return {
@@ -500,8 +509,13 @@ def tail_audit_log(
             position = stat.st_size if start_at_end else 0
             file_obj.seek(position)
         elif stat.st_size < position:
-            position = stat.st_size if start_at_end else 0
-            file_obj.seek(position)
+            if file_obj:
+                position = stat.st_size if start_at_end else 0
+                file_obj.seek(position)
+
+        if not file_obj:
+            time.sleep(poll_interval_s)
+            continue
 
         line = file_obj.readline()
         if not line:

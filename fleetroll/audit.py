@@ -194,11 +194,11 @@ def process_audit_result(
 
     if vault_meta is None and vault_present:
         vault_meta = {
-            "mode": info.get("VLT_MODE"),
-            "owner": info.get("VLT_OWNER"),
-            "group": info.get("VLT_GROUP"),
-            "size": info.get("VLT_SIZE"),
-            "mtime_epoch": info.get("VLT_MTIME"),
+            "mode": info.get("VLT_MODE") or "",
+            "owner": info.get("VLT_OWNER") or "",
+            "group": info.get("VLT_GROUP") or "",
+            "size": info.get("VLT_SIZE") or "",
+            "mtime_epoch": info.get("VLT_MTIME") or "",
         }
 
     result: dict[str, Any] = {

@@ -80,6 +80,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         return
 
     if args.json or not sys.stdout.isatty():
+        columns = None
+        widths = None
         if args.json:
             payload = {host: latest.get(host) for host in hosts}
             print(json.dumps(payload, indent=2, sort_keys=True))
@@ -112,7 +114,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         ):
             if args.json:
                 print(json.dumps(record, sort_keys=True))
-            else:
+            elif columns is not None and widths is not None:
                 if record.get("ok"):
                     latest_ok[record["host"]] = record
                 host = record["host"]

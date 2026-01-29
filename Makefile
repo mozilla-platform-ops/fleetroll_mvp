@@ -1,4 +1,4 @@
-.PHONY: dev lint format test test-watch test-watch-coverage test-coverageaudit ci clean-bytecode clean
+.PHONY: dev lint format type-check test test-watch test-watch-coverage test-coverageaudit ci clean-bytecode clean
 
 dev:
 	uv sync --all-groups
@@ -12,6 +12,9 @@ lint:
 format:
 	uv run ruff format .
 	uv run ruff check --fix .
+
+type-check:
+	uv run ty check fleetroll/
 
 test:
 	uv run pytest

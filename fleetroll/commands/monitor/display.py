@@ -51,10 +51,8 @@ class MonitorDisplay:
         self.page_step = 1
         self.max_offset = 0
         self.max_col_offset = 0
-        self.last_updated = max(
-            (r.get("ts") for r in latest.values() if r.get("ts")),
-            default=None,
-        )
+        timestamps = [r.get("ts") for r in latest.values() if r.get("ts")]
+        self.last_updated = max(timestamps, default=None) if timestamps else None
         self.fqdn_suffix = detect_common_fqdn_suffix(hosts)
         self.show_help = False
         self.curses_mod = None

@@ -130,6 +130,7 @@ def audit_single_host_with_retry(
 
     logger.debug("Auditing host: %s", host)
 
+    err = ""  # Initialize for type checker
     for attempt in range(max_retries):
         # Check batch timeout
         with lock:
@@ -380,7 +381,8 @@ def cmd_host_audit_batch(hosts: list[str], args: HostAuditArgs) -> dict[str, Any
                 if show_progress:
                     completed += 1
                     remaining = len(hosts) - completed
-                    bar.label = format_progress_label(
+                    # Click progressbar type not fully understood by type checker
+                    bar.label = format_progress_label(  # type: ignore[invalid-assignment]
                         remaining, elapsed_s=time.monotonic() - progress_start
                     )
                     bar.update(1)
@@ -484,6 +486,7 @@ def cmd_host_audit(args: HostAuditArgs) -> None:
     quiet = getattr(args, "quiet", False)
 
     # Determine hosts to audit
+    host_file = None
     if is_host_file(args.host):
         host_file = Path(args.host)
         hosts = parse_host_list(host_file)
@@ -493,7 +496,7 @@ def cmd_host_audit(args: HostAuditArgs) -> None:
         is_batch = False
 
     # Show progress message for batch mode
-    if is_batch and not args.json and not quiet:
+    if is_batch and not args.json and not quiet and host_file:
         print(f"Auditing {len(hosts)} hosts from {host_file} with {args.workers} workers...")
 
     # Always use batch logic (works for single host too, provides retry)
