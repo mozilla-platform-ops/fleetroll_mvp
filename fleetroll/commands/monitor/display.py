@@ -96,22 +96,32 @@ class MonitorDisplay:
                 # High-contrast fg/bg combinations for extended palette (pairs 19+)
                 # Format: (fg, bg) chosen for readability
                 fg_bg_combos = [
-                    (curses.COLOR_YELLOW, curses.COLOR_BLUE),  # yellow on blue
+                    # (curses.COLOR_YELLOW, curses.COLOR_BLUE),  # yellow on blue - c16 UNREADABLE
                     (curses.COLOR_BLACK, curses.COLOR_CYAN),  # black on cyan
                     (curses.COLOR_BLACK, curses.COLOR_GREEN),  # black on green
                     (curses.COLOR_YELLOW, curses.COLOR_MAGENTA),  # yellow on magenta
                     (curses.COLOR_BLACK, curses.COLOR_YELLOW),  # black on yellow
                     (curses.COLOR_WHITE, curses.COLOR_RED),  # white on red
-                    (curses.COLOR_WHITE, curses.COLOR_BLUE),  # white on blue
+                    # (curses.COLOR_WHITE, curses.COLOR_BLUE),  # white on blue - c22 UNREADABLE
                     (curses.COLOR_CYAN, curses.COLOR_BLACK),  # cyan on black
                     (curses.COLOR_GREEN, curses.COLOR_BLACK),  # green on black
                     (curses.COLOR_YELLOW, curses.COLOR_BLACK),  # yellow on black
                     (curses.COLOR_WHITE, curses.COLOR_MAGENTA),  # white on magenta
                     (curses.COLOR_BLACK, curses.COLOR_WHITE),  # black on white
-                    (curses.COLOR_BLUE, curses.COLOR_YELLOW),  # blue on yellow
+                    # (curses.COLOR_BLUE, curses.COLOR_YELLOW),  # blue on yellow - c28 UNREADABLE
                     (curses.COLOR_RED, curses.COLOR_CYAN),  # red on cyan
                     (curses.COLOR_MAGENTA, curses.COLOR_YELLOW),  # magenta on yellow
-                    (curses.COLOR_BLUE, curses.COLOR_WHITE),  # blue on white
+                    # (curses.COLOR_BLUE, curses.COLOR_WHITE),  # blue on white - c31 UNREADABLE
+                    # New combos with red/white backgrounds
+                    (curses.COLOR_BLACK, curses.COLOR_RED),  # black on red
+                    (curses.COLOR_GREEN, curses.COLOR_RED),  # green on red
+                    (curses.COLOR_CYAN, curses.COLOR_RED),  # cyan on red
+                    (curses.COLOR_MAGENTA, curses.COLOR_WHITE),  # magenta on white
+                    (curses.COLOR_RED, curses.COLOR_WHITE),  # red on white
+                    # (curses.COLOR_GREEN, curses.COLOR_WHITE),  # green on white - c33 UNREADABLE
+                    (curses.COLOR_BLUE, curses.COLOR_RED),  # blue on red
+                    # (curses.COLOR_BLUE, curses.COLOR_CYAN),  # blue on cyan - c34 UNREADABLE
+                    (curses.COLOR_YELLOW, curses.COLOR_RED),  # yellow on red
                 ]
                 for i, (fg, bg) in enumerate(fg_bg_combos, start=19):
                     if i < curses.COLOR_PAIRS:
@@ -528,9 +538,9 @@ class MonitorDisplay:
             self.curses_mod.color_pair(9),  # green
             self.curses_mod.color_pair(10),  # magenta
             self.curses_mod.color_pair(11),  # yellow
-            self.curses_mod.color_pair(1),  # cyan (header color but ok for SHA)
-            self.curses_mod.color_pair(2),  # yellow
-            self.curses_mod.color_pair(3),  # magenta
+            self.curses_mod.color_pair(6),  # red
+            self.curses_mod.color_pair(15),  # white
+            self.curses_mod.color_pair(4),  # green (dim - different than pair 9)
         ]
         role_palette = [
             self.curses_mod.color_pair(12),  # red

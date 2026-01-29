@@ -23,22 +23,32 @@ COLORS = {
 
 # High-contrast fg/bg combinations
 FG_BG_COMBOS = [
-    ("\033[33;44m", "yellow/blue"),  # yellow on blue
+    # ("\033[33;44m", "yellow/blue"),  # yellow on blue - c16 UNREADABLE
     ("\033[30;46m", "black/cyan"),  # black on cyan
     ("\033[30;42m", "black/green"),  # black on green
     ("\033[33;45m", "yellow/magenta"),  # yellow on magenta
     ("\033[30;43m", "black/yellow"),  # black on yellow
     ("\033[37;41m", "white/red"),  # white on red
-    ("\033[37;44m", "white/blue"),  # white on blue
+    # ("\033[37;44m", "white/blue"),  # white on blue - c22 UNREADABLE
     ("\033[36;40m", "cyan/black"),  # cyan on black
     ("\033[32;40m", "green/black"),  # green on black
     ("\033[33;40m", "yellow/black"),  # yellow on black
     ("\033[37;45m", "white/magenta"),  # white on magenta
     ("\033[30;47m", "black/white"),  # black on white
-    ("\033[34;43m", "blue/yellow"),  # blue on yellow
+    # ("\033[34;43m", "blue/yellow"),  # blue on yellow - c28 UNREADABLE
     ("\033[31;46m", "red/cyan"),  # red on cyan
     ("\033[35;43m", "magenta/yellow"),  # magenta on yellow
-    ("\033[34;47m", "blue/white"),  # blue on white
+    # ("\033[34;47m", "blue/white"),  # blue on white - c31 UNREADABLE
+    # New combos with red/white backgrounds
+    ("\033[30;41m", "black/red"),  # black on red
+    ("\033[32;41m", "green/red"),  # green on red
+    ("\033[36;41m", "cyan/red"),  # cyan on red
+    ("\033[35;47m", "magenta/white"),  # magenta on white
+    ("\033[31;47m", "red/white"),  # red on white
+    # ("\033[32;47m", "green/white"),  # green on white - c33 UNREADABLE
+    ("\033[34;41m", "blue/red"),  # blue on red
+    # ("\033[34;46m", "blue/cyan"),  # blue on cyan - c34 UNREADABLE
+    ("\033[33;41m", "yellow/red"),  # yellow on red
 ]
 
 
@@ -54,7 +64,7 @@ def build_color_map(
     Returns list of (label, ansi_code) tuples.
     """
     # Build basic palette (matches monitor display.py order)
-    basic_colors = ["blue", "cyan", "green", "magenta", "yellow", "cyan", "yellow", "magenta"]
+    basic_colors = ["blue", "cyan", "green", "magenta", "yellow", "red", "white", "green"]
     palette_size = len(basic_colors)
     fg_bg_count = len(FG_BG_COMBOS)
     total_capacity = palette_size * 2 + fg_bg_count
