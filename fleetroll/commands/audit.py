@@ -24,6 +24,7 @@ from ..constants import (
     AUDIT_DIR_NAME,
     AUDIT_MAX_RETRIES,
     AUDIT_RETRY_DELAY_S,
+    HOST_OBSERVATIONS_FILE_NAME,
     OVERRIDES_DIR_NAME,
     VAULT_YAMLS_DIR_NAME,
 )
@@ -526,7 +527,8 @@ def cmd_host_audit(args: HostAuditArgs) -> None:
     elif is_batch:
         # Batch mode: show summary table
         print(format_summary_table(summary, verbose=args.verbose))
-        print(f"\nAudit log: {audit_log}")
+        observations_log = audit_log.parent / HOST_OBSERVATIONS_FILE_NAME
+        print(f"\nObservations: {observations_log}")
 
         # Check if any results have stored override files
         has_stored_files = any(
@@ -538,4 +540,5 @@ def cmd_host_audit(args: HostAuditArgs) -> None:
     else:
         # Single host mode: show detailed output
         format_single_host_output(summary["results"][0], args)
-        print(f"\nAudit log: {audit_log}")
+        observations_log = audit_log.parent / HOST_OBSERVATIONS_FILE_NAME
+        print(f"\nObservations: {observations_log}")
