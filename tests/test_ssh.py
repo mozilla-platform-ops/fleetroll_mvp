@@ -265,6 +265,36 @@ class TestRemoteSetScript:
         )
         assert "tee" in script
 
+    def test_includes_exit_trap_cleanup(self):
+        """Script includes EXIT trap for temp file cleanup."""
+        script = remote_set_script(
+            "/etc/test",
+            mode="0644",
+            owner="root",
+            group="root",
+            backup=False,
+            backup_suffix="suffix",
+        )
+        assert "trap" in script
+        assert "EXIT" in script
+        assert "rm -f" in script
+
+    def test_trap_before_mktemp(self):
+        """EXIT trap is set before mktemp is called."""
+        script = remote_set_script(
+            "/etc/test",
+            mode="0644",
+            owner="root",
+            group="root",
+            backup=False,
+            backup_suffix="suffix",
+        )
+        trap_pos = script.find("trap")
+        mktemp_pos = script.find("mktemp")
+        assert trap_pos > 0, "trap not found"
+        assert mktemp_pos > 0, "mktemp not found"
+        assert trap_pos < mktemp_pos, "trap must be set before mktemp"
+
 
 class TestRemoteUnsetScript:
     """Tests for remote_unset_script function."""
@@ -326,3 +356,13 @@ class TestRemoteUnsetScript:
         )
         # Script should test for file existence
         assert "test -e" in script
+
+    def test_includes_exit_trap_defensive(self):
+        """Script includes EXIT trap for defensive cleanup."""
+        script = remote_unset_script(
+            "/etc/test",
+            backup=True,
+            backup_suffix="20240101T000000Z",
+        )
+        assert "trap" in script
+        assert "EXIT" in script

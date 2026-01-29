@@ -270,6 +270,7 @@ def remote_set_script(
     # 5) mv into place
     script = f"""
 set -eu
+trap 'sudo -n rm -f "$tmp" 2>/dev/null' EXIT
 op={op}
 dir=$(dirname "$op")
 tmp=$(sudo -n mktemp "$dir/.ronin_settings.tmp.XXXXXX")
@@ -301,6 +302,7 @@ def remote_unset_script(override_path: str, *, backup: bool, backup_suffix: str)
     suf = shlex.quote(backup_suffix)
     script = f"""
 set -eu
+trap 'sudo -n rm -f "$tmp" 2>/dev/null' EXIT
 op={op}
 if sudo -n test -e "$op" 2>/dev/null; then
   if {b}; then
