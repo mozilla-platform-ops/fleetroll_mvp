@@ -23,6 +23,7 @@ audit = ["pip-audit"]
 
 [project.scripts]
 fleetroll = "fleetroll:main"
+verify-imports = "tools.verify_imports:main"
 
 [build-system]
 requires = ["hatchling"]
