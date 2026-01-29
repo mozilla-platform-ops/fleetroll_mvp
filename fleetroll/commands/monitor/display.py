@@ -135,7 +135,7 @@ class MonitorDisplay:
                     # (curses.COLOR_BLUE, curses.COLOR_CYAN),  # blue on cyan - c34 UNREADABLE
                     (curses.COLOR_YELLOW, curses.COLOR_RED),  # yellow on red
                 ]
-                for i, (fg, bg) in enumerate(fg_bg_combos, start=19):
+                for i, (fg, bg) in enumerate(fg_bg_combos, start=27):
                     if i < curses.COLOR_PAIRS:
                         curses.init_pair(i, fg, bg)
                 self.color_enabled = True
@@ -239,10 +239,11 @@ class MonitorDisplay:
     ) -> dict[str, int]:
         """Build a color map for categorical values.
 
-        Uses three tiers:
-        1. Basic 8 colors normal (pairs 1-11 from palette)
-        2. Basic 8 colors reversed
-        3. High-contrast fg/bg combinations (pairs 19-34)
+        Uses two tiers (reversed colors removed to avoid terminal-dependent conflicts):
+        1. Basic colors from palette (14 colors)
+        2. High-contrast fg/bg combinations (19 pairs starting at 27)
+
+        Total capacity: 33 unique colors (sufficient for up to 33 unique values).
 
         Adjacent seeds (0, 1, 2) are automatically spread out to maximize
         visual distinction between columns.
@@ -262,12 +263,13 @@ class MonitorDisplay:
         mapping: dict[str, int] = {}
 
         palette_size = len(palette)
-        # High-contrast fg/bg combo pairs (initialized in _init_curses as pairs 19+)
-        fg_bg_pairs = list(range(19, 35))  # 16 fg/bg combinations
-        total_capacity = palette_size * 2 + len(fg_bg_pairs)
+        # High-contrast fg/bg combo pairs (initialized in _init_curses as pairs 27+)
+        # There are 19 combinations defined (black/cyan through yellow/red)
+        fg_bg_pairs = list(range(27, 46))  # 19 fg/bg combinations starting at 27
+        total_capacity = palette_size + len(fg_bg_pairs)  # No more Tier 2 (reversed)
 
         # Spread adjacent seeds for maximum visual distinction
-        # Using 11 (prime) ensures good distribution across 32 total colors
+        # Using 11 (prime) ensures good distribution across total capacity
         spread_factor = 11
         effective_seed = (seed * spread_factor) % total_capacity
 
@@ -278,13 +280,9 @@ class MonitorDisplay:
                 # Tier 1: Normal basic colors
                 color = palette[adjusted_idx]
                 attr = color | base_attr
-            elif adjusted_idx < palette_size * 2:
-                # Tier 2: Reversed basic colors
-                color = palette[adjusted_idx - palette_size]
-                attr = color | self.curses_mod.A_REVERSE | base_attr
             else:
-                # Tier 3: High-contrast fg/bg combinations
-                fg_bg_idx = adjusted_idx - (palette_size * 2)
+                # Tier 2: High-contrast fg/bg combinations
+                fg_bg_idx = adjusted_idx - palette_size
                 if fg_bg_idx < len(fg_bg_pairs):
                     attr = self.curses_mod.color_pair(fg_bg_pairs[fg_bg_idx]) | base_attr
                 else:
@@ -548,8 +546,9 @@ class MonitorDisplay:
             if role and role not in ("-", "?", "missing"):
                 role_values.add(role)
 
-        # Use 15-color palette: 7 standard + 8 extended (if available)
-        # This gives 15 normal + 15 reverse = 30 distinct appearances
+        # Use 14-color palette: 7 standard + 8 extended (if available)
+        # No reversed colors to avoid terminal-dependent conflicts
+        # Total: 14 base + 19 fg/bg = 33 unique colors
         sha_palette = [
             # Standard 7 colors
             self.curses_mod.color_pair(7),  # blue
