@@ -18,6 +18,26 @@ def utc_now_iso() -> str:
     return dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
 
 
+def format_elapsed_time(seconds: float) -> str:
+    """Format elapsed time in human-readable format.
+
+    Args:
+        seconds: Elapsed time in seconds
+
+    Returns:
+        Formatted string like "1m25s", "45s", or "1h05m30s"
+    """
+    total_seconds = int(seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+
+    if hours:
+        return f"{hours}h{minutes:02d}m{secs:02d}s"
+    if minutes:
+        return f"{minutes}m{secs:02d}s"
+    return f"{secs}s"
+
+
 def sha256_hex(data: bytes) -> str:
     """Return SHA256 hex digest of data."""
     return hashlib.sha256(data).hexdigest()

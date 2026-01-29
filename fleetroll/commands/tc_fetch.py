@@ -17,6 +17,7 @@ from ..exceptions import FleetRollError
 from ..taskcluster import fetch_workers, load_tc_credentials
 from ..utils import (
     default_audit_log_path,
+    format_elapsed_time,
     is_host_file,
     parse_host_list,
     utc_now_iso,
@@ -26,26 +27,6 @@ if TYPE_CHECKING:
     from ..cli import Args
 
 logger = logging.getLogger(__name__)
-
-
-def format_elapsed_time(seconds: float) -> str:
-    """Format elapsed time in human-readable format.
-
-    Args:
-        seconds: Elapsed time in seconds
-
-    Returns:
-        Formatted string like "1m25s", "45s", or "1h05m30s"
-    """
-    total_seconds = int(seconds)
-    hours, remainder = divmod(total_seconds, 3600)
-    minutes, secs = divmod(remainder, 60)
-
-    if hours:
-        return f"{hours}h{minutes:02d}m{secs:02d}s"
-    if minutes:
-        return f"{minutes}m{secs:02d}s"
-    return f"{secs}s"
 
 
 def format_tc_fetch_quiet(

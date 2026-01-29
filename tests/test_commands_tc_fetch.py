@@ -7,12 +7,12 @@ from io import StringIO
 from pathlib import Path
 
 from fleetroll.commands.tc_fetch import (
-    format_elapsed_time,
     format_tc_fetch_quiet,
     strip_fqdn,
     tc_workers_file_path,
     write_worker_record,
 )
+from fleetroll.utils import format_elapsed_time
 
 
 class TestFormatElapsedTime:

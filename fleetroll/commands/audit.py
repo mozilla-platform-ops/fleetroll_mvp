@@ -39,6 +39,7 @@ from ..ssh import (
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
+    format_elapsed_time,
     infer_actor,
     is_host_file,
     parse_host_list,
@@ -46,26 +47,6 @@ from ..utils import (
 )
 
 logger = logging.getLogger("fleetroll")
-
-
-def format_elapsed_time(seconds: float) -> str:
-    """Format elapsed time in human-readable format.
-
-    Args:
-        seconds: Elapsed time in seconds
-
-    Returns:
-        Formatted string like "1m25s", "45s", or "1h05m30s"
-    """
-    total_seconds = int(seconds)
-    hours, remainder = divmod(total_seconds, 3600)
-    minutes, secs = divmod(remainder, 60)
-
-    if hours:
-        return f"{hours}h{minutes:02d}m{secs:02d}s"
-    if minutes:
-        return f"{minutes}m{secs:02d}s"
-    return f"{secs}s"
 
 
 def format_single_host_quiet(result: dict[str, Any], elapsed_seconds: float) -> str:
