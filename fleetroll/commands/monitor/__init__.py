@@ -5,13 +5,7 @@ from __future__ import annotations
 # Temporary compatibility shim - re-export everything else from _monitor_impl.py
 from .._monitor_impl import (
     MonitorDisplay,
-    clip_cell,
     cmd_host_monitor,
-    compute_columns_and_widths,
-    format_monitor_row,
-    render_cell_text,
-    render_monitor_lines,
-    render_row_cells,
 )
 
 # Re-export from data module
@@ -30,6 +24,16 @@ from .data import (
     resolve_last_ok_ts,
     strip_fqdn,
     tail_audit_log,
+)
+
+# Re-export from formatting module
+from .formatting import (
+    clip_cell,
+    compute_columns_and_widths,
+    format_monitor_row,
+    render_cell_text,
+    render_monitor_lines,
+    render_row_cells,
 )
 
 __all__ = [
