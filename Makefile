@@ -20,7 +20,7 @@ test-watch:
 	uv run ptw .
 
 test-watch-coverage:
-	uv run ptw -- --cov=fleetroll --cov-report=html --cov-report=term-missing
+	uv run ptw . -- --cov=fleetroll --cov-report=html --cov-report=term-missing
 
 test-coverage:
 	uv run pytest --cov=fleetroll --cov-report=html --cov-report=term-missing
