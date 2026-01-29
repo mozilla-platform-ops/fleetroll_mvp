@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-# Temporary compatibility shim - re-export everything else from _monitor_impl.py
-from .._monitor_impl import (
-    MonitorDisplay,
-    cmd_host_monitor,
-)
+# Temporary compatibility shim - re-export entry point from _monitor_impl.py
+from .._monitor_impl import cmd_host_monitor
 
 # Re-export from data module
 from .data import (
@@ -25,6 +22,9 @@ from .data import (
     strip_fqdn,
     tail_audit_log,
 )
+
+# Re-export from display module
+from .display import MonitorDisplay
 
 # Re-export from formatting module
 from .formatting import (
