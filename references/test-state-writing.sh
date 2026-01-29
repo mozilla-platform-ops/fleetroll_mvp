@@ -38,16 +38,27 @@ fi
 echo -e "${GREEN}✓${NC} Loaded write_puppet_state function"
 echo ""
 
-# Detect OS
+# Detect OS and set paths
+# Use temp paths for testing unless running with sudo
 if [[ "$OSTYPE" == "darwin"* ]]; then
     OS="macos"
-    OVERRIDE_PATH="/opt/puppet_environments/ronin_settings"
-    VAULT_PATH="/var/root/vault.yaml"
+    if [ "$EUID" -eq 0 ]; then
+        OVERRIDE_PATH="/opt/puppet_environments/ronin_settings"
+        VAULT_PATH="/var/root/vault.yaml"
+    else
+        OVERRIDE_PATH="/tmp/test_puppet_repo/ronin_settings"
+        VAULT_PATH="/tmp/test_puppet_repo/vault.yaml"
+    fi
     echo "Detected OS: macOS"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     OS="linux"
-    OVERRIDE_PATH="/etc/puppet/ronin_settings"
-    VAULT_PATH="/root/vault.yaml"
+    if [ "$EUID" -eq 0 ]; then
+        OVERRIDE_PATH="/etc/puppet/ronin_settings"
+        VAULT_PATH="/root/vault.yaml"
+    else
+        OVERRIDE_PATH="/tmp/test_puppet_repo/ronin_settings"
+        VAULT_PATH="/tmp/test_puppet_repo/vault.yaml"
+    fi
     echo "Detected OS: Linux"
 else
     echo -e "${RED}FAIL${NC}: Unsupported OS: $OSTYPE"
@@ -78,10 +89,58 @@ if [ -z "$WORKING_DIR" ]; then
     mkdir -p "$WORKING_DIR"
     # Initialize minimal git repo for testing
     if [ ! -d "$WORKING_DIR/.git" ]; then
-        (cd "$WORKING_DIR" && git init && git remote add origin https://github.com/test/puppet.git)
+        echo "Setting up test git repository..."
+        (
+            cd "$WORKING_DIR" || exit 1
+            git init
+            git config user.email "test@example.com"
+            git config user.name "Test User"
+            echo "# Test Puppet Repository" > README.md
+            git add README.md
+            git commit -m "Initial commit"
+            git remote add origin https://github.com/test/puppet.git
+            git checkout -b production
+        )
+        echo -e "${GREEN}✓${NC} Created test git repository with commits"
     fi
 fi
 echo -e "${GREEN}✓${NC} Working directory: $WORKING_DIR"
+
+# Create test override and vault files if they don't exist
+if [ ! -f "$OVERRIDE_PATH" ]; then
+    echo "Creating test override file at $OVERRIDE_PATH..."
+    OVERRIDE_DIR=$(dirname "$OVERRIDE_PATH")
+    if mkdir -p "$OVERRIDE_DIR" 2>/dev/null; then
+        cat > "$OVERRIDE_PATH" <<'OVERRIDE_EOF'
+# Test override settings
+worker_type: gecko-t-linux
+deployment_stage: testing
+region: us-west-2
+OVERRIDE_EOF
+        echo -e "${GREEN}✓${NC} Created test override file"
+    else
+        echo -e "${YELLOW}WARNING${NC}: Cannot create override file (insufficient permissions)"
+    fi
+else
+    echo -e "${GREEN}✓${NC} Override file exists: $OVERRIDE_PATH"
+fi
+
+if [ ! -f "$VAULT_PATH" ]; then
+    echo "Creating test vault file at $VAULT_PATH..."
+    VAULT_DIR=$(dirname "$VAULT_PATH")
+    if mkdir -p "$VAULT_DIR" 2>/dev/null; then
+        cat > "$VAULT_PATH" <<'VAULT_EOF'
+# Test vault secrets
+api_key: test_key_12345
+database_password: test_password_67890
+VAULT_EOF
+        echo -e "${GREEN}✓${NC} Created test vault file"
+    else
+        echo -e "${YELLOW}WARNING${NC}: Cannot create vault file (insufficient permissions)"
+    fi
+else
+    echo -e "${GREEN}✓${NC} Vault file exists: $VAULT_PATH"
+fi
 
 # Check for puppet role
 ROLE="test-role"
