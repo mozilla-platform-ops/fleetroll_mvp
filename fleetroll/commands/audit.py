@@ -48,6 +48,73 @@ from ..utils import (
 logger = logging.getLogger("fleetroll")
 
 
+def format_elapsed_time(seconds: float) -> str:
+    """Format elapsed time in human-readable format.
+
+    Args:
+        seconds: Elapsed time in seconds
+
+    Returns:
+        Formatted string like "1m25s", "45s", or "1h05m30s"
+    """
+    total_seconds = int(seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+
+    if hours:
+        return f"{hours}h{minutes:02d}m{secs:02d}s"
+    if minutes:
+        return f"{minutes}m{secs:02d}s"
+    return f"{secs}s"
+
+
+def format_single_host_quiet(result: dict[str, Any], elapsed_seconds: float) -> str:
+    """Format single host audit result in quiet mode.
+
+    Args:
+        result: Audit result dictionary
+        elapsed_seconds: Elapsed time in seconds
+
+    Returns:
+        Single-line formatted output
+    """
+    host = result["host"]
+    elapsed = format_elapsed_time(elapsed_seconds)
+
+    if result.get("ok"):
+        return f"✓ {host} ({elapsed})"
+    error = result.get("error", result.get("stderr", "unknown"))
+    return f"✗ {host}: {error} ({elapsed})"
+
+
+def format_batch_quiet(summary: dict[str, Any], elapsed_seconds: float) -> str:
+    """Format batch audit results in quiet mode.
+
+    Args:
+        summary: Summary dictionary with results, total, successful, failed
+        elapsed_seconds: Elapsed time in seconds
+
+    Returns:
+        Single-line formatted output
+    """
+    total = summary["total"]
+    successful = summary["successful"]
+    failed = summary["failed"]
+    elapsed = format_elapsed_time(elapsed_seconds)
+
+    if failed == 0:
+        symbol = "✓"
+        failure_text = ""
+    elif failed == total:
+        symbol = "✗"
+        failure_text = f" ({failed} failed)"
+    else:
+        symbol = "⚠"
+        failure_text = f" ({failed} failed)"
+
+    return f"{symbol} {successful}/{total} hosts successful{failure_text} ({elapsed})"
+
+
 def format_progress_label(remaining: int, *, elapsed_s: float) -> str:
     """Format the progress bar label with remaining hosts and elapsed time."""
     elapsed_total = int(elapsed_s)
@@ -281,7 +348,7 @@ def cmd_host_audit_batch(hosts: list[str], args: Args) -> dict[str, Any]:
     retry_budget = {"deadline": time.time() + args.batch_timeout}
 
     # Determine if we should show progress bar
-    show_progress = not args.json
+    show_progress = not args.json and not getattr(args, "quiet", False)
     completed = 0
     progress_start = time.monotonic()
     progress_label = format_progress_label(len(hosts), elapsed_s=0)
@@ -436,7 +503,10 @@ def format_single_host_output(result: dict[str, Any], args: Args) -> None:
 
 def cmd_host_audit(args: Args) -> None:
     """Audit command - handles both single host and batch mode."""
+    start_time = time.time()
     ensure_host_or_file(args.host)
+    quiet = getattr(args, "quiet", False)
+
     # Determine hosts to audit
     if is_host_file(args.host):
         host_file = Path(args.host)
@@ -447,13 +517,14 @@ def cmd_host_audit(args: Args) -> None:
         is_batch = False
 
     # Show progress message for batch mode
-    if is_batch and not args.json:
+    if is_batch and not args.json and not quiet:
         print(f"Auditing {len(hosts)} hosts from {host_file} with {args.workers} workers...")
 
     # Always use batch logic (works for single host too, provides retry)
     summary = cmd_host_audit_batch(hosts, args)
 
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
+    elapsed_seconds = time.time() - start_time
 
     # Output formatting depends on single vs batch mode
     if args.json:
@@ -465,6 +536,16 @@ def cmd_host_audit(args: Args) -> None:
         else:
             # For single host JSON, return just the result (not wrapped in summary)
             print(json.dumps(summary["results"][0], indent=2, sort_keys=True))
+            if not summary["results"][0].get("ok", False):
+                sys.exit(1)
+    elif quiet:
+        # Quiet mode: single-line output
+        if is_batch:
+            print(format_batch_quiet(summary, elapsed_seconds))
+            if summary["failed"] > 0:
+                sys.exit(1)
+        else:
+            print(format_single_host_quiet(summary["results"][0], elapsed_seconds))
             if not summary["results"][0].get("ok", False):
                 sys.exit(1)
     elif is_batch:

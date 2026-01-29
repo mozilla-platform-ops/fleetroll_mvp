@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -25,6 +26,58 @@ if TYPE_CHECKING:
     from ..cli import Args
 
 logger = logging.getLogger(__name__)
+
+
+def format_elapsed_time(seconds: float) -> str:
+    """Format elapsed time in human-readable format.
+
+    Args:
+        seconds: Elapsed time in seconds
+
+    Returns:
+        Formatted string like "1m25s", "45s", or "1h05m30s"
+    """
+    total_seconds = int(seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+
+    if hours:
+        return f"{hours}h{minutes:02d}m{secs:02d}s"
+    if minutes:
+        return f"{minutes}m{secs:02d}s"
+    return f"{secs}s"
+
+
+def format_tc_fetch_quiet(
+    *,
+    worker_count: int,
+    scan_count: int,
+    warnings: list[str],
+    elapsed_seconds: float,
+) -> str:
+    """Format tc-fetch output in quiet mode.
+
+    Args:
+        worker_count: Number of worker records written
+        scan_count: Number of scan records written
+        warnings: List of warning messages
+        elapsed_seconds: Elapsed time in seconds
+
+    Returns:
+        Single-line formatted output
+    """
+    elapsed = format_elapsed_time(elapsed_seconds)
+
+    if warnings:
+        symbol = "⚠"
+        warning_text = " (" + ", ".join(warnings) + ")"
+    else:
+        symbol = "✓"
+        warning_text = ""
+
+    return (
+        f"{symbol} Wrote {worker_count} worker(s), {scan_count} scan(s){warning_text} ({elapsed})"
+    )
 
 
 def get_host_roles_bulk(hosts: set[str], audit_log_path: Path) -> dict[str, str | None]:
@@ -137,8 +190,15 @@ def cmd_tc_fetch(args: Args) -> None:
         args: Command arguments containing:
             - host: Single host or file with host list
             - verbose: Verbosity level (0=none, 1=verbose, 2+=very verbose)
+            - quiet: Single-line output mode
     """
+    start_time = time.time()
     verbose = getattr(args, "verbose", 0)
+    quiet = getattr(args, "quiet", False)
+
+    # Track warnings for quiet mode
+    hosts_without_roles = 0
+    api_errors = 0
 
     # Load credentials
     try:
@@ -154,11 +214,12 @@ def cmd_tc_fetch(args: Args) -> None:
     else:
         hosts = [args.host]
 
-    click.echo(f"Fetching TaskCluster data for {len(hosts)} host(s)...")
+    if not quiet:
+        click.echo(f"Fetching TaskCluster data for {len(hosts)} host(s)...")
 
     # Get audit log path
     audit_log_path = default_audit_log_path()
-    if verbose >= 1:
+    if verbose >= 1 and not quiet:
         click.echo(f"Reading audit log from: {audit_log_path}")
 
     # Map hosts to roles (single pass through audit log)
@@ -168,10 +229,12 @@ def cmd_tc_fetch(args: Args) -> None:
     for host, role in host_to_role.items():
         if role:
             role_to_hosts[role].append(host)
-            if verbose >= 1:
+            if verbose >= 1 and not quiet:
                 click.echo(f"  {host} -> role: {role}")
-        elif verbose >= 1:
-            click.echo(f"  {host} -> role: NOT FOUND")
+        else:
+            hosts_without_roles += 1
+            if verbose >= 1 and not quiet:
+                click.echo(f"  {host} -> role: NOT FOUND")
 
     # Map roles to workerTypes
     role_to_worker_type: dict[str, tuple[str, str]] = {}
@@ -179,10 +242,11 @@ def cmd_tc_fetch(args: Args) -> None:
 
     for role, role_hosts in role_to_hosts.items():
         if role not in ROLE_TO_TASKCLUSTER:
-            click.echo(
-                f"WARNING: Role '{role}' not found in lookup table, skipping {len(role_hosts)} host(s)",
-                err=True,
-            )
+            if not quiet:
+                click.echo(
+                    f"WARNING: Role '{role}' not found in lookup table, skipping {len(role_hosts)} host(s)",
+                    err=True,
+                )
             continue
 
         provisioner, worker_type = ROLE_TO_TASKCLUSTER[role]
@@ -191,29 +255,32 @@ def cmd_tc_fetch(args: Args) -> None:
         worker_type_to_hosts[worker_type_key].extend(role_hosts)
 
     if not worker_type_to_hosts:
-        click.echo("No hosts with mappable roles found. Nothing to fetch.")
+        if not quiet:
+            click.echo("No hosts with mappable roles found. Nothing to fetch.")
         return
 
     # Show summary of what we're fetching
-    role_summary = ", ".join(
-        f"{role} ({len(hosts)} host(s))"
-        for role, hosts in role_to_hosts.items()
-        if role in role_to_worker_type
-    )
-    click.echo(f"Found roles: {role_summary}")
+    if not quiet:
+        role_summary = ", ".join(
+            f"{role} ({len(hosts)} host(s))"
+            for role, hosts in role_to_hosts.items()
+            if role in role_to_worker_type
+        )
+        click.echo(f"Found roles: {role_summary}")
 
     # Fetch data for each workerType
     ts = utc_now_iso()
     worker_type_to_workers: dict[tuple[str, str], dict[str, Any]] = {}
 
     for (provisioner, worker_type), wt_hosts in worker_type_to_hosts.items():
-        click.echo(f"Querying workerType {provisioner}/{worker_type}...", nl=False)
+        if not quiet:
+            click.echo(f"Querying workerType {provisioner}/{worker_type}...", nl=False)
         try:
             workers_list = fetch_workers(
-                provisioner, worker_type, credentials, verbose=(verbose >= 2)
+                provisioner, worker_type, credentials, verbose=(verbose >= 2 and not quiet)
             )
 
-            if verbose >= 2:
+            if verbose >= 2 and not quiet:
                 click.echo(f"\n  Raw API response: {len(workers_list)} worker(s)")
                 if workers_list and len(workers_list) <= 3:
                     # Show first few workers in full
@@ -232,10 +299,13 @@ def cmd_tc_fetch(args: Args) -> None:
                     workers_map[worker_id] = worker
 
             worker_type_to_workers[(provisioner, worker_type)] = workers_map
-            click.echo(f" {len(workers_map)} worker(s) found")
+            if not quiet:
+                click.echo(f" {len(workers_map)} worker(s) found")
 
         except FleetRollError as e:
-            click.echo(f" FAILED: {e}", err=True)
+            api_errors += 1
+            if not quiet:
+                click.echo(f" FAILED: {e}", err=True)
             # Store empty result so we still write scan record
             worker_type_to_workers[(provisioner, worker_type)] = {}
 
@@ -251,7 +321,7 @@ def cmd_tc_fetch(args: Args) -> None:
         for host in hosts:
             role = host_to_role.get(host)
             if not role or role not in role_to_worker_type:
-                if verbose >= 1:
+                if verbose >= 1 and not quiet:
                     click.echo(f"  Skipping {host}: no role or role not in worker type mapping")
                 continue
 
@@ -263,7 +333,7 @@ def cmd_tc_fetch(args: Args) -> None:
             short_host = strip_fqdn(host)
             worker_data = workers_map.get(short_host)
 
-            if verbose >= 1:
+            if verbose >= 1 and not quiet:
                 click.echo(f"  Matching {host} (short: {short_host})...")
                 if short_host in workers_map:
                     click.echo(f"    Found worker data for {short_host}")
@@ -306,7 +376,7 @@ def cmd_tc_fetch(args: Args) -> None:
                     quarantine_until=quarantine_until,
                 )
                 worker_records_written += 1
-                if verbose >= 1:
+                if verbose >= 1 and not quiet:
                     click.echo(f"    Wrote record: state={state}, quarantine={quarantine_until}")
 
         # Write scan records
@@ -322,6 +392,25 @@ def cmd_tc_fetch(args: Args) -> None:
             )
             scan_records_written += 1
 
-    click.echo(
-        f"Wrote {worker_records_written} worker record(s) and {scan_records_written} scan record(s) to {output_path}"
-    )
+    # Build warnings list for quiet mode
+    elapsed_seconds = time.time() - start_time
+    if quiet:
+        warning_list = []
+        if hosts_without_roles > 0:
+            warning_list.append(f"{hosts_without_roles} hosts without roles")
+        if api_errors > 0:
+            warning_list.append(f"{api_errors} API errors" if api_errors > 1 else "1 API error")
+
+        output = format_tc_fetch_quiet(
+            worker_count=worker_records_written,
+            scan_count=scan_records_written,
+            warnings=warning_list,
+            elapsed_seconds=elapsed_seconds,
+        )
+        click.echo(output)
+    else:
+        msg = (
+            f"Wrote {worker_records_written} worker record(s) and "
+            f"{scan_records_written} scan record(s) to {output_path}"
+        )
+        click.echo(msg)

@@ -146,6 +146,12 @@ def cli(ctx: click.Context, debug: bool):
     is_flag=True,
     help="Show detailed per-host results in batch mode.",
 )
+@click.option(
+    "--quiet",
+    "-q",
+    is_flag=True,
+    help="Single-line output.",
+)
 def host_audit(
     host: str,
     ssh_option: tuple[str, ...],
@@ -160,12 +166,16 @@ def host_audit(
     workers: int,
     batch_timeout: int,
     verbose: bool,
+    quiet: bool,
 ):
     """Audit a host (role + override presence + optionally contents).
 
     HOST_OR_FILE can be a hostname, user@hostname, or a file containing hosts
     (one per line for batch mode).
     """
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+
     args = Args(
         host=host,
         ssh_option=list(ssh_option) if ssh_option else None,
@@ -180,6 +190,7 @@ def host_audit(
         workers=workers,
         batch_timeout=batch_timeout,
         verbose=verbose,
+        quiet=quiet,
     )
     cmd_host_audit(args)
 
@@ -585,9 +596,18 @@ def host_unset_override(
     count=True,
     help="Show verbose output (use -vv for very verbose, includes raw API responses)",
 )
-def tc_fetch(host: str, verbose: int):
+@click.option(
+    "--quiet",
+    "-q",
+    is_flag=True,
+    help="Single-line output.",
+)
+def tc_fetch(host: str, verbose: int, quiet: bool):
     """Fetch TaskCluster worker data for hosts."""
-    args = Args(host=host, verbose=verbose)
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+
+    args = Args(host=host, verbose=verbose, quiet=quiet)
     cmd_tc_fetch(args)
 
 
