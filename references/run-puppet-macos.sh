@@ -21,9 +21,6 @@ if [ -f "${SCRIPT_DIR}/write_puppet_state.sh" ]; then
 else
     echo "WARNING: Could not load state writing function from ${SCRIPT_DIR}/write_puppet_state.sh" >&2
 fi
-
-# ==============================================================================
-# Original run-puppet.mac.sh script follows
 # ==============================================================================
 
 ### ---------------------------------------------

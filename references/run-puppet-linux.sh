@@ -11,7 +11,6 @@
 # The metadata includes git SHA, success status, duration, and file checksums.
 #
 # See: docs/puppet-state-tracking.md for details
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "${SCRIPT_DIR}/write_puppet_state.sh" ]; then
     # shellcheck disable=SC1091
@@ -19,9 +18,6 @@ if [ -f "${SCRIPT_DIR}/write_puppet_state.sh" ]; then
 else
     echo "WARNING: Could not load state writing function from ${SCRIPT_DIR}/write_puppet_state.sh" >&2
 fi
-
-# ==============================================================================
-# Original run-puppet.sh script follows
 # ==============================================================================
 
 function fail {
