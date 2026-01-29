@@ -105,7 +105,9 @@ br
 br ready              # Show issues ready to work (no blockers)
 br list --status=open # All open issues
 br show <id>          # Full issue details with dependencies
-# valid types:    task, bug, feature, epic, chore
+# create options
+# --type <TYPE>  # valid types:  task, bug, feature, epic, chore
+# --parent <PARENT>  # parent issue (epics usually)
 br create --type task --priority 2 --description "Description text" "Issue Title"
 br update <id> --status=in_progress
 br update <id> --description="..."  # Update description
