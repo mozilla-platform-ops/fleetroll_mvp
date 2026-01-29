@@ -13,6 +13,7 @@ from fleetroll.utils import (
     infer_actor,
     is_host_file,
     looks_like_host,
+    natural_sort_key,
     parse_host_list,
     parse_kv_lines,
     sha256_hex,
@@ -43,6 +44,60 @@ class TestSha256Hex:
         """Should handle arbitrary binary data."""
         result = sha256_hex(bytes([0x00, 0xFF, 0x7F]))
         assert len(result) == 64
+
+
+class TestNaturalSortKey:
+    """Tests for natural_sort_key function."""
+
+    def test_simple_numbers(self):
+        """Should sort numbers naturally."""
+        hosts = ["host10", "host2", "host1"]
+        result = sorted(hosts, key=natural_sort_key)
+        assert result == ["host1", "host2", "host10"]
+
+    def test_mixed_alpha_numeric(self):
+        """Should handle mixed alphanumeric strings."""
+        hosts = ["t-linux-10", "t-linux-2", "t-linux-1"]
+        result = sorted(hosts, key=natural_sort_key)
+        assert result == ["t-linux-1", "t-linux-2", "t-linux-10"]
+
+    def test_multiple_numbers(self):
+        """Should handle multiple numbers in string."""
+        hosts = ["host1-10", "host1-2", "host2-1"]
+        result = sorted(hosts, key=natural_sort_key)
+        assert result == ["host1-2", "host1-10", "host2-1"]
+
+    def test_pure_alpha(self):
+        """Should handle pure alphabetic strings."""
+        hosts = ["charlie", "alpha", "bravo"]
+        result = sorted(hosts, key=natural_sort_key)
+        assert result == ["alpha", "bravo", "charlie"]
+
+    def test_case_insensitive(self):
+        """Should sort case-insensitively."""
+        hosts = ["Host2", "host1", "HOST10"]
+        result = sorted(hosts, key=natural_sort_key)
+        assert result == ["host1", "Host2", "HOST10"]
+
+    def test_leading_zeros(self):
+        """Should handle leading zeros in numbers."""
+        hosts = ["host001", "host10", "host2"]
+        result = sorted(hosts, key=natural_sort_key)
+        assert result == ["host001", "host2", "host10"]
+
+    def test_fqdn_hostnames(self):
+        """Should sort FQDN hostnames naturally."""
+        hosts = [
+            "host10.example.com",
+            "host2.example.com",
+            "host1.example.com",
+        ]
+        result = sorted(hosts, key=natural_sort_key)
+        assert result == [
+            "host1.example.com",
+            "host2.example.com",
+            "host10.example.com",
+        ]
 
 
 class TestParseKvLines:

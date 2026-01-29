@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ...constants import HOST_OBSERVATIONS_FILE_NAME, TC_WORKERS_FILE_NAME
-from ...utils import get_log_file_size
+from ...utils import get_log_file_size, natural_sort_key
 from .data import (
     age_seconds,
     build_row_values,
@@ -879,7 +879,7 @@ class MonitorDisplay:
 
         # Compute screen metrics
         metrics = self._compute_screen_metrics()
-        sorted_hosts = sorted(self.hosts)
+        sorted_hosts = sorted(self.hosts, key=natural_sort_key)
 
         # Compute column configuration
         all_columns, labels, widths = self._compute_column_widths(sorted_hosts)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...utils import natural_sort_key
 from .data import build_row_values, strip_fqdn
 
 
@@ -182,8 +183,8 @@ def render_monitor_lines(
     limit: int | None = None,
     fqdn_suffix: str | None = None,
 ) -> tuple[str, list[str]]:
-    """Render monitor header + lines in sorted host order."""
-    sorted_hosts = sorted(hosts)
+    """Render monitor header + lines in natural sorted host order."""
+    sorted_hosts = sorted(hosts, key=natural_sort_key)
     tc_data = tc_data or {}
     columns, widths = compute_columns_and_widths(
         hosts=sorted_hosts,

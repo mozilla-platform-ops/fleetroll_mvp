@@ -13,6 +13,25 @@ from .constants import AUDIT_DIR_NAME, AUDIT_FILE_NAME, HOST_OBSERVATIONS_FILE_N
 from .exceptions import FleetRollError, UserError
 
 
+def natural_sort_key(text: str) -> list[int | str]:
+    """Return a key for natural (alphanumeric) sorting.
+
+    Splits strings into text and numeric parts for natural ordering.
+    Example: ['host1', 'host2', 'host10'] sorts as 1, 2, 10 (not 1, 10, 2).
+
+    Args:
+        text: String to generate sort key for
+
+    Returns:
+        List of alternating strings and integers for sorting
+    """
+
+    def convert(part: str) -> int | str:
+        return int(part) if part.isdigit() else part.lower()
+
+    return [convert(c) for c in re.split(r"(\d+)", text)]
+
+
 def utc_now_iso() -> str:
     """Return current UTC time in ISO format without microseconds."""
     return dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
