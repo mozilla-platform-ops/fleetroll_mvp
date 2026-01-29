@@ -110,6 +110,138 @@ def format_progress_label(remaining: int, *, elapsed_s: float) -> str:
     return f"Auditing hosts (remaining: {remaining}, elapsed: {elapsed})"
 
 
+def aggregate_audit_summary(results: list[dict[str, Any]], hosts: list[str]) -> dict[str, Any]:
+    """Aggregate audit results into a summary with statistics and unique overrides.
+
+    Args:
+        results: List of audit result dictionaries
+        hosts: Original list of hosts that were audited
+
+    Returns:
+        Summary dictionary with results, counts, and unique overrides
+    """
+    # Collect unique overrides by SHA256
+    unique_overrides: dict[str, tuple[str, list[str]]] = {}
+    for r in results:
+        if r.get("ok") and r.get("observed", {}).get("override_present"):
+            sha = r["observed"].get("override_sha256")
+            content = r["observed"].get("override_contents_for_display", "")
+            host = r["host"]
+            if sha and content:
+                if sha not in unique_overrides:
+                    unique_overrides[sha] = (content, [])
+                unique_overrides[sha][1].append(host)
+
+    return {
+        "results": results,
+        "total": len(hosts),
+        "successful": sum(1 for r in results if r.get("ok")),
+        "failed": sum(1 for r in results if not r.get("ok")),
+        "unique_overrides": unique_overrides,
+    }
+
+
+def execute_audits_parallel(
+    hosts: list[str],
+    *,
+    args: HostAuditArgs,
+    ssh_opts: list[str],
+    remote_cmd: str,
+    audit_log: Path,
+    actor: str,
+    retry_budget: dict[str, float],
+    lock: threading.Lock,
+    log_lock: threading.Lock,
+    overrides_dir: Path,
+    vault_checksums: dict[str, str],
+    vault_dir: Path,
+    show_progress: bool,
+) -> list[dict[str, Any]]:
+    """Execute audits for multiple hosts in parallel with optional progress bar.
+
+    Args:
+        hosts: List of hostnames to audit
+        args: Audit command arguments
+        ssh_opts: SSH options list
+        remote_cmd: Remote audit script command
+        audit_log: Path to audit log file
+        actor: Username performing the audit
+        retry_budget: Dictionary with deadline for retries
+        lock: Lock for results list
+        log_lock: Lock for audit log writes
+        overrides_dir: Directory for storing override files
+        vault_checksums: Existing vault checksums
+        vault_dir: Directory for storing vault files
+        show_progress: Whether to show progress bar
+
+    Returns:
+        List of audit result dictionaries
+    """
+    results = []
+    completed = 0
+    progress_start = time.monotonic()
+    progress_label = format_progress_label(len(hosts), elapsed_s=0)
+
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        future_to_host = {
+            executor.submit(
+                audit_single_host_with_retry,
+                host,
+                args=args,
+                ssh_opts=ssh_opts,
+                remote_cmd=remote_cmd,
+                audit_log=audit_log,
+                actor=actor,
+                retry_budget=retry_budget,
+                lock=lock,
+                log_lock=log_lock,
+                overrides_dir=overrides_dir,
+                vault_checksums=vault_checksums,
+                vault_dir=vault_dir,
+            ): host
+            for host in hosts
+        }
+
+        # Use click.progressbar in batch mode, nullcontext in JSON mode
+        with (
+            click.progressbar(
+                length=len(hosts),
+                label=progress_label,
+                show_eta=True,
+                show_percent=True,
+                file=sys.stderr,
+            )
+            if show_progress
+            else nullcontext()
+        ) as bar:
+            for future in as_completed(future_to_host):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    host = future_to_host[future]
+                    results.append(
+                        {
+                            "host": host,
+                            "ok": False,
+                            "error": str(e),
+                            "ts": utc_now_iso(),
+                        }
+                    )
+
+                # Update progress bar (only if showing)
+                if show_progress:
+                    completed += 1
+                    remaining = len(hosts) - completed
+                    # Click progressbar type not fully understood by type checker
+                    bar.label = format_progress_label(  # type: ignore[invalid-assignment]
+                        remaining, elapsed_s=time.monotonic() - progress_start
+                    )
+                    bar.update(1)
+
+    return results
+
+
 def audit_single_host_with_retry(
     host: str,
     *,
@@ -319,94 +451,28 @@ def cmd_host_audit_batch(hosts: list[str], args: HostAuditArgs) -> dict[str, Any
     vault_dir = audit_log.parent / VAULT_YAMLS_DIR_NAME
 
     remote_cmd = remote_audit_script(include_content=not args.no_content)
-
-    results = []
     lock = threading.Lock()
     log_lock = threading.Lock()
     retry_budget = {"deadline": time.time() + args.batch_timeout}
-
-    # Determine if we should show progress bar
     show_progress = not args.json and not getattr(args, "quiet", False)
-    completed = 0
-    progress_start = time.monotonic()
-    progress_label = format_progress_label(len(hosts), elapsed_s=0)
 
-    with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        future_to_host = {
-            executor.submit(
-                audit_single_host_with_retry,
-                host,
-                args=args,
-                ssh_opts=ssh_opts,
-                remote_cmd=remote_cmd,
-                audit_log=audit_log,
-                actor=actor,
-                retry_budget=retry_budget,
-                lock=lock,
-                log_lock=log_lock,
-                overrides_dir=overrides_dir,
-                vault_checksums=vault_checksums,
-                vault_dir=vault_dir,
-            ): host
-            for host in hosts
-        }
+    results = execute_audits_parallel(
+        hosts,
+        args=args,
+        ssh_opts=ssh_opts,
+        remote_cmd=remote_cmd,
+        audit_log=audit_log,
+        actor=actor,
+        retry_budget=retry_budget,
+        lock=lock,
+        log_lock=log_lock,
+        overrides_dir=overrides_dir,
+        vault_checksums=vault_checksums,
+        vault_dir=vault_dir,
+        show_progress=show_progress,
+    )
 
-        # Use click.progressbar in batch mode, nullcontext in JSON mode
-        with (
-            click.progressbar(
-                length=len(hosts),
-                label=progress_label,
-                show_eta=True,
-                show_percent=True,
-                file=sys.stderr,
-            )
-            if show_progress
-            else nullcontext()
-        ) as bar:
-            for future in as_completed(future_to_host):
-                try:
-                    result = future.result()
-                    results.append(result)
-                except Exception as e:
-                    host = future_to_host[future]
-                    results.append(
-                        {
-                            "host": host,
-                            "ok": False,
-                            "error": str(e),
-                            "ts": utc_now_iso(),
-                        }
-                    )
-
-                # Update progress bar (only if showing)
-                if show_progress:
-                    completed += 1
-                    remaining = len(hosts) - completed
-                    # Click progressbar type not fully understood by type checker
-                    bar.label = format_progress_label(  # type: ignore[invalid-assignment]
-                        remaining, elapsed_s=time.monotonic() - progress_start
-                    )
-                    bar.update(1)
-
-    # Collect unique overrides by SHA256
-    unique_overrides: dict[str, tuple[str, list[str]]] = {}
-    for r in results:
-        if r.get("ok") and r.get("observed", {}).get("override_present"):
-            sha = r["observed"].get("override_sha256")
-            content = r["observed"].get("override_contents_for_display", "")
-            host = r["host"]
-            if sha and content:
-                if sha not in unique_overrides:
-                    unique_overrides[sha] = (content, [])
-                unique_overrides[sha][1].append(host)
-
-    return {
-        "results": results,
-        "total": len(hosts),
-        "successful": sum(1 for r in results if r.get("ok")),
-        "failed": sum(1 for r in results if not r.get("ok")),
-        "unique_overrides": unique_overrides,
-    }
+    return aggregate_audit_summary(results, hosts)
 
 
 def format_single_host_output(result: dict[str, Any], args: HostAuditArgs) -> None:
