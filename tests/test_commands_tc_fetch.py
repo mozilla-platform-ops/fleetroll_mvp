@@ -8,8 +8,10 @@ from pathlib import Path
 
 from fleetroll.commands.tc_fetch import (
     format_tc_fetch_quiet,
+    get_host_roles_bulk,
     strip_fqdn,
     tc_workers_file_path,
+    write_scan_record,
     write_worker_record,
 )
 from fleetroll.utils import format_elapsed_time
@@ -212,3 +214,159 @@ class TestWriteWorkerRecord:
         assert record["task_started"] is None
         assert record["task_resolved"] is None
         assert record["quarantine_until"] is None
+
+
+class TestWriteScanRecord:
+    """Tests for write_scan_record function."""
+
+    def test_writes_valid_json_record(self):
+        """Should write a scan record with all fields."""
+        output = StringIO()
+        write_scan_record(
+            output,
+            ts="2024-01-15T10:30:00Z",
+            provisioner="aws-provisioner",
+            worker_type="linux-compute",
+            worker_count=5,
+            requested_by_hosts=["host1", "host2"],
+        )
+
+        output.seek(0)
+        line = output.read()
+        record = json.loads(line.strip())
+
+        assert record["type"] == "scan"
+        assert record["ts"] == "2024-01-15T10:30:00Z"
+        assert record["provisioner"] == "aws-provisioner"
+        assert record["worker_type"] == "linux-compute"
+        assert record["worker_count"] == 5
+        assert record["requested_by_hosts"] == ["host1", "host2"]
+
+    def test_empty_hosts_list(self):
+        """Should handle empty requested_by_hosts."""
+        output = StringIO()
+        write_scan_record(
+            output,
+            ts="2024-01-15T10:30:00Z",
+            provisioner="aws",
+            worker_type="test",
+            worker_count=0,
+            requested_by_hosts=[],
+        )
+
+        output.seek(0)
+        record = json.loads(output.read().strip())
+        assert record["requested_by_hosts"] == []
+        assert record["worker_count"] == 0
+
+    def test_multiple_hosts(self):
+        """Should handle multiple hosts in requested_by_hosts."""
+        output = StringIO()
+        write_scan_record(
+            output,
+            ts="2024-01-15T10:30:00Z",
+            provisioner="gcp-provisioner",
+            worker_type="windows-compute",
+            worker_count=10,
+            requested_by_hosts=["host1", "host2", "host3", "host4"],
+        )
+
+        output.seek(0)
+        record = json.loads(output.read().strip())
+        assert len(record["requested_by_hosts"]) == 4
+        assert "host1" in record["requested_by_hosts"]
+        assert "host4" in record["requested_by_hosts"]
+
+
+class TestGetHostRolesBulk:
+    """Tests for get_host_roles_bulk function."""
+
+    def test_finds_roles_for_hosts(self, tmp_path):
+        """Should return roles for hosts from audit log."""
+        audit_log = tmp_path / "audit.jsonl"
+        audit_log.write_text(
+            '{"host":"host1","ts":"2024-01-15T10:00:00Z","observed":{"role":"gecko_t_linux"}}\n'
+            '{"host":"host2","ts":"2024-01-15T11:00:00Z","observed":{"role":"gecko_t_win"}}\n'
+        )
+
+        result = get_host_roles_bulk({"host1", "host2"}, audit_log)
+
+        assert result["host1"] == "gecko_t_linux"
+        assert result["host2"] == "gecko_t_win"
+
+    def test_uses_most_recent_role(self, tmp_path):
+        """Should use most recent role when multiple records exist."""
+        audit_log = tmp_path / "audit.jsonl"
+        audit_log.write_text(
+            '{"host":"host1","ts":"2024-01-15T10:00:00Z","observed":{"role":"old_role"}}\n'
+            '{"host":"host1","ts":"2024-01-15T12:00:00Z","observed":{"role":"new_role"}}\n'
+        )
+
+        result = get_host_roles_bulk({"host1"}, audit_log)
+        assert result["host1"] == "new_role"
+
+    def test_returns_none_for_missing_hosts(self, tmp_path):
+        """Should return None for hosts not in audit log."""
+        audit_log = tmp_path / "audit.jsonl"
+        audit_log.write_text(
+            '{"host":"host1","ts":"2024-01-15T10:00:00Z","observed":{"role":"some_role"}}\n'
+        )
+
+        result = get_host_roles_bulk({"host1", "host2", "host3"}, audit_log)
+        assert result["host1"] == "some_role"
+        assert result["host2"] is None
+        assert result["host3"] is None
+
+    def test_ignores_records_without_role(self, tmp_path):
+        """Should ignore audit records without role data."""
+        audit_log = tmp_path / "audit.jsonl"
+        audit_log.write_text(
+            '{"host":"host1","ts":"2024-01-15T10:00:00Z","observed":{}}\n'
+            '{"host":"host1","ts":"2024-01-15T11:00:00Z","observed":{"role":"valid_role"}}\n'
+        )
+
+        result = get_host_roles_bulk({"host1"}, audit_log)
+        assert result["host1"] == "valid_role"
+
+    def test_empty_audit_log(self, tmp_path):
+        """Should return all None for empty audit log."""
+        audit_log = tmp_path / "audit.jsonl"
+        audit_log.write_text("")
+
+        result = get_host_roles_bulk({"host1", "host2"}, audit_log)
+        assert result["host1"] is None
+        assert result["host2"] is None
+
+    def test_filters_by_requested_hosts(self, tmp_path):
+        """Should only process requested hosts, not all hosts in log."""
+        audit_log = tmp_path / "audit.jsonl"
+        audit_log.write_text(
+            '{"host":"host1","ts":"2024-01-15T10:00:00Z","observed":{"role":"role1"}}\n'
+            '{"host":"host2","ts":"2024-01-15T10:00:00Z","observed":{"role":"role2"}}\n'
+            '{"host":"host3","ts":"2024-01-15T10:00:00Z","observed":{"role":"role3"}}\n'
+        )
+
+        result = get_host_roles_bulk({"host1", "host3"}, audit_log)
+        assert result["host1"] == "role1"
+        assert result["host3"] == "role3"
+        # host2 should not be in result or should be None
+        assert "host2" not in result or result.get("host2") is None
+
+    def test_missing_timestamp(self, tmp_path):
+        """Should ignore records without timestamp."""
+        audit_log = tmp_path / "audit.jsonl"
+        audit_log.write_text(
+            '{"host":"host1","observed":{"role":"role_no_ts"}}\n'
+            '{"host":"host1","ts":"2024-01-15T11:00:00Z","observed":{"role":"role_with_ts"}}\n'
+        )
+
+        result = get_host_roles_bulk({"host1"}, audit_log)
+        assert result["host1"] == "role_with_ts"
+
+    def test_nonexistent_audit_log(self, tmp_path):
+        """Should handle nonexistent audit log gracefully."""
+        audit_log = tmp_path / "nonexistent.jsonl"
+
+        result = get_host_roles_bulk({"host1", "host2"}, audit_log)
+        assert result["host1"] is None
+        assert result["host2"] is None
