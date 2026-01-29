@@ -28,7 +28,8 @@
       "Bash(pytest:*)",
       "Bash(grep:*)",
       "Bash(br dep list:*)",
-      "Bash(prek:*)"
+      "Bash(prek:*)",
+      "Bash(shellcheck:*)"
     ]
   }
 }
