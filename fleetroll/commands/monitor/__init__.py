@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-# Temporary compatibility shim - re-export entry point from _monitor_impl.py
-from .._monitor_impl import cmd_host_monitor
-
 # Re-export from data module
 from .data import (
     AuditLogTailer,
@@ -25,6 +22,9 @@ from .data import (
 
 # Re-export from display module
 from .display import MonitorDisplay
+
+# Re-export from entry module
+from .entry import cmd_host_monitor
 
 # Re-export from formatting module
 from .formatting import (
