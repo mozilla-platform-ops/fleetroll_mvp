@@ -22,6 +22,27 @@ uv run python -m module            # Run a module
 
 **NEVER** use `pytest`, `python`, `python3`, or `python -m` directly - always prefix with `uv run`.
 
+## Git Operations
+
+The user handles all git operations (staging, committing, pushing). When changes are ready to commit:
+
+1. **Do NOT** run git add, git commit, or git push commands
+2. **Do** prompt the user with a suggested commit message
+3. **Do** list which files should be staged
+4. The user will handle the actual git operations
+
+Example:
+```
+Please stage and commit these changes:
+- file1.py (modified)
+- file2.py (new)
+
+Suggested commit message:
+Add feature X
+
+Description of what changed and why.
+```
+
 ## Function arguments (positional vs keyword)
 
 - Prefer keyword arguments for readability and API stability.
