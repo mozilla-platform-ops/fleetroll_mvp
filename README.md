@@ -28,6 +28,13 @@ Fleetroll MVP currently provides the ability to:
 - view the collected host information
 - make a decision about the state of a rollout (if the override has been applied and the host is healthy in Taskcluster)
 
+Fleetroll MVP lacks the full features of Fleetroll including:
+
+- orchestration of the rollout process
+  - define a rollout including branch to test (to generate the override) and an optional vault.yaml, rollout speed, hosts
+  - start/stop/pause/rollback the rollout
+  - monitoring of the rollout process
+
 ## Background: Puppet Lifecycle
 
 Because puppet changes can affect the system under test, we only run puppet when tests aren't running (either via Taskcluster quarantine or when the generic-worker process isn't running).
