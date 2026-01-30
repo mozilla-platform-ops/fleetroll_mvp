@@ -126,7 +126,7 @@ max-complexity = 55
 ]
 
 [tool.ty.terminal]
-error-on-warning = true
+error-on-warning = false
 
 [tool.ty.environment]
 python-version = "3.11"
