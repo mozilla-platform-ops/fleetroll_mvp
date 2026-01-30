@@ -5,23 +5,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-# ==============================================================================
-# PUPPET RUN METADATA: Source state writing function library
-# ==============================================================================
-# This script writes puppet run metadata to /etc/puppet/last_run_metadata.json
-# after each puppet run, enabling ground-truth tracking of applied configuration.
-# The metadata includes git SHA, success status, duration, and file checksums.
-#
-# See: docs/puppet-state-tracking.md for details
-
-if [ -f "/etc/puppet/lib/puppet_state_functions.sh" ]; then
-    # shellcheck disable=SC1091
-    source "/etc/puppet/lib/puppet_state_functions.sh"
-else
-    echo "WARNING: Could not load state writing function from /etc/puppet/lib/puppet_state_functions.sh" >&2
-fi
-# ==============================================================================
-
 ### ---------------------------------------------
 ### 1. Constants & Variable Definitions
 ### ---------------------------------------------
@@ -206,6 +189,22 @@ LOCAL_PUPPET_REPO="/opt/puppet_environments/${GIT_USERNAME}/ronin_puppet"
 
 echo "Using Puppet Repo: $GIT_REPO_URL"
 echo "Using Branch: $GIT_BRANCH"
+
+# ==============================================================================
+# PUPPET RUN METADATA: Source state writing function library
+# ==============================================================================
+# This script writes puppet run metadata to /etc/puppet/last_run_metadata.json
+# after each puppet run, enabling ground-truth tracking of applied configuration.
+# The metadata includes git SHA, success status, duration, and file checksums.
+#
+# See: docs/puppet-state-tracking.md for details
+if [ -f "/etc/puppet/lib/puppet_state_functions.sh" ]; then
+    # shellcheck disable=SC1091
+    source "/etc/puppet/lib/puppet_state_functions.sh"
+else
+    echo "WARNING: Could not load state writing function from /etc/puppet/lib/puppet_state_functions.sh" >&2
+fi
+# ==============================================================================
 
 # Ensure Puppet Role is Set
 if [ -f "$PUPPET_ROLE_FILE" ]; then
