@@ -1,0 +1,6 @@
+# second set of canaries for 1804 and 2404
+
+# 1804
+t-linux64-ms-002.test.releng.mdc1.mozilla.com
+# 2404
+t-linux64-ms-017.test.releng.mdc1.mozilla.com
