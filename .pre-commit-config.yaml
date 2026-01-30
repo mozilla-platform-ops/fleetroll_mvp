@@ -42,12 +42,26 @@ repos:
         name: check mixed line endings
         args: [--fix=lf]
 
-  # Security: Secret detection
+  # Security: Secret detection (multiple tools for comprehensive coverage)
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.22.1
+    hooks:
+      - id: gitleaks
+        name: gitleaks (rule-based secret detection)
+        exclude: ^\.secrets\.baseline$
+
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.87.2
+    hooks:
+      - id: trufflehog
+        name: trufflehog (entropy-based secret detection)
+        exclude: ^\.secrets\.baseline$
+
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
       - id: detect-secrets
-        name: detect secrets
+        name: detect-secrets (legacy baseline)
         args: [--baseline, .secrets.baseline]
         exclude: package.lock.json
 
