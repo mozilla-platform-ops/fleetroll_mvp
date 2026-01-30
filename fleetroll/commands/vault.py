@@ -202,24 +202,35 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
             }
             print(json.dumps(summary, indent=2, sort_keys=True))
         else:
-            print("DRY RUN: --confirm not provided; no changes will be made.")
+            print(
+                click.style(
+                    "DRY RUN: --confirm not provided; no changes will be made.", fg="yellow"
+                )
+            )
             if is_batch:
-                print(f"Hosts file: {host_file}")
-                print(f"Host count: {len(hosts)}")
+                print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
+                print(f"{click.style('Host count:', fg='cyan')} {len(hosts)}")
             else:
-                print(f"Host: {hosts[0]}")
+                print(f"{click.style('Host:', fg='cyan')} {hosts[0]}")
             action_target = f"{len(hosts)} host(s)"
-            print(f"Action: set vault on {action_target}")
-            print(f"Vault source: {source}")
-            print(f"Vault checksum: sha256={content_hash}")
-            print(f"Mode: {args.mode} Owner: {args.owner} Group: {args.group}")
-            print(f"Backup: {'yes' if not args.no_backup else 'no'}")
+            print(f"{click.style('Action:', fg='cyan')} set vault on {action_target}")
+            print(f"{click.style('Vault source:', fg='cyan')} {source}")
+            print(f"{click.style('Vault checksum:', fg='cyan')} sha256={content_hash}")
+            mode_owner_group = (
+                f"{click.style('Mode:', fg='cyan')} {args.mode} "
+                f"{click.style('Owner:', fg='cyan')} {args.owner} "
+                f"{click.style('Group:', fg='cyan')} {args.group}"
+            )
+            print(mode_owner_group)
+            print(f"{click.style('Backup:', fg='cyan')} {'yes' if not args.no_backup else 'no'}")
             if args.reason:
-                print(f"Reason: {args.reason}")
-            print("Vault contents: (suppressed)")
-            print(f"Local store: {audit_log.parent / VAULT_YAMLS_DIR_NAME}")
-            print(f"Audit log: {audit_log}")
-            print("Run again with --confirm to apply changes.")
+                print(f"{click.style('Reason:', fg='cyan')} {args.reason}")
+            print(click.style("Vault contents: (suppressed)", fg="magenta"))
+            print(
+                f"{click.style('Local store:', fg='cyan')} {audit_log.parent / VAULT_YAMLS_DIR_NAME}"
+            )
+            print(f"{click.style('Audit log:', fg='cyan')} {audit_log}")
+            print(click.style("Run again with --confirm to apply changes.", fg="yellow"))
         return
 
     backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)

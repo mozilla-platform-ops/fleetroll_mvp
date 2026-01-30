@@ -117,19 +117,23 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
             }
             print(json.dumps(summary, indent=2, sort_keys=True))
         else:
-            print("DRY RUN: --confirm not provided; no changes will be made.")
+            print(
+                click.style(
+                    "DRY RUN: --confirm not provided; no changes will be made.", fg="yellow"
+                )
+            )
             if is_batch:
-                print(f"Hosts file: {host_file}")
-                print(f"Host count: {len(hosts)}")
+                print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
+                print(f"{click.style('Host count:', fg='cyan')} {len(hosts)}")
             else:
-                print(f"Host: {hosts[0]}")
+                print(f"{click.style('Host:', fg='cyan')} {hosts[0]}")
             action_target = f"{len(hosts)} host(s)"
-            print(f"Action: unset override on {action_target}")
-            print(f"Backup: {'yes' if not args.no_backup else 'no'}")
+            print(f"{click.style('Action:', fg='cyan')} unset override on {action_target}")
+            print(f"{click.style('Backup:', fg='cyan')} {'yes' if not args.no_backup else 'no'}")
             if args.reason:
-                print(f"Reason: {args.reason}")
-            print(f"Audit log: {audit_log}")
-            print("Run again with --confirm to apply changes.")
+                print(f"{click.style('Reason:', fg='cyan')} {args.reason}")
+            print(f"{click.style('Audit log:', fg='cyan')} {audit_log}")
+            print(click.style("Run again with --confirm to apply changes.", fg="yellow"))
         return
 
     backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)

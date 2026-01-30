@@ -166,27 +166,38 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
             }
             print(json.dumps(summary, indent=2, sort_keys=True))
         else:
-            print("DRY RUN: --confirm not provided; no changes will be made.")
+            print(
+                click.style(
+                    "DRY RUN: --confirm not provided; no changes will be made.", fg="yellow"
+                )
+            )
             if is_batch:
-                print(f"Hosts file: {host_file}")
-                print(f"Host count: {len(hosts)}")
+                print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
+                print(f"{click.style('Host count:', fg='cyan')} {len(hosts)}")
             else:
-                print(f"Host: {hosts[0]}")
+                print(f"{click.style('Host:', fg='cyan')} {hosts[0]}")
             action_target = f"{len(hosts)} host(s)"
-            print(f"Action: set override on {action_target}")
-            print(f"Override source: {source}")
-            print(f"Override checksum: sha256={content_hash}")
-            print(f"Mode: {args.mode} Owner: {args.owner} Group: {args.group}")
-            print(f"Validation: {'enabled' if args.validate else 'disabled'}")
-            print(f"Backup: {'yes' if not args.no_backup else 'no'}")
+            print(f"{click.style('Action:', fg='cyan')} set override on {action_target}")
+            print(f"{click.style('Override source:', fg='cyan')} {source}")
+            print(f"{click.style('Override checksum:', fg='cyan')} sha256={content_hash}")
+            mode_owner_group = (
+                f"{click.style('Mode:', fg='cyan')} {args.mode} "
+                f"{click.style('Owner:', fg='cyan')} {args.owner} "
+                f"{click.style('Group:', fg='cyan')} {args.group}"
+            )
+            print(mode_owner_group)
+            print(
+                f"{click.style('Validation:', fg='cyan')} {'enabled' if args.validate else 'disabled'}"
+            )
+            print(f"{click.style('Backup:', fg='cyan')} {'yes' if not args.no_backup else 'no'}")
             if args.reason:
-                print(f"Reason: {args.reason}")
+                print(f"{click.style('Reason:', fg='cyan')} {args.reason}")
             content_text = data.decode("utf-8", errors="replace")
-            print("--- override contents (begin) ---")
+            print(click.style("--- override contents (begin) ---", fg="magenta"))
             print(content_text, end="" if content_text.endswith("\n") else "\n")
-            print("--- override contents (end) ---")
-            print(f"Audit log: {audit_log}")
-            print("Run again with --confirm to apply changes.")
+            print(click.style("--- override contents (end) ---", fg="magenta"))
+            print(f"{click.style('Audit log:', fg='cyan')} {audit_log}")
+            print(click.style("Run again with --confirm to apply changes.", fg="yellow"))
         return
 
     if args.validate:
