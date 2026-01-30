@@ -174,57 +174,137 @@ else
   printf 'VLT_PRESENT=0\\n'
 fi
 
-# Puppet last run state (best effort) - Linux only for now
-if [ "$os_type" != "Darwin" ]; then
-  # Try last_run_report.yaml first (Puppet 7+), then fall back to summary files
-  pp_report="/opt/puppetlabs/puppet/cache/state/last_run_report.yaml"
-  if sudo -n test -e "$pp_report" 2>/dev/null; then
-    # Parse report file (Puppet 7+): time is ISO timestamp, status indicates success
-    pp_time=$(sudo -n grep "^time:" "$pp_report" 2>/dev/null | head -1 | sed 's/^time: *//' | tr -d "\\\"\\'")
-    if [ -n "$pp_time" ]; then
-      # Convert ISO timestamp to epoch (strip nanoseconds for compatibility)
-      pp_time_clean=$(printf '%s' "$pp_time" | sed 's/\\.[0-9]*//; s/+00:00$/Z/')
-      # GNU date: -d (parse date string)
-      pp_epoch=$(date -d "$pp_time_clean" +%s 2>/dev/null || true)
+# Puppet last run state (best effort)
+# Try new JSON metadata file first, fall back to YAML
+pp_json_file="/etc/puppet/last_run_metadata.json"
+if sudo -n test -e "$pp_json_file" 2>/dev/null; then
+  # Read JSON state file
+  pp_json=$(sudo -n cat "$pp_json_file" 2>/dev/null || true)
+  if [ -n "$pp_json" ]; then
+    # Extract string fields (format: "field":"value")
+    pp_ts=$(printf '%s' "$pp_json" | grep -o '"ts":"[^"]*"' | cut -d'"' -f4 || true)
+    pp_git_sha=$(printf '%s' "$pp_json" | grep -o '"git_sha":"[^"]*"' | cut -d'"' -f4 || true)
+    pp_git_repo=$(printf '%s' "$pp_json" | grep -o '"git_repo":"[^"]*"' | cut -d'"' -f4 || true)
+    pp_git_branch=$(printf '%s' "$pp_json" | grep -o '"git_branch":"[^"]*"' | cut -d'"' -f4 || true)
+    pp_override_sha=$(printf '%s' "$pp_json" | grep -o '"override_sha":"[^"]*"' | cut -d'"' -f4 || true)
+    pp_vault_sha=$(printf '%s' "$pp_json" | grep -o '"vault_sha":"[^"]*"' | cut -d'"' -f4 || true)
+    pp_role=$(printf '%s' "$pp_json" | grep -o '"role":"[^"]*"' | cut -d'"' -f4 || true)
+
+    # Extract numeric/boolean fields (format: "field":value)
+    pp_exit_code=$(printf '%s' "$pp_json" | grep -o '"exit_code":[0-9]*' | cut -d':' -f2 || true)
+    pp_duration=$(printf '%s' "$pp_json" | grep -o '"duration_s":[0-9]*' | cut -d':' -f2 || true)
+    pp_success=$(printf '%s' "$pp_json" | grep -o '"success":[a-z]*' | cut -d':' -f2 || true)
+    pp_git_dirty=$(printf '%s' "$pp_json" | grep -o '"git_dirty":[a-z]*' | cut -d':' -f2 || true)
+
+    # Output fields (only if not null/empty)
+    if [ -n "$pp_ts" ]; then
+      printf 'PP_STATE_TS=%s\\n' "$pp_ts"
+      # Convert ISO timestamp to epoch for backward compatibility
+      if [ "$os_type" = "Darwin" ]; then
+        # macOS: date -j -f (parse format)
+        pp_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$pp_ts" +%s 2>/dev/null || true)
+      else
+        # Linux: date -d (parse date string)
+        pp_epoch=$(date -d "$pp_ts" +%s 2>/dev/null || true)
+      fi
       if [ -n "$pp_epoch" ]; then
         printf 'PP_LAST_RUN_EPOCH=%s\\n' "$pp_epoch"
       fi
     fi
-  pp_status=$(sudo -n awk '/^status:/ {{print $2; exit}}' "$pp_report" 2>/dev/null || true)
-  if [ -n "$pp_status" ]; then
-    if [ "$pp_status" = "failed" ]; then
-      printf 'PP_SUCCESS=0\\n'
-    else
-      printf 'PP_SUCCESS=1\\n'
+    if [ -n "$pp_git_sha" ]; then
+      printf 'PP_GIT_SHA=%s\\n' "$pp_git_sha"
     fi
-  fi
-else
-  # Fall back to summary files (older Puppet versions)
-  pp_state=""
-  for pp_path in \\
-      /opt/puppetlabs/puppet/cache/state/last_run_summary.yaml \\
-      /var/lib/puppet/state/last_run_summary.yaml; do
-    if sudo -n test -e "$pp_path" 2>/dev/null; then
-      pp_state=$(sudo -n cat "$pp_path" 2>/dev/null || true)
-      break
+    if [ -n "$pp_git_repo" ]; then
+      printf 'PP_GIT_REPO=%s\\n' "$pp_git_repo"
     fi
-  done
-  if [ -n "$pp_state" ]; then
-    # Extract time.last_run (Unix epoch)
-    pp_last_run=$(printf '%s' "$pp_state" | awk '/^time:/{{found=1}} found && /last_run:/{{print $2; exit}}')
-    if [ -n "$pp_last_run" ]; then
-      printf 'PP_LAST_RUN_EPOCH=%s\\n' "$pp_last_run"
+    if [ -n "$pp_git_branch" ]; then
+      printf 'PP_GIT_BRANCH=%s\\n' "$pp_git_branch"
     fi
-    # Extract events.failure count (0 = success)
-    pp_failure=$(printf '%s' "$pp_state" | awk '/^events:/{{found=1}} found && /failure:/{{print $2; exit}}')
-    if [ -n "$pp_failure" ]; then
-      if [ "$pp_failure" = "0" ]; then
+    if [ -n "$pp_git_dirty" ]; then
+      # Convert boolean to 0/1
+      if [ "$pp_git_dirty" = "true" ]; then
+        printf 'PP_GIT_DIRTY=1\\n'
+      else
+        printf 'PP_GIT_DIRTY=0\\n'
+      fi
+    fi
+    if [ -n "$pp_override_sha" ]; then
+      printf 'PP_OVERRIDE_SHA_APPLIED=%s\\n' "$pp_override_sha"
+    fi
+    if [ -n "$pp_vault_sha" ]; then
+      printf 'PP_VAULT_SHA_APPLIED=%s\\n' "$pp_vault_sha"
+    fi
+    if [ -n "$pp_role" ]; then
+      printf 'PP_ROLE=%s\\n' "$pp_role"
+    fi
+    if [ -n "$pp_exit_code" ]; then
+      printf 'PP_EXIT_CODE=%s\\n' "$pp_exit_code"
+    fi
+    if [ -n "$pp_duration" ]; then
+      printf 'PP_DURATION_S=%s\\n' "$pp_duration"
+    fi
+    if [ -n "$pp_success" ]; then
+      # Convert boolean to 0/1
+      if [ "$pp_success" = "true" ]; then
         printf 'PP_SUCCESS=1\\n'
       else
         printf 'PP_SUCCESS=0\\n'
       fi
     fi
   fi
+else
+  # Fall back to YAML parsing (older systems without JSON state file)
+  if [ "$os_type" != "Darwin" ]; then
+    # Try last_run_report.yaml first (Puppet 7+), then fall back to summary files
+    pp_report="/opt/puppetlabs/puppet/cache/state/last_run_report.yaml"
+    if sudo -n test -e "$pp_report" 2>/dev/null; then
+      # Parse report file (Puppet 7+): time is ISO timestamp, status indicates success
+      pp_time=$(sudo -n grep "^time:" "$pp_report" 2>/dev/null | head -1 | sed 's/^time: *//' | tr -d "\\\"\\'")
+      if [ -n "$pp_time" ]; then
+        # Convert ISO timestamp to epoch (strip nanoseconds for compatibility)
+        pp_time_clean=$(printf '%s' "$pp_time" | sed 's/\\.[0-9]*//; s/+00:00$/Z/')
+        # GNU date: -d (parse date string)
+        pp_epoch=$(date -d "$pp_time_clean" +%s 2>/dev/null || true)
+        if [ -n "$pp_epoch" ]; then
+          printf 'PP_LAST_RUN_EPOCH=%s\\n' "$pp_epoch"
+        fi
+      fi
+    pp_status=$(sudo -n awk '/^status:/ {{print $2; exit}}' "$pp_report" 2>/dev/null || true)
+    if [ -n "$pp_status" ]; then
+      if [ "$pp_status" = "failed" ]; then
+        printf 'PP_SUCCESS=0\\n'
+      else
+        printf 'PP_SUCCESS=1\\n'
+      fi
+    fi
+  else
+    # Fall back to summary files (older Puppet versions)
+    pp_state=""
+    for pp_path in \\
+        /opt/puppetlabs/puppet/cache/state/last_run_summary.yaml \\
+        /var/lib/puppet/state/last_run_summary.yaml; do
+      if sudo -n test -e "$pp_path" 2>/dev/null; then
+        pp_state=$(sudo -n cat "$pp_path" 2>/dev/null || true)
+        break
+      fi
+    done
+    if [ -n "$pp_state" ]; then
+      # Extract time.last_run (Unix epoch)
+      pp_last_run=$(printf '%s' "$pp_state" | awk '/^time:/{{found=1}} found && /last_run:/{{print $2; exit}}')
+      if [ -n "$pp_last_run" ]; then
+        printf 'PP_LAST_RUN_EPOCH=%s\\n' "$pp_last_run"
+      fi
+      # Extract events.failure count (0 = success)
+      pp_failure=$(printf '%s' "$pp_state" | awk '/^events:/{{found=1}} found && /failure:/{{print $2; exit}}')
+      if [ -n "$pp_failure" ]; then
+        if [ "$pp_failure" = "0" ]; then
+          printf 'PP_SUCCESS=1\\n'
+        else
+          printf 'PP_SUCCESS=0\\n'
+        fi
+      fi
+    fi
+    fi
   fi
 fi
 
