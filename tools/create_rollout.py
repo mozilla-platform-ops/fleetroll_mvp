@@ -118,7 +118,11 @@ def create_rollout_file(
     if repo:
         lines.append(f"- **Puppet repo:** {repo}")
 
-    lines.extend(
+    # Build stage sections
+    stage_sections = []
+
+    # Stage 1: Canary (small test set)
+    stage_sections.extend(
         [
             "",
             "## Stage 1: Canary (small test set)",
@@ -126,51 +130,155 @@ def create_rollout_file(
             "Deploy to initial canary hosts and monitor for issues.",
             "",
             "- [ ] Deploy to initial canary set",
+            "",
+        ]
+    )
+    if vault_rel:
+        stage_sections.extend(
+            [
+                "  ```bash",
+                "  # Deploy vault first",
+                f"  uv run fleetroll host-deploy-vault --from-file {vault_rel} configs/host-lists/TBD.list",
+                "  ```",
+                "",
+            ]
+        )
+    stage_sections.extend(
+        [
             "  ```bash",
+            "  # Deploy override",
             f"  uv run fleetroll host-set-override --from-file {override_rel} configs/host-lists/TBD.list",
             "  ```",
             "",
             "- [ ] Monitor rollout health (`RO_HEALTH` column)",
             "- [ ] Verify puppet runs succeed",
             "- [ ] Deploy to second canary set",
+            "",
+        ]
+    )
+    if vault_rel:
+        stage_sections.extend(
+            [
+                "  ```bash",
+                "  # Deploy vault first",
+                f"  uv run fleetroll host-deploy-vault --from-file {vault_rel} configs/host-lists/TBD.list",
+                "  ```",
+                "",
+            ]
+        )
+    stage_sections.extend(
+        [
             "  ```bash",
+            "  # Deploy override",
             f"  uv run fleetroll host-set-override --from-file {override_rel} configs/host-lists/TBD.list",
             "  ```",
+        ]
+    )
+
+    # Stage 2: Broader canary
+    stage_sections.extend(
+        [
             "",
             "## Stage 2: Broader canary",
             "",
             "Expand to all canary hosts.",
             "",
             "- [ ] Deploy to all canary hosts",
+            "",
+        ]
+    )
+    if vault_rel:
+        stage_sections.extend(
+            [
+                "  ```bash",
+                "  # Deploy vault first",
+                f"  uv run fleetroll host-deploy-vault --from-file {vault_rel} configs/host-lists/TBD.list",
+                "  ```",
+                "",
+            ]
+        )
+    stage_sections.extend(
+        [
             "  ```bash",
+            "  # Deploy override",
             f"  uv run fleetroll host-set-override --from-file {override_rel} configs/host-lists/TBD.list",
             "  ```",
             "",
             "- [ ] Monitor rollout health",
             "- [ ] Verify TaskCluster workers are active",
+        ]
+    )
+
+    # Stage 3: Production rollout (batch 1)
+    stage_sections.extend(
+        [
             "",
             "## Stage 3: Production rollout (batch 1)",
             "",
             "Begin production rollout with first batch.",
             "",
             "- [ ] Deploy to first batch of production hosts",
+            "",
+        ]
+    )
+    if vault_rel:
+        stage_sections.extend(
+            [
+                "  ```bash",
+                "  # Deploy vault first",
+                f"  uv run fleetroll host-deploy-vault --from-file {vault_rel} configs/host-lists/TBD.list",
+                "  ```",
+                "",
+            ]
+        )
+    stage_sections.extend(
+        [
             "  ```bash",
+            "  # Deploy override",
             f"  uv run fleetroll host-set-override --from-file {override_rel} configs/host-lists/TBD.list",
             "  ```",
             "",
             "- [ ] Monitor rollout health",
+        ]
+    )
+
+    # Stage 4: Production rollout (remaining)
+    stage_sections.extend(
+        [
             "",
             "## Stage 4: Production rollout (remaining)",
             "",
             "Complete production rollout to all hosts.",
             "",
             "- [ ] Deploy to all remaining hosts",
+            "",
+        ]
+    )
+    if vault_rel:
+        stage_sections.extend(
+            [
+                "  ```bash",
+                "  # Deploy vault first",
+                f"  uv run fleetroll host-deploy-vault --from-file {vault_rel} configs/host-lists/TBD.list",
+                "  ```",
+                "",
+            ]
+        )
+    stage_sections.extend(
+        [
             "  ```bash",
+            "  # Deploy override",
             f"  uv run fleetroll host-set-override --from-file {override_rel} configs/host-lists/TBD.list",
             "  ```",
             "",
             "- [ ] Monitor final rollout health",
             "- [ ] Verify all hosts show `RO_HEALTH=Y`",
+        ]
+    )
+
+    # Rollback section
+    stage_sections.extend(
+        [
             "",
             "## Rollback (if needed)",
             "",
@@ -182,6 +290,8 @@ def create_rollout_file(
             "```",
         ]
     )
+
+    lines.extend(stage_sections)
 
     rollout_path.write_text("\n".join(lines) + "\n")
 
