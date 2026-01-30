@@ -3,7 +3,7 @@
 # set -e
 # set -x
 
-host_list="host-lists/all_moonshots.list"
+host_list="configs/host-lists/all_moonshots.list"
 options="-q"
 
 uv run fleetroll host-audit $host_list $options "$@"

@@ -3,7 +3,7 @@
 # set -e
 # set -x
 
-host_list="host-lists/all.list"
+host_list="configs/host-lists/all.list"
 options="-q"
 
 uv run fleetroll host-audit $host_list $options "$@"

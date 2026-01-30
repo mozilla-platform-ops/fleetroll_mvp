@@ -1,6 +1,9 @@
 # bv (beads viewer) local config and caches
 .bv/
 
+# Local configs (user-specific, not shared)
+configs/local/
+
 .coverage
 
 # for mvp/sandbox, let's let these in
