@@ -88,7 +88,7 @@ ${ERR_MSG}
 """
 
 try:
-   smtpObj = smtplib.SMTP('smtp1.mail.mdc1.mozilla.com')
+   smtpObj = smtplib.SMTP('<%= @smtp_relay_host %>')
    smtpObj.sendmail("${SENDER}", "${RECEIVER}", msg)
    print("Successfully sent email")
 except smtplib.SMTPException as e:
@@ -100,8 +100,8 @@ EOF
 function notify_telegraf {
     TELEGRAF_TABLE=$1
     TELEGRAF_VALUE=$2
-    META_DATA=",workerType=gecko-t-linux-talos-1804,workerGroup=mdc1,provisionerId=releng-hardware,workerId=t-linux64-ms-003"
-    CURL_OPTIONS=('--user' 'REDACTED_USER:REDACTED_TOKEN' '-i' '-XPOST' "REDACTED_ENDPOINT" '--data-binary' "${TELEGRAF_TABLE}${META_DATA} value=${TELEGRAF_VALUE}")
+    META_DATA="<% @meta_data.each do |key,value| -%>,<%= key -%>=<%= value -%><% end -%>"
+    CURL_OPTIONS=('--user' '<%= @telegraf_user -%>:<%= @telegraf_password -%>' '-i' '-XPOST' "REDACTED_ENDPOINT" '--data-binary' "${TELEGRAF_TABLE}${META_DATA} value=${TELEGRAF_VALUE}")
     # Print the metrics post output only if there is an error.
     out=$(curl --fail --silent --show-error "${CURL_OPTIONS[@]}" 2>&1) || echo "${out}"
 }
@@ -217,9 +217,9 @@ function run_puppet {
 
 
 # Main script starts here
-PUPPET_REPO="${PUPPET_REPO:-https://github.com/mozilla-platform-ops/ronin_puppet.git}"
-PUPPET_BRANCH="${PUPPET_BRANCH:-master}"
-PUPPET_MAIL="${PUPPET_MAIL:-puppet-ronin-reports@mozilla.com}"
+PUPPET_REPO="${PUPPET_REPO:-<%= @puppet_repo -%>}"
+PUPPET_BRANCH="${PUPPET_BRANCH:-<%= @puppet_branch -%>}"
+PUPPET_MAIL="${PUPPET_MAIL:-<%= @puppet_notify_email %>}"
 
 # detect if python3 is available and set it to PYTHON_BIN
 if command -v python3 &> /dev/null; then

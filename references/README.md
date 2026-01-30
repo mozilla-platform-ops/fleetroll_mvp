@@ -5,17 +5,35 @@ This directory contains production-ready reference implementations of puppet wra
 ## Contents
 
 - **`puppet_state_functions.sh`** - Reusable bash function library for writing puppet state metadata
-- **`run-puppet-linux.sh`** - Linux reference implementation with state tracking
-- **`run-puppet-macos.sh`** - macOS reference implementation with state tracking
+- **`run-puppet-linux.sh.erb`** - Linux reference implementation with state tracking (ERB template)
+- **`run-puppet-macos.sh`** - macOS reference implementation with state tracking (plain shell script)
 - **`test-state-writing.sh`** - Development test script (tests the function implementation)
 - **`verify-state-file.sh`** - Production verifier (checks existing state file format)
 - **`README.md`** - This file
+
+**Note**: Linux uses ERB templating (must be rendered before deployment), macOS uses plain shell with variable defaults.
 
 ## Overview
 
 These scripts integrate with fleetroll's puppet state tracking feature by writing metadata to `/etc/puppet/last_run_metadata.json` after each puppet run. This provides ground-truth tracking of applied configuration instead of relying on heuristics.
 
 See [`docs/puppet-state-tracking.md`](../docs/puppet-state-tracking.md) for complete feature documentation.
+
+## Templating Approach
+
+**Linux** (`run-puppet-linux.sh.erb`):
+- Uses ERB templating (Embedded Ruby)
+- Contains template variables like `<%= @telegraf_user -%>`
+- Must be rendered with actual values before deployment
+- No secrets stored in repository
+
+**macOS** (`run-puppet-macos.sh`):
+- Plain shell script (no templating)
+- Uses shell variable defaults: `${VAR:-default}`
+- Can be deployed directly
+- Matches production macOS deployment (doesn't use ERB)
+
+To render the Linux ERB template, you'll need a puppet/ERB processor that provides the template variables.
 
 ## State File Format
 
