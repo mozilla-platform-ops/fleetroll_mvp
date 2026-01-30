@@ -385,24 +385,12 @@ class TaskclusterClient:
 
     # similar to get_quarantine_details_graphql(), but for tasks
     def get_task_details_graphql(self, task_id: str) -> dict[str, Any] | None:
+        # Example curl command (sanitized - use your own credentials):
         # curl 'https://firefox-ci-tc.services.mozilla.com/graphql' \
         #   -X POST \
-        #   -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:146.0) Gecko/20100101 Firefox/146.0' \
-        #   -H 'Accept: */*' \
-        #   -H 'Accept-Language: en-US,en;q=0.5' \
-        #   -H 'Accept-Encoding: gzip, deflate, br, zstd' \
-        #   -H 'Referer: https://firefox-ci-tc.services.mozilla.com/' \
+        #   -H 'Authorization: Bearer YOUR_TOKEN_HERE' \
         #   -H 'content-type: application/json' \
-        #   -H 'Authorization: Bearer REDACTED_TC_TOKEN==' \
-        #   -H 'Origin: https://firefox-ci-tc.services.mozilla.com' \
-        #   -H 'DNT: 1' \
-        #   -H 'Connection: keep-alive' \
-        #   -H 'Cookie: connect.sid=s%3AtZGJzk4_CZiRu4LC3tgdNohnxcvCJTS9.6%2F8Al9cWTyaIficKhbAqCrtuGcZR%2FM3412gJAFkuoFw' \
-        #   -H 'Sec-Fetch-Dest: empty' \
-        #   -H 'Sec-Fetch-Mode: cors' \
-        #   -H 'Sec-Fetch-Site: same-origin' \
-        #   -H 'Priority: u=4' \
-        #   --data-raw $'{"operationName":"Task","variables":{"taskId":"Gc-_ljbsSXSeniAX7DzS_g","artifactsConnection":{"limit":1000},"dependentsConnection":{"limit":25},"taskActionsFilter":{"kind":{"$in":["task","hook"]},"context":{"$not":{"$size":0}}}},"query":"query Task($taskId: ID\041, $artifactsConnection: PageConnection, $dependentsConnection: PageConnection, $taskActionsFilter: JSON) {\\n  task(taskId: $taskId) {\\n    taskId\\n    taskGroupId\\n    retries\\n    created\\n    deadline\\n    expires\\n    priority\\n    taskQueueId\\n    schedulerId\\n    projectId\\n    tags\\n    requires\\n    scopes\\n    routes\\n    payload\\n    extra\\n    dependencies\\n    metadata {\\n      name\\n      description\\n      owner\\n      source\\n      __typename\\n    }\\n    status {\\n      state\\n      retriesLeft\\n      runs {\\n        taskId\\n        runId\\n        state\\n        reasonCreated\\n        reasonResolved\\n        scheduled\\n        started\\n        resolved\\n        workerGroup\\n        workerId\\n        takenUntil\\n        artifacts(connection: $artifactsConnection) {\\n          ...Artifacts\\n          __typename\\n        }\\n        __typename\\n      }\\n      __typename\\n    }\\n    taskActions(filter: $taskActionsFilter) {\\n      actions\\n      variables\\n      version\\n      __typename\\n    }\\n    decisionTask {\\n      scopes\\n      __typename\\n    }\\n    __typename\\n  }\\n  dependents(taskId: $taskId, connection: $dependentsConnection) {\\n    pageInfo {\\n      hasNextPage\\n      hasPreviousPage\\n      cursor\\n      previousCursor\\n      nextCursor\\n      __typename\\n    }\\n    edges {\\n      node {\\n        taskId\\n        status {\\n          state\\n          __typename\\n        }\\n        metadata {\\n          name\\n          __typename\\n        }\\n        __typename\\n      }\\n      __typename\\n    }\\n    __typename\\n  }\\n}\\n\\nfragment Artifacts on ArtifactsConnection {\\n  pageInfo {\\n    hasNextPage\\n    hasPreviousPage\\n    cursor\\n    previousCursor\\n    nextCursor\\n    __typename\\n  }\\n  edges {\\n    node {\\n      name\\n      contentType\\n      __typename\\n    }\\n    __typename\\n  }\\n  __typename\\n}"}'
+        #   --data-binary '{"operationName":"Task","variables":{"taskId":"TASK_ID"},"query":"query Task..."}'
         pass
 
     def get_worker_quarantine_info(
