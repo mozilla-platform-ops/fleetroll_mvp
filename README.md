@@ -57,6 +57,8 @@ TODO: move this section lower once fully implemented/thought out.
 ### Linux hosts
 
 The taskcluster worker (generic-worker) is only run if puppet passes.
+- Good: Guarantees hosts are converged if the taskcluster client is working.
+- Bad: Puppet failures can break every worker. Recovery involves updating the client to a better commit and running run-puppet.sh manually (or rebooting).
 
 #### puppet
 
@@ -74,6 +76,8 @@ The taskcluster worker (generic-worker) is only run if puppet passes.
 ### Mac hosts
 
 generic-worker will start on Mac even if the puppet run is unsuccesful.
+- Good: Bad puppet won't take out the fleet.
+- Bad: No or less of a guarantee that the host is in the desired state.
 
 #### puppet
 
