@@ -76,6 +76,7 @@ write_puppet_state() {
         local git_repo="null"
         local git_branch="null"
         local git_sha="null"
+        local git_dirty="null"
 
         if [[ -d "$working_dir/.git" ]]; then
             pushd "$working_dir" >/dev/null 2>&1 || true
@@ -101,6 +102,15 @@ write_puppet_state() {
                 git_sha="\"$commit_sha\""
             fi
 
+            # Check if repo is dirty (has uncommitted changes or untracked files)
+            local status_output
+            status_output=$(git status --porcelain 2>/dev/null || true)
+            if [[ -n "$status_output" ]]; then
+                git_dirty="true"
+            else
+                git_dirty="false"
+            fi
+
             popd >/dev/null 2>&1 || true
         fi
 
@@ -124,9 +134,11 @@ write_puppet_state() {
             fi
         fi
 
-        # Escape override_path for JSON (handle quotes and backslashes)
+        # Escape paths for JSON (handle quotes and backslashes)
         local override_path_escaped
         override_path_escaped=$(printf '%s' "$override_path" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        local vault_path_escaped
+        vault_path_escaped=$(printf '%s' "$vault_path" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
         # Build JSON (no trailing commas for maximum compatibility)
         local json
@@ -134,16 +146,18 @@ write_puppet_state() {
 {
   "schema_version": 1,
   "ts": "$ts",
+  "duration_s": $duration_s,
   "success": $success,
   "exit_code": $exit_code,
+  "role": "$role",
   "git_repo": $git_repo,
   "git_branch": $git_branch,
   "git_sha": $git_sha,
-  "override_sha": $override_sha,
+  "git_dirty": $git_dirty,
+  "vault_path": "$vault_path_escaped",
   "vault_sha": $vault_sha,
   "override_path": "$override_path_escaped",
-  "role": "$role",
-  "duration_s": $duration_s
+  "override_sha": $override_sha
 }
 EOF
         )

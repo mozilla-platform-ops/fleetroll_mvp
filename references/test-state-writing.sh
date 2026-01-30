@@ -40,14 +40,15 @@ echo ""
 
 # Detect OS and set paths
 # Use temp paths for testing unless running with sudo
+# Note: override/vault paths should be OUTSIDE the git working directory
 if [[ "$OSTYPE" == "darwin"* ]]; then
     OS="macos"
     if [ "$EUID" -eq 0 ]; then
         OVERRIDE_PATH="/opt/puppet_environments/ronin_settings"
         VAULT_PATH="/var/root/vault.yaml"
     else
-        OVERRIDE_PATH="/tmp/test_puppet_repo/ronin_settings"
-        VAULT_PATH="/tmp/test_puppet_repo/vault.yaml"
+        OVERRIDE_PATH="/tmp/test_puppet_config/ronin_settings"
+        VAULT_PATH="/tmp/test_puppet_config/vault.yaml"
     fi
     echo "Detected OS: macOS"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -56,8 +57,8 @@ elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
         OVERRIDE_PATH="/etc/puppet/ronin_settings"
         VAULT_PATH="/root/vault.yaml"
     else
-        OVERRIDE_PATH="/tmp/test_puppet_repo/ronin_settings"
-        VAULT_PATH="/tmp/test_puppet_repo/vault.yaml"
+        OVERRIDE_PATH="/tmp/test_puppet_config/ronin_settings"
+        VAULT_PATH="/tmp/test_puppet_config/vault.yaml"
     fi
     echo "Detected OS: Linux"
 else
@@ -86,25 +87,36 @@ fi
 if [ -z "$WORKING_DIR" ]; then
     echo -e "${YELLOW}WARNING${NC}: No puppet working directory found, using /tmp/test_puppet_repo"
     WORKING_DIR="/tmp/test_puppet_repo"
-    mkdir -p "$WORKING_DIR"
-    # Initialize minimal git repo for testing
-    if [ ! -d "$WORKING_DIR/.git" ]; then
-        echo "Setting up test git repository..."
-        (
-            cd "$WORKING_DIR" || exit 1
-            git init
-            git config user.email "test@example.com"
-            git config user.name "Test User"
-            echo "# Test Puppet Repository" > README.md
-            git add README.md
-            git commit -m "Initial commit"
-            git remote add origin https://github.com/test/puppet.git
-            git checkout -b production
-        )
-        echo -e "${GREEN}✓${NC} Created test git repository with commits"
+
+    # Always recreate test repo to ensure clean state
+    if [ -d "$WORKING_DIR" ]; then
+        echo "Removing old test repository..."
+        rm -rf "$WORKING_DIR"
     fi
+
+    echo "Setting up test git repository..."
+    mkdir -p "$WORKING_DIR"
+    (
+        cd "$WORKING_DIR" || exit 1
+        git init
+        git config user.email "test@example.com"
+        git config user.name "Test User"
+        echo "# Test Puppet Repository" > README.md
+        git add README.md
+        git commit -m "Initial commit"
+        git remote add origin https://github.com/test/puppet.git
+        git checkout -b production
+    )
+    echo -e "${GREEN}✓${NC} Created test git repository with commits"
 fi
 echo -e "${GREEN}✓${NC} Working directory: $WORKING_DIR"
+
+# Clean up and recreate test config directory for non-root users
+if [[ "$OVERRIDE_PATH" == "/tmp/test_puppet_config"* ]]; then
+    if [ -d "/tmp/test_puppet_config" ]; then
+        rm -rf /tmp/test_puppet_config
+    fi
+fi
 
 # Create test override and vault files if they don't exist
 if [ ! -f "$OVERRIDE_PATH" ]; then
@@ -224,9 +236,11 @@ REQUIRED_FIELDS=(
     "git_repo"
     "git_branch"
     "git_sha"
-    "override_sha"
-    "vault_sha"
+    "git_dirty"
     "override_path"
+    "override_sha"
+    "vault_path"
+    "vault_sha"
     "role"
     "duration_s"
 )
@@ -298,6 +312,15 @@ else
     exit 1
 fi
 
+# Check vault_path matches
+if grep -q "\"vault_path\": \"$VAULT_PATH\"" "$TEST_OUTPUT_FILE"; then
+    echo -e "${GREEN}✓${NC} vault_path matches: $VAULT_PATH"
+else
+    echo -e "${RED}FAIL${NC}: vault_path does not match"
+    rm "$TEST_OUTPUT_FILE"
+    exit 1
+fi
+
 echo ""
 
 echo "========================================"
@@ -324,6 +347,57 @@ else
     exit 1
 fi
 rm "$TEST_OUTPUT_FILE_FAIL"
+
+echo ""
+echo "========================================"
+echo "Test 7: Test git dirty tracking"
+echo "========================================"
+
+# Test 7a: Verify clean repo reports git_dirty: false
+if grep -q '"git_dirty": false' "$TEST_OUTPUT_FILE"; then
+    echo -e "${GREEN}✓${NC} Clean repo: git_dirty is false"
+else
+    echo -e "${RED}FAIL${NC}: Clean repo should have git_dirty: false"
+    cat "$TEST_OUTPUT_FILE"
+    rm "$TEST_OUTPUT_FILE"
+    exit 1
+fi
+
+# Test 7b: Make repo dirty and verify git_dirty: true
+TEST_OUTPUT_FILE_DIRTY=$(mktemp /tmp/puppet_state_test_dirty.XXXXXX.json)
+echo "Making repository dirty..."
+(cd "$WORKING_DIR" && echo "# Modified" >> README.md)
+
+write_puppet_state "$WORKING_DIR" "$ROLE" "$EXIT_CODE" "$DURATION" \
+    "$OVERRIDE_PATH" "$VAULT_PATH" "$TEST_OUTPUT_FILE_DIRTY"
+
+if grep -q '"git_dirty": true' "$TEST_OUTPUT_FILE_DIRTY"; then
+    echo -e "${GREEN}✓${NC} Dirty repo: git_dirty is true"
+else
+    echo -e "${RED}FAIL${NC}: Dirty repo should have git_dirty: true"
+    cat "$TEST_OUTPUT_FILE_DIRTY"
+    rm "$TEST_OUTPUT_FILE" "$TEST_OUTPUT_FILE_DIRTY"
+    exit 1
+fi
+
+# Test 7c: Add untracked file and verify still dirty
+echo "Adding untracked file..."
+(cd "$WORKING_DIR" && echo "test" > untracked.txt)
+
+TEST_OUTPUT_FILE_UNTRACKED=$(mktemp /tmp/puppet_state_test_untracked.XXXXXX.json)
+write_puppet_state "$WORKING_DIR" "$ROLE" "$EXIT_CODE" "$DURATION" \
+    "$OVERRIDE_PATH" "$VAULT_PATH" "$TEST_OUTPUT_FILE_UNTRACKED"
+
+if grep -q '"git_dirty": true' "$TEST_OUTPUT_FILE_UNTRACKED"; then
+    echo -e "${GREEN}✓${NC} Untracked files: git_dirty is true"
+else
+    echo -e "${RED}FAIL${NC}: Repo with untracked files should have git_dirty: true"
+    cat "$TEST_OUTPUT_FILE_UNTRACKED"
+    rm "$TEST_OUTPUT_FILE" "$TEST_OUTPUT_FILE_DIRTY" "$TEST_OUTPUT_FILE_UNTRACKED"
+    exit 1
+fi
+
+rm "$TEST_OUTPUT_FILE_DIRTY" "$TEST_OUTPUT_FILE_UNTRACKED"
 
 echo ""
 echo "========================================"
