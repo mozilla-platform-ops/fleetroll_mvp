@@ -76,7 +76,7 @@ def compute_columns_and_widths(
         "tc_j_sf": "TC_T_DUR",
         "pp_last": "PP_LAST",
         "applied": "APPLIED",
-        "healthy": "HEALTHY",
+        "healthy": "RO_HEALTH",
         "data": "DATA",
     }
     caps = {
@@ -205,7 +205,7 @@ def render_monitor_lines(
         "tc_j_sf": "TC_T_DUR",
         "pp_last": "PP_LAST",
         "applied": "APPLIED",
-        "healthy": "HEALTHY",
+        "healthy": "RO_HEALTH",
         "data": "DATA",
     }
     header_parts = [clip_cell(labels[col], widths[col]) for col in columns]

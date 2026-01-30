@@ -54,7 +54,7 @@ def test_render_row_cells_alignment() -> None:
         "tc_j_sf": "TC_J_SF",
         "pp_last": "PP_LAST",
         "applied": "APPLIED",
-        "healthy": "HEALTHY",
+        "healthy": "RO_HEALTH",
         "data": "DATA",
     }
     header_cells = render_row_cells(labels, columns=columns, widths=widths, include_marker=False)

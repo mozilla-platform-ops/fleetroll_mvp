@@ -32,7 +32,7 @@ APPLIED   Override applied by puppet
           N = override present, puppet hasn't run or failed
           - = no override present
 
-HEALTHY   Overall rollout health status
+RO_HEALTH Overall rollout health status
           Y = APPLIED and TC worker active (< 1 hour)
           N = not applied or TC worker stale
           - = no override present

@@ -212,8 +212,8 @@ class MonitorDisplay:
             return self.curses_mod.color_pair(5)  # YELLOW
         return 0  # gray/default for "-"
 
-    def healthy_attr(self, value: str) -> int:
-        """Color HEALTHY: green=Y, red=N, gray=-."""
+    def ro_health_attr(self, value: str) -> int:
+        """Color RO_HEALTH: green=Y, red=N, gray=-."""
         if not self.color_enabled:
             return 0
         if value == "Y":
@@ -482,7 +482,7 @@ class MonitorDisplay:
             "tc_j_sf": "TC_T_DUR",
             "pp_last": "PP_LAST",
             "applied": "APPLIED",
-            "healthy": "HEALTHY",
+            "healthy": "RO_HEALTH",
             "data": "DATA",
         }
 
@@ -949,7 +949,7 @@ class MonitorDisplay:
                 col += len(cell)
                 continue
             if col_name == "healthy":
-                attr = self.healthy_attr(values.get("healthy", "-"))
+                attr = self.ro_health_attr(values.get("healthy", "-"))
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
