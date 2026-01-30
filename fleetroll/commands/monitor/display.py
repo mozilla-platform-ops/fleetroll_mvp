@@ -41,7 +41,8 @@ class MonitorDisplay:
     ) -> None:
         self.stdscr = stdscr
         self.hosts = hosts
-        self.host_source = host_source
+        # Show just the filename if it's a path, to save space in the status line
+        self.host_source = Path(host_source).name if "/" in host_source else host_source
         self.latest = latest
         self.latest_ok = latest_ok
         self.tc_data = tc_data
