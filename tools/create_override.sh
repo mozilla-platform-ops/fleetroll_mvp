@@ -15,7 +15,7 @@ fi
 branch_name="$1"
 script_dir=$(dirname "$0")
 # resolve user_override_dir to absolute path
-user_override_dir="$(realpath "$script_dir/../configs/local/overrides")"
+user_override_dir="$(realpath "$script_dir/../configs/overrides")"
 override_file="$user_override_dir/${branch_name}.override"
 # get $user from username
 user=$(whoami)
