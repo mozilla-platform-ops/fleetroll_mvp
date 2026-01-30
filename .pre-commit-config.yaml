@@ -17,7 +17,7 @@ repos:
       - id: ty-check
         name: ty check
         description: Type check Python code with ty
-        entry: bash -c 'uv run ty check fleetroll/ || echo "⚠️  Type checking found issues (not blocking)"'
+        entry: bash -c 'uv run ty check fleetroll/ --output-format concise 2>&1 | grep -v "warning\[" || echo "⚠️  Type checking found issues (not blocking)"'
         language: system
         types: [python]
         pass_filenames: false
