@@ -67,7 +67,7 @@ Run `prek` before suggesting commits to ensure all checks pass.
 The user handles all git operations (staging, committing, pushing). When changes are ready to commit:
 
 1. **Do NOT** run git add, git commit, or git push commands
-2. **Do** prompt the user with a suggested commit message
+2. **Do** prompt the user with a suggested commit message (1 main line, newlinee, and then max 2 more lines)
 3. **Do** list which files should be staged
 4. The user will handle the actual git operations
 
@@ -109,7 +109,7 @@ This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) 
 - **Starting work on a bead**: Set the bead's status to in_progress.
 - **Creating new beads**: Use descriptive titles, descriptions, and set appropriate priority and type.
 - **Closing beads**: When asked to close a bead and files have changed during the
-  work, suggest a git commit message that mentions any relevant beads (e.g. `Refactor draw_screen into 8 focused methods (mvp-5jc)`)
+  work, suggest a git commit message that mentions any relevant beads (e.g. `Refactor draw_screen into 8 focused methods (mvp-5jc <bead state>)`)
 - U
 - Always `br sync` before ending session
 
