@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import datetime
 import json
 import os
@@ -213,6 +214,48 @@ def process_audit_result(
         except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
             # If parsing fails, leave all fields as None
             pass
+
+    # Backward compatibility: Fall back to old format fields if new format not present
+    if puppet_state_ts is None and "PP_STATE_TS" in info:
+        puppet_state_ts = info["PP_STATE_TS"]
+
+    if puppet_last_run_epoch is None and "PP_LAST_RUN_EPOCH" in info:
+        with contextlib.suppress(ValueError, TypeError):
+            puppet_last_run_epoch = int(info["PP_LAST_RUN_EPOCH"])
+
+    if puppet_success is None and "PP_SUCCESS" in info:
+        with contextlib.suppress(ValueError, TypeError):
+            puppet_success = info["PP_SUCCESS"] == "1"
+
+    if puppet_git_sha is None and "PP_GIT_SHA" in info:
+        puppet_git_sha = info["PP_GIT_SHA"]
+
+    if puppet_git_repo is None and "PP_GIT_REPO" in info:
+        puppet_git_repo = info["PP_GIT_REPO"]
+
+    if puppet_git_branch is None and "PP_GIT_BRANCH" in info:
+        puppet_git_branch = info["PP_GIT_BRANCH"]
+
+    if puppet_git_dirty is None and "PP_GIT_DIRTY" in info:
+        with contextlib.suppress(ValueError, TypeError):
+            puppet_git_dirty = info["PP_GIT_DIRTY"] == "1"
+
+    if puppet_override_sha_applied is None and "PP_OVERRIDE_SHA_APPLIED" in info:
+        puppet_override_sha_applied = info["PP_OVERRIDE_SHA_APPLIED"]
+
+    if puppet_vault_sha_applied is None and "PP_VAULT_SHA_APPLIED" in info:
+        puppet_vault_sha_applied = info["PP_VAULT_SHA_APPLIED"]
+
+    if puppet_role is None and "PP_ROLE" in info:
+        puppet_role = info["PP_ROLE"]
+
+    if puppet_exit_code is None and "PP_EXIT_CODE" in info:
+        with contextlib.suppress(ValueError, TypeError):
+            puppet_exit_code = int(info["PP_EXIT_CODE"])
+
+    if puppet_duration_s is None and "PP_DURATION_S" in info:
+        with contextlib.suppress(ValueError, TypeError):
+            puppet_duration_s = int(info["PP_DURATION_S"])
 
     # Compute content hash if we got content
     content_bytes = content.encode("utf-8", "replace")
