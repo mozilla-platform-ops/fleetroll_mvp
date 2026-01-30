@@ -178,79 +178,10 @@ fi
 # Try new JSON metadata file first, fall back to YAML
 pp_json_file="/etc/puppet/last_run_metadata.json"
 if sudo -n test -e "$pp_json_file" 2>/dev/null; then
-  # Read JSON state file
-  pp_json=$(sudo -n cat "$pp_json_file" 2>/dev/null || true)
-  if [ -n "$pp_json" ]; then
-    # Extract string fields (format: "field":"value")
-    pp_ts=$(printf '%s' "$pp_json" | grep -o '"ts":"[^"]*"' | cut -d'"' -f4 || true)
-    pp_git_sha=$(printf '%s' "$pp_json" | grep -o '"git_sha":"[^"]*"' | cut -d'"' -f4 || true)
-    pp_git_repo=$(printf '%s' "$pp_json" | grep -o '"git_repo":"[^"]*"' | cut -d'"' -f4 || true)
-    pp_git_branch=$(printf '%s' "$pp_json" | grep -o '"git_branch":"[^"]*"' | cut -d'"' -f4 || true)
-    pp_override_sha=$(printf '%s' "$pp_json" | grep -o '"override_sha":"[^"]*"' | cut -d'"' -f4 || true)
-    pp_vault_sha=$(printf '%s' "$pp_json" | grep -o '"vault_sha":"[^"]*"' | cut -d'"' -f4 || true)
-    pp_role=$(printf '%s' "$pp_json" | grep -o '"role":"[^"]*"' | cut -d'"' -f4 || true)
-
-    # Extract numeric/boolean fields (format: "field":value)
-    pp_exit_code=$(printf '%s' "$pp_json" | grep -o '"exit_code":[0-9]*' | cut -d':' -f2 || true)
-    pp_duration=$(printf '%s' "$pp_json" | grep -o '"duration_s":[0-9]*' | cut -d':' -f2 || true)
-    pp_success=$(printf '%s' "$pp_json" | grep -o '"success":[a-z]*' | cut -d':' -f2 || true)
-    pp_git_dirty=$(printf '%s' "$pp_json" | grep -o '"git_dirty":[a-z]*' | cut -d':' -f2 || true)
-
-    # Output fields (only if not null/empty)
-    if [ -n "$pp_ts" ]; then
-      printf 'PP_STATE_TS=%s\\n' "$pp_ts"
-      # Convert ISO timestamp to epoch for backward compatibility
-      if [ "$os_type" = "Darwin" ]; then
-        # macOS: date -j -f (parse format)
-        pp_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$pp_ts" +%s 2>/dev/null || true)
-      else
-        # Linux: date -d (parse date string)
-        pp_epoch=$(date -d "$pp_ts" +%s 2>/dev/null || true)
-      fi
-      if [ -n "$pp_epoch" ]; then
-        printf 'PP_LAST_RUN_EPOCH=%s\\n' "$pp_epoch"
-      fi
-    fi
-    if [ -n "$pp_git_sha" ]; then
-      printf 'PP_GIT_SHA=%s\\n' "$pp_git_sha"
-    fi
-    if [ -n "$pp_git_repo" ]; then
-      printf 'PP_GIT_REPO=%s\\n' "$pp_git_repo"
-    fi
-    if [ -n "$pp_git_branch" ]; then
-      printf 'PP_GIT_BRANCH=%s\\n' "$pp_git_branch"
-    fi
-    if [ -n "$pp_git_dirty" ]; then
-      # Convert boolean to 0/1
-      if [ "$pp_git_dirty" = "true" ]; then
-        printf 'PP_GIT_DIRTY=1\\n'
-      else
-        printf 'PP_GIT_DIRTY=0\\n'
-      fi
-    fi
-    if [ -n "$pp_override_sha" ]; then
-      printf 'PP_OVERRIDE_SHA_APPLIED=%s\\n' "$pp_override_sha"
-    fi
-    if [ -n "$pp_vault_sha" ]; then
-      printf 'PP_VAULT_SHA_APPLIED=%s\\n' "$pp_vault_sha"
-    fi
-    if [ -n "$pp_role" ]; then
-      printf 'PP_ROLE=%s\\n' "$pp_role"
-    fi
-    if [ -n "$pp_exit_code" ]; then
-      printf 'PP_EXIT_CODE=%s\\n' "$pp_exit_code"
-    fi
-    if [ -n "$pp_duration" ]; then
-      printf 'PP_DURATION_S=%s\\n' "$pp_duration"
-    fi
-    if [ -n "$pp_success" ]; then
-      # Convert boolean to 0/1
-      if [ "$pp_success" = "true" ]; then
-        printf 'PP_SUCCESS=1\\n'
-      else
-        printf 'PP_SUCCESS=0\\n'
-      fi
-    fi
+  # Read JSON state file and base64 encode it (handles newlines and any formatting)
+  pp_json_b64=$(sudo -n cat "$pp_json_file" 2>/dev/null | base64 | tr -d '\\n' || true)
+  if [ -n "$pp_json_b64" ]; then
+    printf 'PP_STATE_JSON=%s\\n' "$pp_json_b64"
   fi
 else
   # Fall back to YAML parsing (older systems without JSON state file)

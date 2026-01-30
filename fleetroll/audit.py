@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import datetime
 import json
 import os
 import tempfile
@@ -166,51 +168,51 @@ def process_audit_result(
         except ValueError:
             uptime_s = None
 
-    # Parse puppet state
-    # String fields
-    puppet_state_ts = info.get("PP_STATE_TS")
-    puppet_git_sha = info.get("PP_GIT_SHA")
-    puppet_git_repo = info.get("PP_GIT_REPO")
-    puppet_git_branch = info.get("PP_GIT_BRANCH")
-    puppet_override_sha_applied = info.get("PP_OVERRIDE_SHA_APPLIED")
-    puppet_vault_sha_applied = info.get("PP_VAULT_SHA_APPLIED")
-    puppet_role = info.get("PP_ROLE")
-
-    # Integer fields (with error handling)
+    # Parse puppet state from base64-encoded JSON
+    puppet_state_ts = None
+    puppet_git_sha = None
+    puppet_git_repo = None
+    puppet_git_branch = None
+    puppet_override_sha_applied = None
+    puppet_vault_sha_applied = None
+    puppet_role = None
     puppet_last_run_epoch = None
-    puppet_last_run_raw = info.get("PP_LAST_RUN_EPOCH")
-    if puppet_last_run_raw:
-        try:
-            puppet_last_run_epoch = int(puppet_last_run_raw)
-        except ValueError:
-            puppet_last_run_epoch = None
-
     puppet_exit_code = None
-    puppet_exit_code_raw = info.get("PP_EXIT_CODE")
-    if puppet_exit_code_raw:
-        try:
-            puppet_exit_code = int(puppet_exit_code_raw)
-        except ValueError:
-            puppet_exit_code = None
-
     puppet_duration_s = None
-    puppet_duration_s_raw = info.get("PP_DURATION_S")
-    if puppet_duration_s_raw:
-        try:
-            puppet_duration_s = int(puppet_duration_s_raw)
-        except ValueError:
-            puppet_duration_s = None
-
-    # Boolean fields
     puppet_success = None
-    puppet_success_raw = info.get("PP_SUCCESS")
-    if puppet_success_raw is not None:
-        puppet_success = puppet_success_raw == "1"
-
     puppet_git_dirty = None
-    puppet_git_dirty_raw = info.get("PP_GIT_DIRTY")
-    if puppet_git_dirty_raw is not None:
-        puppet_git_dirty = puppet_git_dirty_raw == "1"
+
+    pp_state_json_b64 = info.get("PP_STATE_JSON")
+    if pp_state_json_b64:
+        try:
+            # Decode base64 and parse JSON
+            pp_state_json = base64.b64decode(pp_state_json_b64).decode("utf-8")
+            pp_state = json.loads(pp_state_json)
+
+            # Extract fields from JSON
+            puppet_state_ts = pp_state.get("ts")
+            puppet_git_sha = pp_state.get("git_sha")
+            puppet_git_repo = pp_state.get("git_repo")
+            puppet_git_branch = pp_state.get("git_branch")
+            puppet_override_sha_applied = pp_state.get("override_sha")
+            puppet_vault_sha_applied = pp_state.get("vault_sha")
+            puppet_role = pp_state.get("role")
+            puppet_exit_code = pp_state.get("exit_code")
+            puppet_duration_s = pp_state.get("duration_s")
+            puppet_success = pp_state.get("success")
+            puppet_git_dirty = pp_state.get("git_dirty")
+
+            # Convert timestamp to epoch
+            if puppet_state_ts:
+                try:
+                    ts_dt = datetime.datetime.fromisoformat(puppet_state_ts)
+                    puppet_last_run_epoch = int(ts_dt.timestamp())
+                except (ValueError, AttributeError):
+                    pass
+
+        except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+            # If parsing fails, leave all fields as None
+            pass
 
     # Compute content hash if we got content
     content_bytes = content.encode("utf-8", "replace")
