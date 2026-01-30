@@ -4,10 +4,11 @@ This directory contains production-ready reference implementations of puppet wra
 
 ## Contents
 
-- **`puppet_state_functions.sh`** - Reusable bash function for writing puppet state metadata
+- **`puppet_state_functions.sh`** - Reusable bash function library for writing puppet state metadata
 - **`run-puppet-linux.sh`** - Linux reference implementation with state tracking
 - **`run-puppet-macos.sh`** - macOS reference implementation with state tracking
-- **`test-state-writing.sh`** - Test script to validate state writing functionality
+- **`test-state-writing.sh`** - Development test script (tests the function implementation)
+- **`verify-state-file.sh`** - Production verifier (checks existing state file format)
 - **`README.md`** - This file
 
 ## Overview
@@ -170,24 +171,39 @@ This ensures puppet convergence is never blocked by state tracking.
 
 ## Testing
 
-### Test Script
+### Development Testing
 
-Run the test script to validate state writing on your system:
+Use `test-state-writing.sh` to test the function implementation during development:
 
 ```bash
-# As regular user (uses /tmp for testing)
-./test-state-writing.sh
-
-# With sudo to test production paths
-sudo ./test-state-writing.sh
+# Run from git repo directory
+cd /path/to/fleetroll_mvp
+bash references/test-state-writing.sh
 ```
 
-The test validates:
-- State writing function loads correctly
-- JSON format is valid
-- All required fields are present
-- Field values match inputs
-- Failure scenarios work correctly
+This test:
+- Sources and tests the `puppet_state_functions.sh` function
+- Creates temporary git repos and config files
+- Validates function behavior in various scenarios (clean/dirty repos, success/failure)
+- Tests JSON format and field values
+
+### Production Verification
+
+Use `verify-state-file.sh` to check the existing state file on production hosts:
+
+```bash
+# Copy verifier to host and run
+scp references/verify-state-file.sh user@host:~/
+ssh user@host
+sudo ./verify-state-file.sh
+```
+
+This verifier:
+- Checks that `/etc/puppet/last_run_metadata.json` exists
+- Validates JSON format
+- Verifies all required fields are present
+- Shows current file content and age
+- Does NOT require `puppet_state_functions.sh` to be present
 
 ### Manual Testing
 

@@ -22,14 +22,21 @@ echo "========================================"
 echo ""
 
 # Source the state writing function library
-if [ ! -f "${SCRIPT_DIR}/puppet_state_functions.sh" ]; then
-    echo -e "${RED}FAIL${NC}: puppet_state_functions.sh not found at ${SCRIPT_DIR}/puppet_state_functions.sh"
+# Check local directory first (for development), then production path
+if [ -f "${SCRIPT_DIR}/puppet_state_functions.sh" ]; then
+    echo -e "${GREEN}✓${NC} Found puppet_state_functions.sh (local)"
+    # shellcheck disable=SC1091
+    source "${SCRIPT_DIR}/puppet_state_functions.sh"
+elif [ -f "/etc/puppet/lib/puppet_state_functions.sh" ]; then
+    echo -e "${GREEN}✓${NC} Found puppet_state_functions.sh (production: /etc/puppet/lib)"
+    # shellcheck disable=SC1091
+    source "/etc/puppet/lib/puppet_state_functions.sh"
+else
+    echo -e "${RED}FAIL${NC}: puppet_state_functions.sh not found"
+    echo "  Checked: ${SCRIPT_DIR}/puppet_state_functions.sh"
+    echo "  Checked: /etc/puppet/lib/puppet_state_functions.sh"
     exit 1
 fi
-
-echo -e "${GREEN}✓${NC} Found puppet_state_functions.sh"
-# shellcheck disable=SC1091
-source "${SCRIPT_DIR}/puppet_state_functions.sh"
 
 if ! type write_puppet_state >/dev/null 2>&1; then
     echo -e "${RED}FAIL${NC}: write_puppet_state function not loaded"
