@@ -10,6 +10,8 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
+# TODO: take an arg that controls if local or not
+
 branch_name="$1"
 script_dir=$(dirname "$0")
 # resolve user_override_dir to absolute path
