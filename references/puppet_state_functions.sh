@@ -3,26 +3,37 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-# Puppet State Writing Function
+# Puppet State Functions Library
 #
-# Writes puppet run metadata to /etc/puppet/last_run_metadata.json
-# This provides ground truth about what puppet actually applied.
+# This file contains shell functions for writing puppet run metadata.
+# It should be sourced by run-puppet.sh, not executed directly.
 #
-# CRITICAL: This function must NEVER fail the puppet run.
-# All errors are logged but execution continues.
-
-# Usage:
-#   write_puppet_state <working_dir> <role> <exit_code> <duration_s> <override_path> <vault_path> [state_file]
+# Installation:
+#   Install this file at: /etc/puppet/lib/puppet_state_functions.sh
 #
-# Example integration in run-puppet.sh:
+# Usage in run-puppet.sh:
+#   source /etc/puppet/lib/puppet_state_functions.sh
+#
 #   SECONDS=0
 #   run_puppet
 #   retval=$?
 #   PUPPET_RUN_DURATION=$SECONDS
-#   write_puppet_state "$WORKING_DIR" "$ROLE" "$retval" "$PUPPET_RUN_DURATION" "/etc/puppet/ronin_settings" "/root/vault.yaml"
+#   write_puppet_state "$WORKING_DIR" "$ROLE" "$retval" "$PUPPET_RUN_DURATION" \
+#       "/etc/puppet/ronin_settings" "/root/vault.yaml"
 #
-# Example for testing:
-#   write_puppet_state "$WORKING_DIR" "$ROLE" "$retval" "$PUPPET_RUN_DURATION" "/etc/puppet/ronin_settings" "/root/vault.yaml" "/tmp/test_state.json"
+# Testing:
+#   write_puppet_state "$WORKING_DIR" "$ROLE" "$retval" "$PUPPET_RUN_DURATION" \
+#       "/etc/puppet/ronin_settings" "/root/vault.yaml" "/tmp/test_state.json"
+#
+# Functions provided:
+#   write_puppet_state - Writes puppet run metadata to /etc/puppet/last_run_metadata.json
+#
+# CRITICAL: This function must NEVER fail the puppet run.
+# All errors are logged but execution continues.
+
+# write_puppet_state
+# Writes puppet run metadata to /etc/puppet/last_run_metadata.json
+# This provides ground truth about what puppet actually applied.
 #
 # Parameters:
 #   working_dir    - Git working directory for puppet code (e.g., /etc/puppet/environments/mozilla-platform-ops/code)

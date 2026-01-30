@@ -4,7 +4,7 @@ This directory contains production-ready reference implementations of puppet wra
 
 ## Contents
 
-- **`write_puppet_state.sh`** - Reusable bash function for writing puppet state metadata
+- **`puppet_state_functions.sh`** - Reusable bash function for writing puppet state metadata
 - **`run-puppet-linux.sh`** - Linux reference implementation with state tracking
 - **`run-puppet-macos.sh`** - macOS reference implementation with state tracking
 - **`test-state-writing.sh`** - Test script to validate state writing functionality
@@ -59,13 +59,12 @@ The reference scripts are based on the examples in `examples/` with minimal chan
 
 ### Integration Points
 
-**1. Source the state writing function** (added to top of script):
+**1. Source the state writing function library** (added to top of script):
 ```bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "${SCRIPT_DIR}/write_puppet_state.sh" ]; then
-    source "${SCRIPT_DIR}/write_puppet_state.sh"
+if [ -f "/etc/puppet/lib/puppet_state_functions.sh" ]; then
+    source "/etc/puppet/lib/puppet_state_functions.sh"
 else
-    echo "WARNING: Could not load state writing function" >&2
+    echo "WARNING: Could not load state writing function from /etc/puppet/lib/puppet_state_functions.sh" >&2
 fi
 ```
 
@@ -104,24 +103,27 @@ fi
 
 ### Prerequisites
 
-1. Ensure `write_puppet_state.sh` is deployed alongside the run-puppet script
-2. Ensure the script can source the state writer (same directory)
+1. Ensure `puppet_state_functions.sh` is deployed to `/etc/puppet/lib/`
+2. Ensure `/etc/puppet/lib/` directory exists
 3. Ensure `/etc/puppet/` directory exists (already present for ronin_settings)
 
 ### Deployment Steps
 
 1. **Deploy both files to target hosts**:
    ```bash
-   # Example deployment locations:
-   /usr/local/bin/run-puppet.sh           # Main script
-   /usr/local/lib/write_puppet_state.sh   # State writer function
+   # Standard deployment locations:
+   /usr/local/bin/run-puppet.sh                 # Main script (executable)
+   /etc/puppet/lib/puppet_state_functions.sh    # State writer function library
    ```
 
-2. **Update source path if needed**:
-   If you deploy to different directories, update the source line in the run-puppet script:
+2. **Create library directory if needed**:
    ```bash
-   source "/usr/local/lib/write_puppet_state.sh"
+   sudo mkdir -p /etc/puppet/lib
+   sudo chmod 755 /etc/puppet/lib
    ```
+
+3. **Verify the integration**:
+   The run-puppet scripts are already configured to source from `/etc/puppet/lib/puppet_state_functions.sh`
 
 3. **Test the integration**:
    ```bash
@@ -236,9 +238,10 @@ The state file is **additive only**:
 ### State file not created
 
 Check:
-1. Is `write_puppet_state.sh` in the same directory as run-puppet script?
-2. Does the puppet script have permission to write to `/etc/puppet/`?
-3. Check stderr output for warnings
+1. Is `puppet_state_functions.sh` installed at `/etc/puppet/lib/puppet_state_functions.sh`?
+2. Does `/etc/puppet/lib/` directory exist?
+3. Does the puppet script have permission to write to `/etc/puppet/`?
+4. Check stderr output for warnings
 
 ### Invalid JSON in state file
 

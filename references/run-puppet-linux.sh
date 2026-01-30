@@ -4,19 +4,18 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # ==============================================================================
-# PUPPET RUN METADATA: Source state writing function
+# PUPPET RUN METADATA: Source state writing function library
 # ==============================================================================
 # This script writes puppet run metadata to /etc/puppet/last_run_metadata.json
 # after each puppet run, enabling ground-truth tracking of applied configuration.
 # The metadata includes git SHA, success status, duration, and file checksums.
 #
 # See: docs/puppet-state-tracking.md for details
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "${SCRIPT_DIR}/write_puppet_state.sh" ]; then
+if [ -f "/etc/puppet/lib/puppet_state_functions.sh" ]; then
     # shellcheck disable=SC1091
-    source "${SCRIPT_DIR}/write_puppet_state.sh"
+    source "/etc/puppet/lib/puppet_state_functions.sh"
 else
-    echo "WARNING: Could not load state writing function from ${SCRIPT_DIR}/write_puppet_state.sh" >&2
+    echo "WARNING: Could not load state writing function from /etc/puppet/lib/puppet_state_functions.sh" >&2
 fi
 # ==============================================================================
 

@@ -21,15 +21,15 @@ echo "Puppet State Writing Test"
 echo "========================================"
 echo ""
 
-# Source the state writing function
-if [ ! -f "${SCRIPT_DIR}/write_puppet_state.sh" ]; then
-    echo -e "${RED}FAIL${NC}: write_puppet_state.sh not found at ${SCRIPT_DIR}/write_puppet_state.sh"
+# Source the state writing function library
+if [ ! -f "${SCRIPT_DIR}/puppet_state_functions.sh" ]; then
+    echo -e "${RED}FAIL${NC}: puppet_state_functions.sh not found at ${SCRIPT_DIR}/puppet_state_functions.sh"
     exit 1
 fi
 
-echo -e "${GREEN}✓${NC} Found write_puppet_state.sh"
+echo -e "${GREEN}✓${NC} Found puppet_state_functions.sh"
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/write_puppet_state.sh"
+source "${SCRIPT_DIR}/puppet_state_functions.sh"
 
 if ! type write_puppet_state >/dev/null 2>&1; then
     echo -e "${RED}FAIL${NC}: write_puppet_state function not loaded"
