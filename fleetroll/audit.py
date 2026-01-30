@@ -167,6 +167,16 @@ def process_audit_result(
             uptime_s = None
 
     # Parse puppet state
+    # String fields
+    puppet_state_ts = info.get("PP_STATE_TS")
+    puppet_git_sha = info.get("PP_GIT_SHA")
+    puppet_git_repo = info.get("PP_GIT_REPO")
+    puppet_git_branch = info.get("PP_GIT_BRANCH")
+    puppet_override_sha_applied = info.get("PP_OVERRIDE_SHA_APPLIED")
+    puppet_vault_sha_applied = info.get("PP_VAULT_SHA_APPLIED")
+    puppet_role = info.get("PP_ROLE")
+
+    # Integer fields (with error handling)
     puppet_last_run_epoch = None
     puppet_last_run_raw = info.get("PP_LAST_RUN_EPOCH")
     if puppet_last_run_raw:
@@ -175,10 +185,32 @@ def process_audit_result(
         except ValueError:
             puppet_last_run_epoch = None
 
+    puppet_exit_code = None
+    puppet_exit_code_raw = info.get("PP_EXIT_CODE")
+    if puppet_exit_code_raw:
+        try:
+            puppet_exit_code = int(puppet_exit_code_raw)
+        except ValueError:
+            puppet_exit_code = None
+
+    puppet_duration_s = None
+    puppet_duration_s_raw = info.get("PP_DURATION_S")
+    if puppet_duration_s_raw:
+        try:
+            puppet_duration_s = int(puppet_duration_s_raw)
+        except ValueError:
+            puppet_duration_s = None
+
+    # Boolean fields
     puppet_success = None
     puppet_success_raw = info.get("PP_SUCCESS")
     if puppet_success_raw is not None:
         puppet_success = puppet_success_raw == "1"
+
+    puppet_git_dirty = None
+    puppet_git_dirty_raw = info.get("PP_GIT_DIRTY")
+    if puppet_git_dirty_raw is not None:
+        puppet_git_dirty = puppet_git_dirty_raw == "1"
 
     # Compute content hash if we got content
     content_bytes = content.encode("utf-8", "replace")
@@ -229,8 +261,18 @@ def process_audit_result(
             "vault_meta": vault_meta,
             "vault_sha256": info.get("VLT_SHA256") or vault_sha256,
             "uptime_s": uptime_s,
+            "puppet_state_ts": puppet_state_ts,
             "puppet_last_run_epoch": puppet_last_run_epoch,
             "puppet_success": puppet_success,
+            "puppet_git_sha": puppet_git_sha,
+            "puppet_git_repo": puppet_git_repo,
+            "puppet_git_branch": puppet_git_branch,
+            "puppet_git_dirty": puppet_git_dirty,
+            "puppet_override_sha_applied": puppet_override_sha_applied,
+            "puppet_vault_sha_applied": puppet_vault_sha_applied,
+            "puppet_role": puppet_role,
+            "puppet_exit_code": puppet_exit_code,
+            "puppet_duration_s": puppet_duration_s,
         },
     }
 

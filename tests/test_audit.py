@@ -447,3 +447,154 @@ OVERRIDE_PRESENT=0
         )
         assert result["observed"]["puppet_last_run_epoch"] is None
         assert result["observed"]["puppet_success"] is None
+
+    def test_parses_all_new_puppet_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Extracts all new puppet state fields from JSON metadata."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=1
+ROLE=test-role
+OVERRIDE_PRESENT=0
+PP_STATE_TS=2024-01-25T12:34:56Z
+PP_LAST_RUN_EPOCH=1706187296
+PP_SUCCESS=1
+PP_GIT_SHA=abc123def456
+PP_GIT_REPO=https://github.com/example/repo.git
+PP_GIT_BRANCH=main
+PP_GIT_DIRTY=0
+PP_OVERRIDE_SHA_APPLIED=def789abc012
+PP_VAULT_SHA_APPLIED=ghi345jkl678
+PP_ROLE=gecko-t-linux-talos
+PP_EXIT_CODE=2
+PP_DURATION_S=145
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        # String fields
+        assert result["observed"]["puppet_state_ts"] == "2024-01-25T12:34:56Z"
+        assert result["observed"]["puppet_git_sha"] == "abc123def456"  # pragma: allowlist secret
+        assert result["observed"]["puppet_git_repo"] == "https://github.com/example/repo.git"
+        assert result["observed"]["puppet_git_branch"] == "main"
+        assert (
+            result["observed"]["puppet_override_sha_applied"]
+            == "def789abc012"  # pragma: allowlist secret
+        )
+        assert (
+            result["observed"]["puppet_vault_sha_applied"]
+            == "ghi345jkl678"  # pragma: allowlist secret
+        )
+        assert result["observed"]["puppet_role"] == "gecko-t-linux-talos"
+        # Integer fields
+        assert result["observed"]["puppet_last_run_epoch"] == 1706187296
+        assert result["observed"]["puppet_exit_code"] == 2
+        assert result["observed"]["puppet_duration_s"] == 145
+        # Boolean fields
+        assert result["observed"]["puppet_success"] is True
+        assert result["observed"]["puppet_git_dirty"] is False
+
+    def test_parses_git_dirty_true(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Correctly parses git_dirty when true."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+PP_GIT_DIRTY=1
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_git_dirty"] is True
+
+    def test_new_puppet_fields_none_when_missing(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+    ):
+        """All new puppet fields are None when not in output."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        # String fields
+        assert result["observed"]["puppet_state_ts"] is None
+        assert result["observed"]["puppet_git_sha"] is None
+        assert result["observed"]["puppet_git_repo"] is None
+        assert result["observed"]["puppet_git_branch"] is None
+        assert result["observed"]["puppet_override_sha_applied"] is None
+        assert result["observed"]["puppet_vault_sha_applied"] is None
+        assert result["observed"]["puppet_role"] is None
+        # Integer fields
+        assert result["observed"]["puppet_exit_code"] is None
+        assert result["observed"]["puppet_duration_s"] is None
+        # Boolean fields
+        assert result["observed"]["puppet_git_dirty"] is None
+
+    def test_puppet_integer_parsing_error_handling(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+    ):
+        """Handles invalid integer values gracefully."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+PP_EXIT_CODE=invalid
+PP_DURATION_S=not_a_number
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_exit_code"] is None
+        assert result["observed"]["puppet_duration_s"] is None
+
+    def test_backward_compatibility_old_format(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Old format without PP_STATE_TS still works."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=1
+ROLE=test-role
+OVERRIDE_PRESENT=0
+PP_LAST_RUN_EPOCH=1706140800
+PP_SUCCESS=1
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        # Old fields still work
+        assert result["observed"]["puppet_last_run_epoch"] == 1706140800
+        assert result["observed"]["puppet_success"] is True
+        # New fields are None
+        assert result["observed"]["puppet_state_ts"] is None
+        assert result["observed"]["puppet_git_sha"] is None
