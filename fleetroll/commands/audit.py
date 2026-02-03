@@ -51,6 +51,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger("fleetroll")
 
 
+def format_status_indicator(emoji: str, status: str, color: str) -> str:
+    """Format colored emoji + status text.
+
+    Args:
+        emoji: The status emoji (✓, ⚠, ✗)
+        status: Status text (SUCCESS, WARNING, FAILED)
+        color: Click color name (green, yellow, red)
+
+    Returns:
+        Colored formatted string
+    """
+    return click.style(f"{emoji} {status}", fg=color)
+
+
 def format_single_host_quiet(result: dict[str, Any], elapsed_seconds: float) -> str:
     """Format single host audit result in quiet mode.
 
@@ -65,9 +79,12 @@ def format_single_host_quiet(result: dict[str, Any], elapsed_seconds: float) -> 
     elapsed = format_elapsed_time(elapsed_seconds)
 
     if result.get("ok"):
-        return f"✓ {host} ({elapsed})"
+        status = format_status_indicator("✓", "SUCCESS", "green")
+        return f"{status} {host} ({elapsed})"
+
+    status = format_status_indicator("✗", "FAILED", "red")
     error = result.get("error", result.get("stderr", "unknown"))
-    return f"✗ {host}: {error} ({elapsed})"
+    return f"{status} {host}: {error} ({elapsed})"
 
 
 def format_batch_quiet(summary: dict[str, Any], elapsed_seconds: float) -> str:
@@ -86,16 +103,16 @@ def format_batch_quiet(summary: dict[str, Any], elapsed_seconds: float) -> str:
     elapsed = format_elapsed_time(elapsed_seconds)
 
     if failed == 0:
-        symbol = "✓"
+        status = format_status_indicator("✓", "SUCCESS", "green")
         failure_text = ""
     elif failed == total:
-        symbol = "✗"
+        status = format_status_indicator("✗", "FAILED", "red")
         failure_text = f" ({failed} failed)"
     else:
-        symbol = "⚠"
+        status = format_status_indicator("⚠", "WARNING", "yellow")
         failure_text = f" ({failed} failed)"
 
-    return f"{symbol} {successful}/{total} hosts successful{failure_text} ({elapsed})"
+    return f"{status} {successful}/{total} hosts successful{failure_text} ({elapsed})"
 
 
 def format_progress_label(remaining: int, *, elapsed_s: float) -> str:

@@ -29,6 +29,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def format_status_indicator(emoji: str, status: str, color: str) -> str:
+    """Format colored emoji + status text.
+
+    Args:
+        emoji: The status emoji (✓, ⚠, ✗)
+        status: Status text (SUCCESS, WARNING, FAILED)
+        color: Click color name (green, yellow, red)
+
+    Returns:
+        Colored formatted string
+    """
+    return click.style(f"{emoji} {status}", fg=color)
+
+
 def format_tc_fetch_quiet(
     *,
     worker_count: int,
@@ -50,14 +64,14 @@ def format_tc_fetch_quiet(
     elapsed = format_elapsed_time(elapsed_seconds)
 
     if warnings:
-        symbol = "⚠"
+        status = format_status_indicator("⚠", "WARNING", "yellow")
         warning_text = " (" + ", ".join(warnings) + ")"
     else:
-        symbol = "✓"
+        status = format_status_indicator("✓", "SUCCESS", "green")
         warning_text = ""
 
     return (
-        f"{symbol} Wrote {worker_count} worker(s), {scan_count} scan(s){warning_text} ({elapsed})"
+        f"{status} Wrote {worker_count} worker(s), {scan_count} scan(s){warning_text} ({elapsed})"
     )
 
 

@@ -101,6 +101,7 @@ class TestFormatTcFetchQuiet:
             elapsed_seconds=30,
         )
         assert "✓" in result
+        assert "SUCCESS" in result
         assert "5 worker(s)" in result
         assert "2 scan(s)" in result
         assert "30s" in result
@@ -115,6 +116,7 @@ class TestFormatTcFetchQuiet:
             elapsed_seconds=60,
         )
         assert "⚠" in result
+        assert "WARNING" in result
         assert "3 worker(s)" in result
         assert "1 scan(s)" in result
         assert "timeout, api error" in result
@@ -129,6 +131,7 @@ class TestFormatTcFetchQuiet:
             elapsed_seconds=45,
         )
         assert "⚠" in result
+        assert "WARNING" in result
         assert "rate limit" in result
 
     def test_zero_counts(self):
@@ -140,6 +143,7 @@ class TestFormatTcFetchQuiet:
             elapsed_seconds=5,
         )
         assert "✓" in result
+        assert "SUCCESS" in result
         assert "0 worker(s)" in result
         assert "0 scan(s)" in result
 
@@ -151,6 +155,8 @@ class TestFormatTcFetchQuiet:
             warnings=[],
             elapsed_seconds=10,
         )
+        assert "✓" in result
+        assert "SUCCESS" in result
         assert "1 worker(s)" in result
         assert "1 scan(s)" in result
 
