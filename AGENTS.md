@@ -110,9 +110,6 @@ This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) 
 - **Creating new beads**: Use descriptive titles, descriptions, and set appropriate priority and type.
 - **Closing beads**: When asked to close a bead and files have changed during the
   work, suggest a git commit message that mentions any relevant beads (e.g. `Refactor draw_screen into 8 focused methods (mvp-5jc <bead state>)`)
-- U
-- Always `br sync` before ending session
-
 
 ### Essential Commands
 
@@ -134,7 +131,6 @@ br dep remove <id> <depends_on>
 br dep list
 br close <id> --reason="Completed"
 br close <id1> <id2>  # Close multiple issues at once
-br sync               # Commit and push changes
 ```
 
 **IMPORTANT: Never edit `.beads/*.jsonl` files directly. Always use `br` commands.**
@@ -145,7 +141,6 @@ br sync               # Commit and push changes
 2. **Claim**: Use `br update <id> --status=in_progress`
 3. **Work**: Implement the task
 4. **Complete**: Use `br close <id>`
-5. **Sync**: Always run `br sync` at session end
 
 ### Key Concepts
 
@@ -169,9 +164,7 @@ Example workflow:
 ```bash
 git status              # Check what changed
 git add <files>         # Stage code changes
-br sync                 # Commit beads changes
 git commit -m "..."     # Commit code
-br sync                 # Commit any new beads changes
 git push                # Push to remote
 ```
 
