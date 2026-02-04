@@ -302,12 +302,14 @@ class MonitorDisplay:
         return mapping
 
     def handle_key(self, key: int) -> bool:
-        # Handle help popup dismissal
+        # Handle help popup dismissal - any key closes help (except '?' which opens it)
         if self.show_help:
-            if key in (27, ord("q"), ord("Q")):  # 27 = Escape
+            # Don't dismiss on '?' to avoid immediate close when opening
+            # Don't dismiss on -1 (timeout/no key pressed)
+            if key != ord("?") and key != -1:
                 self.show_help = False
                 self.draw_screen()
-            return False  # Ignore other keys while help is shown
+            return False  # Don't process the key that closed help
 
         if key in (ord("q"), ord("Q")):
             return True

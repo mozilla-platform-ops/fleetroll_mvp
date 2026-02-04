@@ -10,12 +10,12 @@ FLEETROLL_MASCOT = [
 ]
 
 COLUMN_GUIDE_TEXT = """\
-Column Guide (press q or Esc to close)
+Column Guide (press any key to close)
 
 Keybindings:
-  q, Q        Quit monitor
-  s, S        Toggle sort order (host ↔ role)
-  o, O        Toggle override filter (all hosts ↔ overrides only)
+  s           Toggle sort order (host ↔ role)
+  o           Toggle override filter (all hosts ↔ overrides only)
+  q           Quit monitor
 
 Columns:
 HOST      Hostname (FQDN suffix stripped if common)
