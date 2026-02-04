@@ -7,7 +7,10 @@ from collections.abc import Iterable
 from curses import error as curses_error
 from importlib.metadata import version as get_version
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .cache import ShaInfoCache
 
 from ...constants import HOST_OBSERVATIONS_FILE_NAME, TC_WORKERS_FILE_NAME
 from ...utils import get_log_file_size
@@ -38,6 +41,7 @@ class MonitorDisplay:
         latest_ok: dict[str, dict[str, Any]],
         tc_data: dict[str, dict[str, Any]],
         tc_workers_path: Path,
+        sha_cache: ShaInfoCache | None = None,
     ) -> None:
         self.stdscr = stdscr
         self.hosts = hosts
@@ -47,6 +51,7 @@ class MonitorDisplay:
         self.latest_ok = latest_ok
         self.tc_data = tc_data
         self.tc_workers_path = tc_workers_path
+        self.sha_cache = sha_cache
         self.tc_file_mtime = None
         self.offset = 0
         self.col_offset = 0
@@ -460,7 +465,9 @@ class MonitorDisplay:
             "host",
             "role",
             "vlt_sha",
+            "vlt_info",
             "sha",
+            "ovr_info",
             "uptime",
             "pp_last",
             "tc_last",
@@ -476,7 +483,9 @@ class MonitorDisplay:
             "uptime": "UPTIME",
             "role": "ROLE",
             "sha": "OVR_SHA",
+            "ovr_info": "OVR_INFO",
             "vlt_sha": "VLT_SHA",
+            "vlt_info": "VLT_INFO",
             "tc_quar": "TC_QUAR",
             "tc_last": "TC_LAST",
             "tc_j_sf": "TC_T_DUR",
@@ -496,12 +505,13 @@ class MonitorDisplay:
                 last_ok=self.latest_ok.get(host),
                 tc_data=tc_worker_data,
                 fqdn_suffix=self.fqdn_suffix,
+                sha_cache=self.sha_cache,
             )
             for col in all_columns:
                 widths[col] = max(widths[col], len(values[col]))
 
         # Add padding for role/sha columns
-        for col in ("role", "sha", "vlt_sha"):
+        for col in ("role", "sha", "vlt_sha", "ovr_info", "vlt_info"):
             if col in widths:
                 widths[col] += 2
 
@@ -536,6 +546,7 @@ class MonitorDisplay:
                 last_ok=self.latest_ok.get(host),
                 tc_data=tc_worker_data,
                 fqdn_suffix=self.fqdn_suffix,
+                sha_cache=self.sha_cache,
             )
             sha = values.get("sha", "")
             vlt_sha = values.get("vlt_sha", "")
@@ -815,6 +826,7 @@ class MonitorDisplay:
             last_ok=self.latest_ok.get(host),
             tc_data=tc_worker_data,
             fqdn_suffix=self.fqdn_suffix,
+            sha_cache=self.sha_cache,
         )
         ts_value = resolve_last_ok_ts(self.latest.get(host), last_ok=self.latest_ok.get(host))
         tc_ts_value = tc_worker_data.get("ts") if tc_worker_data else None

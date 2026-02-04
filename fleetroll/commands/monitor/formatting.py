@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .data import build_row_values, strip_fqdn
+
+if TYPE_CHECKING:
+    from .cache import ShaInfoCache
 
 
 def clip_cell(value: str, width: int) -> str:
@@ -49,13 +52,16 @@ def compute_columns_and_widths(
     cap_widths: bool = True,
     sep_len: int = 1,
     fqdn_suffix: str | None = None,
+    sha_cache: ShaInfoCache | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     """Compute columns and widths that fit within max_width."""
     columns = [
         "host",
         "role",
         "vlt_sha",
+        "vlt_info",
         "sha",
+        "ovr_info",
         "uptime",
         "pp_last",
         "tc_last",
@@ -70,7 +76,9 @@ def compute_columns_and_widths(
         "uptime": "UPTIME",
         "role": "ROLE",
         "sha": "OVR_SHA",
+        "ovr_info": "OVR_INFO",
         "vlt_sha": "VLT_SHA",
+        "vlt_info": "VLT_INFO",
         "tc_quar": "TC_QUAR",
         "tc_last": "TC_LAST",
         "tc_j_sf": "TC_T_DUR",
@@ -84,7 +92,9 @@ def compute_columns_and_widths(
         "uptime": 16,
         "role": 40,
         "sha": 12,
+        "ovr_info": 25,
         "vlt_sha": 12,
+        "vlt_info": 20,
         "tc_quar": 8,
         "tc_last": 12,
         "tc_j_sf": 20,
@@ -106,6 +116,7 @@ def compute_columns_and_widths(
             last_ok=latest_ok.get(host) if latest_ok else None,
             tc_data=tc_data.get(short_host),
             fqdn_suffix=fqdn_suffix,
+            sha_cache=sha_cache,
         )
         for col in columns:
             widths[col] = max(widths[col], len(values[col]))
@@ -117,7 +128,9 @@ def compute_columns_and_widths(
         return columns, widths
 
     drop_order = [
+        "vlt_info",
         "vlt_sha",
+        "ovr_info",
         "sha",
         "role",
         "uptime",
@@ -160,10 +173,11 @@ def format_monitor_row(
     widths: dict[str, int],
     col_sep: str = " ",
     fqdn_suffix: str | None = None,
+    sha_cache: ShaInfoCache | None = None,
 ) -> str:
     """Format a single table row for a host."""
     values = build_row_values(
-        host, record, last_ok=last_ok, tc_data=tc_data, fqdn_suffix=fqdn_suffix
+        host, record, last_ok=last_ok, tc_data=tc_data, fqdn_suffix=fqdn_suffix, sha_cache=sha_cache
     )
     parts = [clip_cell(values[col], widths[col]) for col in columns]
     return col_sep.join(parts)
@@ -181,6 +195,7 @@ def render_monitor_lines(
     start: int = 0,
     limit: int | None = None,
     fqdn_suffix: str | None = None,
+    sha_cache: ShaInfoCache | None = None,
 ) -> tuple[str, list[str]]:
     """Render monitor header + lines in the provided host order."""
     tc_data = tc_data or {}
@@ -193,13 +208,16 @@ def render_monitor_lines(
         cap_widths=cap_widths,
         sep_len=len(col_sep),
         fqdn_suffix=fqdn_suffix,
+        sha_cache=sha_cache,
     )
     labels = {
         "host": "HOST",
         "uptime": "UPTIME",
         "role": "ROLE",
         "sha": "OVR_SHA",
+        "ovr_info": "OVR_INFO",
         "vlt_sha": "VLT_SHA",
+        "vlt_info": "VLT_INFO",
         "tc_quar": "TC_QUAR",
         "tc_last": "TC_LAST",
         "tc_j_sf": "TC_T_DUR",
@@ -225,6 +243,7 @@ def render_monitor_lines(
             widths=widths,
             col_sep=col_sep,
             fqdn_suffix=fqdn_suffix,
+            sha_cache=sha_cache,
         )
         for host in host_slice
     ]

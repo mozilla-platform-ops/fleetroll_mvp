@@ -7,12 +7,15 @@ import json
 import time
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ...audit import iter_audit_records
 from ...constants import HOST_OBSERVATIONS_FILE_NAME
 from ...humanhash import humanize
 from ...utils import natural_sort_key
+
+if TYPE_CHECKING:
+    from .cache import ShaInfoCache
 
 
 def record_matches(
@@ -228,6 +231,7 @@ def build_ok_row_values(
     *,
     tc_data: dict[str, Any] | None = None,
     fqdn_suffix: str | None = None,
+    sha_cache: ShaInfoCache | None = None,
 ) -> dict[str, str]:
     """Build string values for an OK monitor row."""
     # Strip common FQDN suffix if provided
@@ -248,6 +252,15 @@ def build_ok_row_values(
         sha = f"{sha} {humanize(sha_full, words=2)}"
     if vault_sha_full:
         vault_sha = f"{vault_sha} {humanize(vault_sha_full, words=2)}"
+
+    # Get human-readable info
+    ovr_info = "-"
+    vlt_info = "-"
+    if sha_cache:
+        if sha_full:
+            ovr_info = sha_cache.get_override_info(sha_full)
+        if vault_sha_full:
+            vlt_info = sha_cache.get_vault_info(vault_sha_full)
     meta = observed.get("override_meta") or {}
     mtime = meta.get("mtime_epoch") if override_present else "-"
 
@@ -398,7 +411,9 @@ def build_ok_row_values(
         "override": override_state,
         "role": role,
         "sha": sha,
+        "ovr_info": ovr_info,
         "vlt_sha": vault_sha,
+        "vlt_info": vlt_info,
         "mtime": str(mtime),
         "err": "-",
         "tc_quar": tc_quar,
@@ -418,6 +433,7 @@ def build_row_values(
     last_ok: dict[str, Any] | None = None,
     tc_data: dict[str, Any] | None = None,
     fqdn_suffix: str | None = None,
+    sha_cache: ShaInfoCache | None = None,
 ) -> dict[str, str]:
     """Build string values for a monitor row."""
     # Strip common FQDN suffix if provided
@@ -438,7 +454,9 @@ def build_row_values(
             "override": "?",
             "role": "?",
             "sha": "?",
+            "ovr_info": "?",
             "vlt_sha": "?",
+            "vlt_info": "?",
             "mtime": "?",
             "err": "?",
             "tc_quar": "-",
@@ -453,7 +471,9 @@ def build_row_values(
     if not record.get("ok"):
         err = record.get("error") or record.get("stderr") or "error"
         if last_ok and last_ok.get("ok"):
-            values = build_ok_row_values(host, last_ok, tc_data=tc_data, fqdn_suffix=fqdn_suffix)
+            values = build_ok_row_values(
+                host, last_ok, tc_data=tc_data, fqdn_suffix=fqdn_suffix, sha_cache=sha_cache
+            )
             values["status"] = "FAIL"
             values["err"] = err
             return values
@@ -471,7 +491,9 @@ def build_row_values(
             "override": "-",
             "role": "-",
             "sha": "-",
+            "ovr_info": "-",
             "vlt_sha": "-",
+            "vlt_info": "-",
             "mtime": "-",
             "err": err,
             "tc_quar": "-",
@@ -483,7 +505,9 @@ def build_row_values(
             "data": f"{audit_str}/{tc_str}",
         }
 
-    return build_ok_row_values(host, record, tc_data=tc_data, fqdn_suffix=fqdn_suffix)
+    return build_ok_row_values(
+        host, record, tc_data=tc_data, fqdn_suffix=fqdn_suffix, sha_cache=sha_cache
+    )
 
 
 def resolve_last_ok_ts(

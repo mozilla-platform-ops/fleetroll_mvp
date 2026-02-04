@@ -16,6 +16,7 @@ from ...utils import (
     is_host_file,
     parse_host_list,
 )
+from .cache import ShaInfoCache
 from .data import (
     AuditLogTailer,
     get_host_sort_key,
@@ -61,6 +62,13 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
     tc_workers_path = Path.home() / ".fleetroll" / TC_WORKERS_FILE_NAME
     tc_data = load_tc_worker_data(tc_workers_path)
 
+    # Load SHA info cache
+    fleetroll_dir = Path.home() / ".fleetroll"
+    overrides_dir = fleetroll_dir / "overrides"
+    vault_dir = fleetroll_dir / "vault_yamls"
+    sha_cache = ShaInfoCache(overrides_dir, vault_dir)
+    sha_cache.load_all()
+
     if args.once:
         # Sort hosts according to --sort option
         sorted_hosts = sorted(
@@ -82,6 +90,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 max_width=0,
                 cap_widths=False,
                 col_sep="  ",
+                sha_cache=sha_cache,
             )
             print(header)
             for line in lines:
@@ -111,6 +120,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 max_width=0,
                 cap_widths=False,
                 sep_len=2,
+                sha_cache=sha_cache,
             )
             header, lines = render_monitor_lines(
                 hosts=sorted_hosts,
@@ -120,6 +130,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 max_width=0,
                 cap_widths=False,
                 col_sep="  ",
+                sha_cache=sha_cache,
             )
             print(header)
             for line in lines:
@@ -145,6 +156,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                         columns=columns,
                         widths=widths,
                         col_sep="  ",
+                        sha_cache=sha_cache,
                     )
                 )
         return
@@ -160,6 +172,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
             latest_ok=latest_ok,
             tc_data=tc_data,
             tc_workers_path=tc_workers_path,
+            sha_cache=sha_cache,
         )
         display.draw_screen()
         tailer = AuditLogTailer(
