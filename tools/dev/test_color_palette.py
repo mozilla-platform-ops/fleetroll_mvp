@@ -125,11 +125,13 @@ def main():
         print("  ".join(row_parts))
 
     print("\n" + "=" * 100)
-    total = 15 + 19  # 15 colors (7 standard + 8 extended) + 19 fg/bg combos
+    palette_colors = len(BASIC_COLORS) + len(EXTENDED_COLORS)
+    fg_bg_count = len(FG_BG_COMBOS)
+    total = palette_colors + fg_bg_count
     print(
         f"Total capacity: {total} distinct appearances "
-        f"(15 palette + 19 fg/bg combos)\n"
-        f"Palette: 7 standard + 8 extended 256-colors\n"
+        f"({palette_colors} palette + {fg_bg_count} fg/bg combos)\n"
+        f"Palette: {len(BASIC_COLORS)} standard + {len(EXTENDED_COLORS)} extended 256-colors\n"
     )
 
 
