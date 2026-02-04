@@ -63,6 +63,7 @@ class MonitorDisplay:
         self.fqdn_suffix = detect_common_fqdn_suffix(hosts)
         self.show_help = False
         self.sort_field = "host"  # Current sort field: "host" or "role"
+        self.show_only_overrides = False  # Filter to show only hosts with overrides
         self.curses_mod = None
         self.color_enabled = False
         self.extended_colors = False
@@ -346,6 +347,11 @@ class MonitorDisplay:
             self.offset = 0  # Reset to first page on sort change
             self.needs_redraw = True
             self.draw_screen()
+        elif key in (ord("o"), ord("O")):
+            # Toggle override filter
+            self.show_only_overrides = not self.show_only_overrides
+            self.offset = 0  # Reset to first page on filter change
+            self.draw_screen()
         return False
 
     def _update_tc_mtime(self) -> None:
@@ -412,8 +418,11 @@ class MonitorDisplay:
             self.latest_ok[record["host"]] = record
         self.last_updated = record.get("ts", "unknown")
 
-    def _compute_screen_metrics(self) -> dict[str, Any]:
+    def _compute_screen_metrics(self, *, host_count: int | None = None) -> dict[str, Any]:
         """Compute screen dimensions and pagination metrics.
+
+        Args:
+            host_count: Number of hosts to display (defaults to self.hosts length)
 
         Returns:
             Dictionary containing:
@@ -425,13 +434,15 @@ class MonitorDisplay:
             - current_page: Current page number (1-indexed)
             - updated: Human-readable last updated time
         """
+        if host_count is None:
+            host_count = len(self.hosts)
         height, width = self.stdscr.getmaxyx()
         usable_width = max(width - 1, 0)
         page_size = max(height - 2, 0)
         self.page_step = max(page_size, 1)
-        self.max_offset = max(len(self.hosts) - page_size, 0)
+        self.max_offset = max(host_count - page_size, 0)
         self.offset = min(self.offset, self.max_offset)
-        total_pages = max((len(self.hosts) + self.page_step - 1) // self.page_step, 1)
+        total_pages = max((host_count + self.page_step - 1) // self.page_step, 1)
         current_page = min(((self.offset + self.page_step - 1) // self.page_step) + 1, total_pages)
         updated_age = age_seconds(self.last_updated) if self.last_updated else None
         updated = humanize_duration(updated_age) if updated_age is not None else "never"
@@ -725,6 +736,8 @@ class MonitorDisplay:
             usable_width: Available screen width
         """
         left = f"fleetroll: host-monitor [? for help], sort={self.sort_field}"
+        if self.show_only_overrides:
+            left = f"{left}, filter=overrides"
         if total_pages > 1:
             left = f"{left}, page={current_page}/{total_pages}"
         if scroll_indicator:
@@ -887,6 +900,28 @@ class MonitorDisplay:
             hostname, sort_field=self.sort_field, latest=self.latest, latest_ok=self.latest_ok
         )
 
+    def _has_overrides(self, hostname: str) -> bool:
+        """Check if a host has override configuration.
+
+        Args:
+            hostname: Hostname to check
+
+        Returns:
+            True if host has overrides, False otherwise
+        """
+        short_host = strip_fqdn(hostname)
+        tc_worker_data = self.tc_data.get(short_host)
+        values = build_row_values(
+            hostname,
+            self.latest.get(hostname),
+            last_ok=self.latest_ok.get(hostname),
+            tc_data=tc_worker_data,
+            fqdn_suffix=self.fqdn_suffix,
+            sha_cache=self.sha_cache,
+        )
+        sha_value = values.get("sha", "")
+        return sha_value not in ("-", "?", "")
+
     def _draw_host_row(
         self,
         row: int,
@@ -1033,9 +1068,13 @@ class MonitorDisplay:
     def draw_screen(self) -> None:
         self.stdscr.erase()
 
-        # Compute screen metrics
-        metrics = self._compute_screen_metrics()
+        # Sort and filter hosts
         sorted_hosts = sorted(self.hosts, key=self._get_sort_key)
+        if self.show_only_overrides:
+            sorted_hosts = [h for h in sorted_hosts if self._has_overrides(h)]
+
+        # Compute screen metrics with filtered host count
+        metrics = self._compute_screen_metrics(host_count=len(sorted_hosts))
 
         # Compute column configuration
         all_columns, labels, widths = self._compute_column_widths(sorted_hosts)

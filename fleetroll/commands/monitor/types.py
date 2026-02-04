@@ -13,7 +13,9 @@ COLUMN_GUIDE_TEXT = """\
 Column Guide (press q or Esc to close)
 
 Keybindings:
+  q, Q        Quit monitor
   s, S        Toggle sort order (host ↔ role)
+  o, O        Toggle override filter (all hosts ↔ overrides only)
 
 Columns:
 HOST      Hostname (FQDN suffix stripped if common)
