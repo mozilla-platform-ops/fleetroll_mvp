@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import cast
 
 
-def parse_override_file(path: Path) -> dict[str, str] | None:
+def parse_override_file(path: Path) -> dict[str, str | None] | None:
     """Parse override file to extract user/branch info.
 
     Args:
@@ -87,7 +88,7 @@ class ShaInfoCache:
         """
         self.overrides_dir = overrides_dir
         self.vault_dir = vault_dir
-        self.override_cache: dict[str, dict[str, str]] = {}
+        self.override_cache: dict[str, dict[str, str | None]] = {}
         self.vault_cache: dict[str, str] = {}
 
     def load_all(self) -> None:
@@ -146,7 +147,9 @@ class ShaInfoCache:
                     self.override_cache[sha_prefix] = info
 
         if info:
-            return info["branch"]
+            # branch is always str (never None) because parse_override_file returns
+            # None if branch_match fails, so when info exists, branch is always set
+            return cast("str", info["branch"])
         return "-"
 
     def get_vault_info(self, sha256: str) -> str:
