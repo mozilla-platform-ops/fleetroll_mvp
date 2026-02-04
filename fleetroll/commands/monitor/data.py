@@ -253,14 +253,16 @@ def build_ok_row_values(
     if vault_sha_full:
         vault_sha = f"{vault_sha} {humanize(vault_sha_full, words=2)}"
 
-    # Get human-readable info
-    ovr_info = "-"
-    vlt_info = "-"
+    # Append human-readable info to SHA columns
     if sha_cache:
         if sha_full:
             ovr_info = sha_cache.get_override_info(sha_full)
+            if ovr_info != "-":
+                sha = f"{sha} ({ovr_info})"
         if vault_sha_full:
             vlt_info = sha_cache.get_vault_info(vault_sha_full)
+            if vlt_info != "-":
+                vault_sha = f"{vault_sha} ({vlt_info})"
     meta = observed.get("override_meta") or {}
     mtime = meta.get("mtime_epoch") if override_present else "-"
 
@@ -411,9 +413,7 @@ def build_ok_row_values(
         "override": override_state,
         "role": role,
         "sha": sha,
-        "ovr_info": ovr_info,
         "vlt_sha": vault_sha,
-        "vlt_info": vlt_info,
         "mtime": str(mtime),
         "err": "-",
         "tc_quar": tc_quar,
@@ -454,9 +454,7 @@ def build_row_values(
             "override": "?",
             "role": "?",
             "sha": "?",
-            "ovr_info": "?",
             "vlt_sha": "?",
-            "vlt_info": "?",
             "mtime": "?",
             "err": "?",
             "tc_quar": "-",
@@ -491,9 +489,7 @@ def build_row_values(
             "override": "-",
             "role": "-",
             "sha": "-",
-            "ovr_info": "-",
             "vlt_sha": "-",
-            "vlt_info": "-",
             "mtime": "-",
             "err": err,
             "tc_quar": "-",

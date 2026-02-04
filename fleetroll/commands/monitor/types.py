@@ -18,10 +18,8 @@ Keybindings:
 Columns:
 HOST      Hostname (FQDN suffix stripped if common)
 ROLE      Puppet role assigned to host
-VLT_SHA   Vault file SHA256 hash
-VLT_INFO  Vault info (symlink name for vault file)
-OVR_SHA   Override file SHA256 hash
-OVR_INFO  Override info (branch name from override file)
+VLT_SHA   Vault file SHA256 hash (symlink name in parentheses)
+OVR_SHA   Override file SHA256 hash (branch name in parentheses)
 UPTIME    Host uptime since last boot
 PP_LAST   Time since last puppet run (FAIL if failed)
 TC_LAST   Time since TC worker was last active

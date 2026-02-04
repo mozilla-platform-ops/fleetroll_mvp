@@ -465,9 +465,7 @@ class MonitorDisplay:
             "host",
             "role",
             "vlt_sha",
-            "vlt_info",
             "sha",
-            "ovr_info",
             "uptime",
             "pp_last",
             "tc_last",
@@ -483,9 +481,7 @@ class MonitorDisplay:
             "uptime": "UPTIME",
             "role": "ROLE",
             "sha": "OVR_SHA",
-            "ovr_info": "OVR_INFO",
             "vlt_sha": "VLT_SHA",
-            "vlt_info": "VLT_INFO",
             "tc_quar": "TC_QUAR",
             "tc_last": "TC_LAST",
             "tc_j_sf": "TC_T_DUR",
@@ -511,7 +507,7 @@ class MonitorDisplay:
                 widths[col] = max(widths[col], len(values[col]))
 
         # Add padding for role/sha columns
-        for col in ("role", "sha", "vlt_sha", "ovr_info", "vlt_info"):
+        for col in ("role", "sha", "vlt_sha"):
             if col in widths:
                 widths[col] += 2
 
@@ -994,17 +990,39 @@ class MonitorDisplay:
                         if col_name == "sha"
                         else vlt_sha_colors.get(values.get("vlt_sha", ""), 0)
                     )
-                    split_idx = full_value.rfind(" ")
-                    prefix = full_value[: split_idx + 1]
-                    suffix = full_value[split_idx + 1 :]
-                    padding = " " * (width - len(full_value))
-                    self.safe_addstr(row, col, prefix)
-                    col += len(prefix)
-                    self.safe_addstr(row, col, suffix, marker_attr)
-                    col += len(suffix)
-                    if padding:
-                        self.safe_addstr(row, col, padding)
-                        col += len(padding)
+                    # Find the humanhash position (before the parenthesis if present)
+                    # Format: "SHA humanhash (info)" or "SHA humanhash"
+                    paren_idx = full_value.find(" (")
+                    if paren_idx != -1:
+                        # Has info in parentheses - find space before humanhash
+                        before_paren = full_value[:paren_idx]
+                        split_idx = before_paren.rfind(" ")
+                        prefix = full_value[: split_idx + 1]
+                        humanhash = before_paren[split_idx + 1 :]
+                        info_part = full_value[paren_idx:]
+                        padding = " " * (width - len(full_value))
+                        self.safe_addstr(row, col, prefix)
+                        col += len(prefix)
+                        self.safe_addstr(row, col, humanhash, marker_attr)
+                        col += len(humanhash)
+                        self.safe_addstr(row, col, info_part)
+                        col += len(info_part)
+                        if padding:
+                            self.safe_addstr(row, col, padding)
+                            col += len(padding)
+                    else:
+                        # No info - use original logic
+                        split_idx = full_value.rfind(" ")
+                        prefix = full_value[: split_idx + 1]
+                        suffix = full_value[split_idx + 1 :]
+                        padding = " " * (width - len(full_value))
+                        self.safe_addstr(row, col, prefix)
+                        col += len(prefix)
+                        self.safe_addstr(row, col, suffix, marker_attr)
+                        col += len(suffix)
+                        if padding:
+                            self.safe_addstr(row, col, padding)
+                            col += len(padding)
                 else:
                     self.safe_addstr(row, col, cell, attr)
                     col += len(cell)
