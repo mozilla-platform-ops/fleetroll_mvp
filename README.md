@@ -101,17 +101,11 @@ A modern terminal emulator is required for the curses-based monitor interface:
 Install dependencies with the following commands.
 
 ```bash
-# prek (https://github.com/j178/prek, git commit hooks)
-brew install prek
-
-# actionlint (URL?, github actions linting)
-brew install actionlinst
-
-# beads-rust (https://github.com/Dicklesworthstone/beads_rust, repo issue tracking)
-curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
-
 # install python deps
 uv sync
+
+# if you run `. ./.venv/bin/activate` to activate the uv venv you can drop
+# the `uv run` from fleetroll commands (below and in general).
 ```
 
 ## Usage
@@ -210,10 +204,16 @@ Stored in beads. See `AGENTS.md` for more info.
 ```bash
 # install testing deps
 uv sync --all-groups
+# prek (https://github.com/j178/prek, git commit hooks)
+brew install prek
+# actionlint (URL?, github actions linting)
+brew install actionlinst
+# beads-rust (https://github.com/Dicklesworthstone/beads_rust, repo issue tracking)
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
 
 # testing
 uv run pytest
 
-# pytest-watcher
+# pytest-watcher (runs tests on any change)
 uv run ptw .
 ```
