@@ -14,6 +14,11 @@ if TYPE_CHECKING:
 
 from ...constants import HOST_OBSERVATIONS_FILE_NAME, TC_WORKERS_FILE_NAME
 from ...utils import get_log_file_size
+from .colors import (
+    EXTENDED_COLORS,
+    FG_BG_COMBOS,
+    build_color_mapping,
+)
 from .data import (
     age_seconds,
     build_row_values,
@@ -104,46 +109,24 @@ class MonitorDisplay:
                 curses.init_pair(18, curses.COLOR_WHITE, curses.COLOR_BLACK)
                 # Extended 256 colors for more distinct palette (pairs 19-26)
                 if curses.COLORS >= 256:
-                    curses.init_pair(19, 208, -1)  # bright-orange
-                    curses.init_pair(20, 129, -1)  # bright-purple
-                    curses.init_pair(21, 205, -1)  # hot-pink
-                    curses.init_pair(22, 33, -1)  # teal
-                    curses.init_pair(23, 160, -1)  # maroon
-                    curses.init_pair(24, 220, -1)  # gold
-                    curses.init_pair(25, 28, -1)  # forest-green
-                    curses.init_pair(26, 214, -1)  # orange-red
+                    for i, (_, color_code) in enumerate(EXTENDED_COLORS, start=19):
+                        curses.init_pair(i, color_code, -1)
                 # High-contrast fg/bg combinations for extended palette (pairs 27+)
-                # Format: (fg, bg) chosen for readability
-                fg_bg_combos = [
-                    # (curses.COLOR_YELLOW, curses.COLOR_BLUE),  # yellow on blue - c16 UNREADABLE
-                    (curses.COLOR_BLACK, curses.COLOR_CYAN),  # black on cyan
-                    (curses.COLOR_BLACK, curses.COLOR_GREEN),  # black on green
-                    (curses.COLOR_YELLOW, curses.COLOR_MAGENTA),  # yellow on magenta
-                    (curses.COLOR_BLACK, curses.COLOR_YELLOW),  # black on yellow
-                    (curses.COLOR_WHITE, curses.COLOR_RED),  # white on red
-                    # (curses.COLOR_WHITE, curses.COLOR_BLUE),  # white on blue - c22 UNREADABLE
-                    (curses.COLOR_CYAN, curses.COLOR_BLACK),  # cyan on black
-                    (curses.COLOR_GREEN, curses.COLOR_BLACK),  # green on black
-                    (curses.COLOR_YELLOW, curses.COLOR_BLACK),  # yellow on black
-                    (curses.COLOR_WHITE, curses.COLOR_MAGENTA),  # white on magenta
-                    (curses.COLOR_BLACK, curses.COLOR_WHITE),  # black on white
-                    # (curses.COLOR_BLUE, curses.COLOR_YELLOW),  # blue on yellow - c28 UNREADABLE
-                    (curses.COLOR_RED, curses.COLOR_CYAN),  # red on cyan
-                    (curses.COLOR_MAGENTA, curses.COLOR_YELLOW),  # magenta on yellow
-                    # (curses.COLOR_BLUE, curses.COLOR_WHITE),  # blue on white - c31 UNREADABLE
-                    # New combos with red/white backgrounds
-                    (curses.COLOR_BLACK, curses.COLOR_RED),  # black on red
-                    (curses.COLOR_GREEN, curses.COLOR_RED),  # green on red
-                    (curses.COLOR_CYAN, curses.COLOR_RED),  # cyan on red
-                    (curses.COLOR_MAGENTA, curses.COLOR_WHITE),  # magenta on white
-                    (curses.COLOR_RED, curses.COLOR_WHITE),  # red on white
-                    # (curses.COLOR_GREEN, curses.COLOR_WHITE),  # green on white - c33 UNREADABLE
-                    (curses.COLOR_BLUE, curses.COLOR_RED),  # blue on red
-                    # (curses.COLOR_BLUE, curses.COLOR_CYAN),  # blue on cyan - c34 UNREADABLE
-                    (curses.COLOR_YELLOW, curses.COLOR_RED),  # yellow on red
-                ]
-                for i, (fg, bg) in enumerate(fg_bg_combos, start=27):
+                # Using shared FG_BG_COMBOS from colors module
+                curses_color_map = {
+                    "black": curses.COLOR_BLACK,
+                    "red": curses.COLOR_RED,
+                    "green": curses.COLOR_GREEN,
+                    "yellow": curses.COLOR_YELLOW,
+                    "blue": curses.COLOR_BLUE,
+                    "magenta": curses.COLOR_MAGENTA,
+                    "cyan": curses.COLOR_CYAN,
+                    "white": curses.COLOR_WHITE,
+                }
+                for i, (fg_name, bg_name, _) in enumerate(FG_BG_COMBOS, start=27):
                     if i < curses.COLOR_PAIRS:
+                        fg = curses_color_map[fg_name]
+                        bg = curses_color_map[bg_name]
                         curses.init_pair(i, fg, bg)
                 self.color_enabled = True
                 # Detect 256-color support (for future use)
@@ -266,40 +249,32 @@ class MonitorDisplay:
         """
         if not self.color_enabled:
             return {}
-        ordered = sorted(values)
-        mapping: dict[str, int] = {}
 
         palette_size = len(palette)
-        # High-contrast fg/bg combo pairs (initialized in _init_curses as pairs 27+)
-        # There are 19 combinations defined (black/cyan through yellow/red)
-        fg_bg_pairs = list(range(27, 46))  # 19 fg/bg combinations starting at 27
-        total_capacity = palette_size + len(fg_bg_pairs)  # No more Tier 2 (reversed)
+        total_capacity = palette_size + len(FG_BG_COMBOS)
 
-        # Spread adjacent seeds for maximum visual distinction
-        # Using 11 (prime) ensures good distribution across total capacity
-        spread_factor = 11
-        effective_seed = (seed * spread_factor) % total_capacity
+        # Use shared color mapping algorithm
+        index_mapping = build_color_mapping(
+            values,
+            total_capacity=total_capacity,
+            seed=seed,
+        )
 
-        for idx, value in enumerate(ordered):
-            adjusted_idx = (idx + effective_seed) % total_capacity
-
-            if adjusted_idx < palette_size:
-                # Tier 1: Normal basic colors
-                color = palette[adjusted_idx]
-                attr = color | base_attr
+        # Convert color indices to curses attributes
+        result: dict[str, int] = {}
+        for value, color_index in index_mapping.items():
+            if color_index < palette_size:
+                # Tier 1: Basic colors from palette
+                attr = palette[color_index] | base_attr
             else:
                 # Tier 2: High-contrast fg/bg combinations
-                fg_bg_idx = adjusted_idx - palette_size
-                if fg_bg_idx < len(fg_bg_pairs):
-                    attr = self.curses_mod.color_pair(fg_bg_pairs[fg_bg_idx]) | base_attr
-                else:
-                    # Wrap around if we somehow exceed all options
-                    color = palette[adjusted_idx % palette_size]
-                    attr = color | base_attr
+                fg_bg_idx = color_index - palette_size
+                pair_num = 27 + fg_bg_idx
+                attr = self.curses_mod.color_pair(pair_num) | base_attr
 
-            mapping[value] = attr
+            result[value] = attr
 
-        return mapping
+        return result
 
     def handle_key(self, key: int) -> bool:
         # Handle help popup dismissal - any key closes help (except '?' which opens it)

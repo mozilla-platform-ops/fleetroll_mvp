@@ -6,59 +6,14 @@ from __future__ import annotations
 import argparse
 import sys
 
-# ANSI color codes
-RESET = "\033[0m"
-REVERSE = "\033[7m"
-
-# Basic foreground colors (matching curses color pairs)
-COLORS = {
-    "blue": "\033[34m",
-    "cyan": "\033[36m",
-    "green": "\033[32m",
-    "magenta": "\033[35m",
-    "yellow": "\033[33m",
-    "red": "\033[31m",
-    "white": "\033[37m",
-    # Extended 256 colors
-    "orange": "\033[38;5;208m",
-    "purple": "\033[38;5;129m",
-    "pink": "\033[38;5;205m",
-    "teal": "\033[38;5;33m",
-    "maroon": "\033[38;5;160m",
-    "gold": "\033[38;5;220m",
-    "forest-green": "\033[38;5;28m",
-    "orange-red": "\033[38;5;214m",
-}
-
-# High-contrast fg/bg combinations
-FG_BG_COMBOS = [
-    # ("\033[33;44m", "yellow/blue"),  # yellow on blue - c16 UNREADABLE
-    ("\033[30;46m", "black/cyan"),  # black on cyan
-    ("\033[30;42m", "black/green"),  # black on green
-    ("\033[33;45m", "yellow/magenta"),  # yellow on magenta
-    ("\033[30;43m", "black/yellow"),  # black on yellow
-    ("\033[37;41m", "white/red"),  # white on red
-    # ("\033[37;44m", "white/blue"),  # white on blue - c22 UNREADABLE
-    ("\033[36;40m", "cyan/black"),  # cyan on black
-    ("\033[32;40m", "green/black"),  # green on black
-    ("\033[33;40m", "yellow/black"),  # yellow on black
-    ("\033[37;45m", "white/magenta"),  # white on magenta
-    ("\033[30;47m", "black/white"),  # black on white
-    # ("\033[34;43m", "blue/yellow"),  # blue on yellow - c28 UNREADABLE
-    ("\033[31;46m", "red/cyan"),  # red on cyan
-    ("\033[35;43m", "magenta/yellow"),  # magenta on yellow
-    # ("\033[34;47m", "blue/white"),  # blue on white - c31 UNREADABLE
-    # New combos with red/white backgrounds
-    ("\033[30;41m", "black/red"),  # black on red
-    ("\033[32;41m", "green/red"),  # green on red
-    ("\033[36;41m", "cyan/red"),  # cyan on red
-    ("\033[35;47m", "magenta/white"),  # magenta on white
-    ("\033[31;47m", "red/white"),  # red on white
-    # ("\033[32;47m", "green/white"),  # green on white - c33 UNREADABLE
-    ("\033[34;41m", "blue/red"),  # blue on red
-    # ("\033[34;46m", "blue/cyan"),  # blue on cyan - c34 UNREADABLE
-    ("\033[33;41m", "yellow/red"),  # yellow on red
-]
+from fleetroll.commands.monitor.colors import (
+    ANSI_RESET,
+    BASIC_COLORS,
+    EXTENDED_COLORS,
+    FG_BG_COMBOS,
+    build_color_mapping,
+    get_ansi_code,
+)
 
 
 def build_color_map(
@@ -66,58 +21,53 @@ def build_color_map(
     *,
     seed: int = 0,
 ) -> list[tuple[str, str]]:
-    """Build a color map using normal and reverse colors.
+    """Build a color map using the shared color palette logic.
 
     Adjacent seeds are automatically spread for maximum visual distinction.
 
     Returns list of (label, ansi_code) tuples.
     """
     # Build combined palette: 7 standard + 8 extended = 15 colors
-    basic_colors = [
-        # Standard 7
-        "blue",
-        "cyan",
-        "green",
-        "magenta",
-        "yellow",
-        "red",
-        "white",
-        # Extended 8 (256-color)
-        "orange",
-        "purple",
-        "pink",
-        "teal",
-        "maroon",
-        "gold",
-        "forest-green",
-        "orange-red",
-    ]
-    palette_size = len(basic_colors)  # 15
-    total_capacity = palette_size * 2  # 15*2 = 30
+    palette_size = len(BASIC_COLORS) + len(EXTENDED_COLORS)  # 15
+    total_capacity = palette_size + len(FG_BG_COMBOS)  # 15 + 19 = 34
 
-    # Spread adjacent seeds for maximum visual distinction (matches display.py)
-    spread_factor = 11
-    effective_seed = (seed * spread_factor) % total_capacity
+    # Create synthetic values for testing
+    values = [f"value_{idx}" for idx in range(value_count)]
+
+    # Get color mapping using shared algorithm
+    color_mapping = build_color_mapping(
+        values,
+        total_capacity=total_capacity,
+        seed=seed,
+    )
 
     result = []
+    for idx, value in enumerate(values):
+        color_index = color_mapping[value]
+        ansi_code = get_ansi_code(
+            color_index,
+            palette_size=palette_size,
+            extended_support=True,
+        )
 
-    for idx in range(value_count):
-        adjusted_idx = (idx + effective_seed) % total_capacity
-
-        if adjusted_idx < palette_size:
-            # Tier 1: Normal colors
-            color_name = basic_colors[adjusted_idx]
-            ansi_code = COLORS[color_name]
-            color_label = f"normal:{color_name}"
+        # Determine color label for display
+        if color_index < len(BASIC_COLORS):
+            color_name = BASIC_COLORS[color_index]
+            color_label = f"basic:{color_name}"
+        elif color_index < len(BASIC_COLORS) + len(EXTENDED_COLORS):
+            extended_idx = color_index - len(BASIC_COLORS)
+            color_name, _ = EXTENDED_COLORS[extended_idx]
+            color_label = f"256:{color_name}"
         else:
-            # Tier 2: Reversed colors
-            color_idx = adjusted_idx - palette_size
-            color_name = basic_colors[color_idx]
-            ansi_code = REVERSE + COLORS[color_name]
-            color_label = f"reverse:{color_name}"
+            fg_bg_idx = color_index - palette_size
+            if fg_bg_idx < len(FG_BG_COMBOS):
+                _, _, combo_desc = FG_BG_COMBOS[fg_bg_idx]
+                color_label = f"fg/bg:{combo_desc}"
+            else:
+                color_label = "wrapped"
 
         # Create a compact label showing value index, color index, and description
-        label = f"v{idx:<2d} c{adjusted_idx:<2d} {color_label}"
+        label = f"v{idx:<2d} c{color_index:<2d} {color_label}"
         result.append((label, ansi_code))
 
     return result
@@ -170,15 +120,15 @@ def main():
             label, ansi_code = columns[col_idx][val_idx]
             # Show label with sample text in color
             display = f"{label:38s} sample-123"
-            colored = f"{ansi_code}{display}{RESET}"
+            colored = f"{ansi_code}{display}{ANSI_RESET}"
             row_parts.append(colored)
         print("  ".join(row_parts))
 
     print("\n" + "=" * 100)
-    total = 15 * 2  # 15 colors (7 standard + 8 extended) x 2 (normal + reverse)
+    total = 15 + 19  # 15 colors (7 standard + 8 extended) + 19 fg/bg combos
     print(
         f"Total capacity: {total} distinct appearances "
-        f"(15 normal + 15 reverse)\n"
+        f"(15 palette + 19 fg/bg combos)\n"
         f"Palette: 7 standard + 8 extended 256-colors\n"
     )
 
