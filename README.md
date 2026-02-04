@@ -89,6 +89,15 @@ generic-worker will start on Mac even if the puppet run is unsuccesful.
 
 ## Setup
 
+### Requirements
+
+A modern terminal emulator is required for the curses-based monitor interface:
+- **WezTerm**: Works well (recommended)
+- **Ghostty**: Works well (minor help menu rendering issue)
+- Traditional terminals (Terminal.app, older xterm) may have display issues
+
+### Installation
+
 Install dependencies with the following commands.
 
 ```bash
