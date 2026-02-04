@@ -13,7 +13,7 @@ COLUMN_GUIDE_TEXT = """\
 Column Guide (press any key to close)
 
 Keybindings:
-  s           Toggle sort order (host ↔ role)
+  s           Cycle sort order (host → role → ovr_sha → host)
   o           Toggle override filter (all hosts ↔ overrides only)
   q           Quit monitor
 

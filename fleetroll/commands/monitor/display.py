@@ -319,8 +319,13 @@ class MonitorDisplay:
             # Reload will be handled later if needed
             self.draw_screen()
         elif key in (ord("s"), ord("S")):
-            # Toggle between host and role sort
-            self.sort_field = "role" if self.sort_field == "host" else "host"
+            # Cycle between host -> role -> ovr_sha sort
+            if self.sort_field == "host":
+                self.sort_field = "role"
+            elif self.sort_field == "role":
+                self.sort_field = "ovr_sha"
+            else:
+                self.sort_field = "host"
             self.offset = 0  # Reset to first page on sort change
             self.needs_redraw = True
             self.draw_screen()

@@ -45,7 +45,7 @@ def get_host_sort_key(
 
     Args:
         hostname: Hostname to generate key for
-        sort_field: Sort field ("host" or "role")
+        sort_field: Sort field ("host", "role", or "ovr_sha")
         latest: Dictionary of latest records by hostname
         latest_ok: Dictionary of last successful records (fallback for failed audits)
 
@@ -55,7 +55,7 @@ def get_host_sort_key(
     if sort_field == "host":
         return (natural_sort_key(hostname),)
 
-    # Sort by role - use same fallback logic as build_row_values
+    # Use same fallback logic as build_row_values
     host_data = latest.get(hostname, {})
 
     # If current record failed, fall back to last_ok (matches display logic)
@@ -67,16 +67,29 @@ def get_host_sort_key(
 
     observed = host_data.get("observed", {}) if host_data else {}
 
-    # Extract role from observed data (same logic as build_row_values)
-    role_present = observed.get("role_present")
-    role = observed.get("role", "") if role_present else "missing"
+    if sort_field == "role":
+        # Extract role from observed data (same logic as build_row_values)
+        role_present = observed.get("role_present")
+        role = observed.get("role", "") if role_present else "missing"
 
-    # Sort hosts with roles first (0), then hosts without roles (1)
-    # Treat special values ("-", "?", "missing", "") as no role
-    # This puts hosts without roles at the end
-    has_role = 0 if (role and role not in ("-", "?", "missing")) else 1
+        # Sort hosts with roles first (0), then hosts without roles (1)
+        # Treat special values ("-", "?", "missing", "") as no role
+        # This puts hosts without roles at the end
+        has_role = 0 if (role and role not in ("-", "?", "missing")) else 1
 
-    return (has_role, role, natural_sort_key(hostname))
+        return (has_role, role, natural_sort_key(hostname))
+
+    if sort_field == "ovr_sha":
+        # Extract override SHA from observed data
+        sha_full = observed.get("override_sha256") or ""
+
+        # Sort hosts with overrides first (0), then hosts without overrides (1)
+        has_override = 0 if sha_full else 1
+
+        return (has_override, sha_full, natural_sort_key(hostname))
+
+    # Default to hostname if unknown sort field
+    return (natural_sort_key(hostname),)
 
 
 def detect_common_fqdn_suffix(hosts: list[str]) -> str | None:
