@@ -92,7 +92,7 @@ def compute_columns_and_widths(
         "uptime": 16,
         "role": 40,
         "sha": 12,
-        "ovr_info": 25,
+        "ovr_info": 20,
         "vlt_sha": 12,
         "vlt_info": 20,
         "tc_quar": 8,

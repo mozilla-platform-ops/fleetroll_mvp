@@ -43,12 +43,14 @@ PUPPET_BRANCH="my-branch"
 
 
 def test_parse_override_file_missing_repo():
-    """Test parsing override file missing PUPPET_REPO."""
+    """Test parsing override file missing PUPPET_REPO returns branch anyway."""
     with TemporaryDirectory() as tmpdir:
         override_file = Path(tmpdir) / "test_override"
         override_file.write_text("PUPPET_BRANCH='branch'\n")
         result = parse_override_file(override_file)
-        assert result is None
+        assert result is not None
+        assert result["branch"] == "branch"
+        assert result["user"] is None
 
 
 def test_parse_override_file_missing_branch():
@@ -60,17 +62,30 @@ def test_parse_override_file_missing_branch():
         assert result is None
 
 
-def test_parse_override_file_invalid_url():
-    """Test parsing override file with invalid GitHub URL."""
+def test_parse_override_file_non_github_url():
+    """Test parsing override file with non-GitHub URL returns branch anyway."""
     with TemporaryDirectory() as tmpdir:
         override_file = Path(tmpdir) / "test_override"
         override_file.write_text(
             """PUPPET_REPO='https://example.com/repo.git'
-PUPPET_BRANCH='branch'
+PUPPET_BRANCH='my-branch'
 """
         )
         result = parse_override_file(override_file)
-        assert result is None
+        assert result is not None
+        assert result["branch"] == "my-branch"
+        assert result["user"] is None
+
+
+def test_parse_override_file_no_repo():
+    """Test parsing override file with no PUPPET_REPO still works."""
+    with TemporaryDirectory() as tmpdir:
+        override_file = Path(tmpdir) / "test_override"
+        override_file.write_text("PUPPET_BRANCH='branch'\n")
+        result = parse_override_file(override_file)
+        assert result is not None
+        assert result["branch"] == "branch"
+        assert result["user"] is None
 
 
 def test_parse_override_file_not_exists():
@@ -147,7 +162,7 @@ PUPPET_BRANCH='test-branch'
         cache.load_all()
 
         result = cache.get_override_info("abc123456789")
-        assert result == "testuser/test-branch"
+        assert result == "test-branch"
 
 
 def test_sha_info_cache_override_fallback():
@@ -222,7 +237,7 @@ PUPPET_BRANCH='late-branch'
 
         # Should find it via lazy lookup
         result = cache.get_override_info("late12345678abcdef")
-        assert result == "lateuser/late-branch"
+        assert result == "late-branch"
 
 
 def test_sha_info_cache_empty_sha():

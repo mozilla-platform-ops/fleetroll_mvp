@@ -13,7 +13,8 @@ def parse_override_file(path: Path) -> dict[str, str] | None:
         path: Path to override file
 
     Returns:
-        Dict with "user" and "branch" keys, or None on error
+        Dict with "user" and "branch" keys, or None on error.
+        User will be None if repo is not a GitHub URL.
     """
     try:
         content = path.read_text(encoding="utf-8")
@@ -24,19 +25,19 @@ def parse_override_file(path: Path) -> dict[str, str] | None:
     repo_match = re.search(r"PUPPET_REPO=['\"](.+?)['\"]", content)
     branch_match = re.search(r"PUPPET_BRANCH=['\"](.+?)['\"]", content)
 
-    if not repo_match or not branch_match:
+    if not branch_match:
         return None
 
-    repo_url = repo_match.group(1)
     branch = branch_match.group(1)
 
-    # Extract username from GitHub URL
+    # Extract username from GitHub URL if available
     # e.g., https://github.com/rcurranmoz/ronin_puppet.git -> rcurranmoz
-    user_match = re.search(r"github\.com[:/]([^/]+)/", repo_url)
-    if not user_match:
-        return None
-
-    user = user_match.group(1)
+    user = None
+    if repo_match:
+        repo_url = repo_match.group(1)
+        user_match = re.search(r"github\.com[:/]([^/]+)/", repo_url)
+        if user_match:
+            user = user_match.group(1)
 
     return {"user": user, "branch": branch}
 
@@ -127,7 +128,7 @@ class ShaInfoCache:
             sha256: Full SHA256 hash
 
         Returns:
-            "user/branch" string or "-" if not found
+            Branch name or "-" if not found
         """
         if not sha256:
             return "-"
@@ -145,7 +146,7 @@ class ShaInfoCache:
                     self.override_cache[sha_prefix] = info
 
         if info:
-            return f"{info['user']}/{info['branch']}"
+            return info["branch"]
         return "-"
 
     def get_vault_info(self, sha256: str) -> str:
