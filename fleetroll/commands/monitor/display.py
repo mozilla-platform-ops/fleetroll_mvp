@@ -484,6 +484,16 @@ class MonitorDisplay:
             "data": "DATA",
         }
 
+        # Add sort indicator to active column
+        sort_field_to_column = {
+            "host": "host",
+            "role": "role",
+            "ovr_sha": "sha",
+        }
+        active_column = sort_field_to_column.get(self.sort_field)
+        if active_column and active_column in labels:
+            labels[active_column] = labels[active_column] + " *"
+
         widths = {col: len(labels[col]) for col in all_columns}
         for host in sorted_hosts:
             short_host = strip_fqdn(host)
@@ -683,6 +693,9 @@ class MonitorDisplay:
             columns: Ordered list of columns to display
             widths: Column name to width mapping
         """
+        # Colored asterisk attribute (yellow to stand out from magenta headers)
+        asterisk_attr = self.curses_mod.color_pair(2) if self.color_enabled else 0
+
         header_parts = render_row_cells(
             labels, columns=columns, widths=widths, include_marker=False
         )
@@ -694,8 +707,31 @@ class MonitorDisplay:
                 if idx:
                     self.safe_addstr(1, col, " | ")
                     col += 3
-                self.safe_addstr(1, col, part, self.column_attr)
-                col += len(part)
+                # Check if this part contains the sort indicator (strip padding first)
+                if " *" in part:
+                    # Find position of " *" and split there
+                    asterisk_pos = part.find(" *")
+                    base_part = part[:asterisk_pos]
+                    padding = part[asterisk_pos + 2 :]  # Everything after " *"
+                    self.safe_addstr(1, col, base_part, self.column_attr)
+                    col += len(base_part)
+                    self.safe_addstr(1, col, " *", asterisk_attr)
+                    col += 2
+                    if padding:
+                        self.safe_addstr(1, col, padding, self.column_attr)
+                        col += len(padding)
+                else:
+                    self.safe_addstr(1, col, part, self.column_attr)
+                    col += len(part)
+        # Single column case
+        elif " *" in header_line:
+            asterisk_pos = header_line.find(" *")
+            base_line = header_line[:asterisk_pos]
+            padding = header_line[asterisk_pos + 2 :]
+            self.safe_addstr(1, 0, base_line, self.column_attr)
+            self.safe_addstr(1, len(base_line), " *", asterisk_attr)
+            if padding:
+                self.safe_addstr(1, len(base_line) + 2, padding, self.column_attr)
         else:
             self.safe_addstr(1, 0, header_line, self.column_attr)
 
