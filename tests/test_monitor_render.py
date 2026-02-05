@@ -294,6 +294,27 @@ def test_puppet_columns_applied_healthy():
     assert values["applied"] == "N"
     assert values["healthy"] == "N"
 
+    # Override present but no puppet state detection (Mac host scenario)
+    # -> APPLIED=-, HEALTHY=- (unknown, not "N")
+    record_no_puppet_state = {
+        "ok": True,
+        "ts": now.isoformat(),
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_osx_1015",
+            "override_present": True,
+            "override_sha256": "abc123",
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": str(now_epoch - 3600)},
+            "uptime_s": 3600,
+            "puppet_last_run_epoch": None,  # No puppet state detection
+            "puppet_success": None,
+        },
+    }
+    values = build_row_values("host1", record_no_puppet_state, tc_data=tc_data_fresh)
+    assert values["applied"] == "-"  # Unknown, not "N"
+    assert values["healthy"] == "-"  # Unknown, not "N"
+
 
 def _sep_positions(line: str) -> list[int]:
     positions = []

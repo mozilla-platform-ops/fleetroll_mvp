@@ -360,11 +360,15 @@ class TestOsXScriptGeneration:
         script = remote_audit_script(include_content=True)
         assert "/proc/uptime" in script
 
-    def test_puppet_skipped_on_darwin(self):
-        """Script skips puppet data collection on Darwin."""
+    def test_puppet_state_collection_supports_both_platforms(self):
+        """Script collects puppet state on both platforms via JSON metadata."""
         script = remote_audit_script(include_content=True)
-        # Puppet section should be wrapped in OS check
-        assert 'if [ "$os_type" != "Darwin" ]' in script
+        # New JSON metadata file approach works on both Darwin and Linux
+        assert "/etc/puppet/last_run_metadata.json" in script
+        assert "PP_STATE_JSON" in script
+        # Fall back to YAML parsing (Linux-only) when JSON not available
+        assert "last_run_report.yaml" in script
+        assert "last_run_summary.yaml" in script
 
     def test_set_script_has_os_detection(self):
         """remote_set_script includes OS detection."""

@@ -302,19 +302,20 @@ def build_ok_row_values(
     # APPLIED: override present AND puppet ran after mtime AND succeeded
     applied = "-"
     if override_present:
-        applied = "N"
-        override_mtime_epoch = meta.get("mtime_epoch")
-        if (
-            override_mtime_epoch is not None
-            and puppet_last_run_epoch is not None
-            and puppet_success is True
-        ):
-            try:
-                mtime_int = int(override_mtime_epoch)
-                if puppet_last_run_epoch > mtime_int:
-                    applied = "Y"
-            except (ValueError, TypeError):
-                pass
+        # If we can't detect puppet runs (e.g., Mac hosts without JSON state file),
+        # show "-" (unknown) instead of "N" (known not applied)
+        if puppet_last_run_epoch is None:
+            applied = "-"
+        else:
+            applied = "N"
+            override_mtime_epoch = meta.get("mtime_epoch")
+            if override_mtime_epoch is not None and puppet_success is True:
+                try:
+                    mtime_int = int(override_mtime_epoch)
+                    if puppet_last_run_epoch > mtime_int:
+                        applied = "Y"
+                except (ValueError, TypeError):
+                    pass
 
     # HEALTHY: applied AND TC_LAST < 1 hour
     healthy = "-"
@@ -335,9 +336,13 @@ def build_ok_row_values(
                 pass
 
     if override_present:
-        healthy = "N"
-        if applied == "Y" and tc_last_s is not None and tc_last_s < 3600:
-            healthy = "Y"
+        # If APPLIED is unknown ("-"), we can't determine health either
+        if applied == "-":
+            healthy = "-"
+        else:
+            healthy = "N"
+            if applied == "Y" and tc_last_s is not None and tc_last_s < 3600:
+                healthy = "Y"
 
     # Add TaskCluster fields
     tc_quar = "-"
