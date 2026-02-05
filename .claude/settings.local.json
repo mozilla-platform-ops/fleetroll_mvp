@@ -29,7 +29,11 @@
       "Bash(grep:*)",
       "Bash(br dep list:*)",
       "Bash(prek:*)",
-      "Bash(shellcheck:*)"
+      "Bash(shellcheck:*)",
+      "Bash(cass health:*)",
+      "Bash(cass index:*)",
+      "Bash(cass search:*)",
+      "Bash(cass expand:*)"
     ]
   }
 }
