@@ -175,7 +175,7 @@ else
 fi
 
 # Puppet last run state (best effort)
-# Try new JSON metadata file first, fall back to YAML (Linux only)
+# Try new JSON metadata file first, fall back to YAML if available
 # Note: macOS hosts in this environment don't generate Puppet's standard YAML state files
 # (last_run_report.yaml or last_run_summary.yaml) due to how puppet is invoked via boot script.
 # macOS hosts require the JSON state file to be deployed for puppet run detection.
@@ -187,22 +187,24 @@ if sudo -n test -e "$pp_json_file" 2>/dev/null; then
     printf 'PP_STATE_JSON=%s\\n' "$pp_json_b64"
   fi
 else
-  # Fall back to YAML parsing (Linux only - macOS doesn't generate these files)
-  if [ "$os_type" != "Darwin" ]; then
-    # Try last_run_report.yaml first (Puppet 7+), then fall back to summary files
-    pp_report="/opt/puppetlabs/puppet/cache/state/last_run_report.yaml"
-    if sudo -n test -e "$pp_report" 2>/dev/null; then
-      # Parse report file (Puppet 7+): time is ISO timestamp, status indicates success
-      pp_time=$(sudo -n grep "^time:" "$pp_report" 2>/dev/null | head -1 | sed 's/^time: *//' | tr -d "\\\"\\'")
-      if [ -n "$pp_time" ]; then
-        # Convert ISO timestamp to epoch (strip nanoseconds for compatibility)
-        pp_time_clean=$(printf '%s' "$pp_time" | sed 's/\\.[0-9]*//; s/+00:00$/Z/')
-        # GNU date: -d (parse date string)
-        pp_epoch=$(date -d "$pp_time_clean" +%s 2>/dev/null || true)
-        if [ -n "$pp_epoch" ]; then
-          printf 'PP_LAST_RUN_EPOCH=%s\\n' "$pp_epoch"
-        fi
+  # Fall back to YAML parsing if available
+  # Note: macOS hosts in this environment don't generate these YAML files,
+  # so these checks will succeed on Linux but typically fail on macOS.
+
+  # Try last_run_report.yaml first (Puppet 7+)
+  pp_report="/opt/puppetlabs/puppet/cache/state/last_run_report.yaml"
+  if sudo -n test -e "$pp_report" 2>/dev/null; then
+    # Parse report file (Puppet 7+): time is ISO timestamp, status indicates success
+    pp_time=$(sudo -n grep "^time:" "$pp_report" 2>/dev/null | head -1 | sed 's/^time: *//' | tr -d "\\\"\\'")
+    if [ -n "$pp_time" ]; then
+      # Convert ISO timestamp to epoch (strip nanoseconds for compatibility)
+      pp_time_clean=$(printf '%s' "$pp_time" | sed 's/\\.[0-9]*//; s/+00:00$/Z/')
+      # GNU date: -d (parse date string)
+      pp_epoch=$(date -d "$pp_time_clean" +%s 2>/dev/null || true)
+      if [ -n "$pp_epoch" ]; then
+        printf 'PP_LAST_RUN_EPOCH=%s\\n' "$pp_epoch"
       fi
+    fi
     pp_status=$(sudo -n awk '/^status:/ {{print $2; exit}}' "$pp_report" 2>/dev/null || true)
     if [ -n "$pp_status" ]; then
       if [ "$pp_status" = "failed" ]; then
@@ -211,8 +213,10 @@ else
         printf 'PP_SUCCESS=1\\n'
       fi
     fi
-  else
-    # Fall back to summary files (older Puppet versions)
+  fi
+
+  # Fall back to summary files (older Puppet versions) if report file not found
+  if ! sudo -n test -e "$pp_report" 2>/dev/null; then
     pp_state=""
     for pp_path in \\
         /opt/puppetlabs/puppet/cache/state/last_run_summary.yaml \\
@@ -237,7 +241,6 @@ else
           printf 'PP_SUCCESS=0\\n'
         fi
       fi
-    fi
     fi
   fi
 fi
