@@ -175,7 +175,10 @@ else
 fi
 
 # Puppet last run state (best effort)
-# Try new JSON metadata file first, fall back to YAML
+# Try new JSON metadata file first, fall back to YAML (Linux only)
+# Note: macOS hosts in this environment don't generate Puppet's standard YAML state files
+# (last_run_report.yaml or last_run_summary.yaml) due to how puppet is invoked via boot script.
+# macOS hosts require the JSON state file to be deployed for puppet run detection.
 pp_json_file="/etc/puppet/last_run_metadata.json"
 if sudo -n test -e "$pp_json_file" 2>/dev/null; then
   # Read JSON state file and base64 encode it (handles newlines and any formatting)
@@ -184,7 +187,7 @@ if sudo -n test -e "$pp_json_file" 2>/dev/null; then
     printf 'PP_STATE_JSON=%s\\n' "$pp_json_b64"
   fi
 else
-  # Fall back to YAML parsing (older systems without JSON state file)
+  # Fall back to YAML parsing (Linux only - macOS doesn't generate these files)
   if [ "$os_type" != "Darwin" ]; then
     # Try last_run_report.yaml first (Puppet 7+), then fall back to summary files
     pp_report="/opt/puppetlabs/puppet/cache/state/last_run_report.yaml"
