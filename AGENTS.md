@@ -62,6 +62,33 @@ prek
 
 Run `prek` before suggesting commits to ensure all checks pass.
 
+## Cass - Agent Session Search
+
+Use `cass` to search previous Claude Code chat sessions and extend your context with relevant information from past conversations. When working on a task, search for related topics, error messages, or implementations to learn from previous solutions and avoid repeating past mistakes.
+
+⚠️ **Never run bare `cass` in an agent context** — it launches the interactive TUI. Always use `--robot` or `--json`.
+
+```bash
+# 1) Health check (exit 0 = OK, non-zero = rebuild index)
+cass health --json || cass index --full
+
+# 2) Search across all agent history
+cass search "authentication error" --robot --limit 5 --fields minimal
+
+# 3) View + expand a hit (use source_path/line_number from search output)
+cass view /path/to/session.jsonl -n 42 --json
+cass expand /path/to/session.jsonl -n 42 -C 3 --json
+
+# 4) Discover the full machine API
+cass robot-docs guide
+cass robot-docs schemas
+```
+
+**Output conventions:**
+- `stdout` = data only
+- `stderr` = diagnostics
+- `exit 0` = success
+
 ## Git Operations
 
 The user handles all git operations (staging, committing, pushing). When changes are ready to commit:

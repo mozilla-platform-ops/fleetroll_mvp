@@ -186,6 +186,9 @@ brew install prek
 brew install actionlinst
 # beads-rust (https://github.com/Dicklesworthstone/beads_rust, repo issue tracking)
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
+# cass (https://github.com/Dicklesworthstone/coding_agent_session_search)
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_session_search/main/install.sh?$(date +%s)" \
+  | bash -s -- --easy-mode --verify
 
 # testing
 uv run pytest
