@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import curses
 import json
 import sys
 from curses import wrapper as curses_wrapper
@@ -182,23 +183,20 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         )
         while True:
             key = stdscr.getch()
-            needs_draw = key != -1  # Track if we got any input
 
             if display.handle_key(key, draw=False):
                 return
 
-            # Drain any additional pending input (for trackpad scrolling)
-            # This prevents lag from processing scroll events one-by-one
-            while True:
-                next_key = stdscr.getch()
-                if next_key == -1:  # No more pending input
-                    break
-                needs_draw = True
-                if display.handle_key(next_key, draw=False):
-                    return
-
-            # Redraw once after processing all pending input
-            if needs_draw:
+            # After processing a key, check if there's more input pending
+            # If so, flush it to avoid lag from processing hundreds of scroll events
+            if key != -1:
+                # Peek to see if there's pending input
+                stdscr.nodelay(True)
+                peek = stdscr.getch()
+                if peek != -1:
+                    # There's pending input - likely rapid scrolling
+                    # Flush the entire input buffer to avoid lag
+                    curses.flushinp()
                 display.draw_screen()
 
             record = tailer.poll()
