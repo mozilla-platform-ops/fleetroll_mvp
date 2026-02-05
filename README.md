@@ -11,81 +11,45 @@
 
 Fleetroll MVP streamlines host state visibility and configuration management. It's a tool for auditing, monitoring, and managing Linux and macOS hardware (i.e. long-running) hosts in the Mozilla FirefoxCI Taskcluster environment using Puppet. It's designed for the Mozilla Release Operations team.
 
-Fleetroll MVP is an exploration on the concepts in Fleetroll product spec in development. See [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
+Fleetroll MVP is an exploration on the concepts in the in-development Fleetroll product spec ([`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md) ).
 
-## Supported Platforms
-
-FleetRoll supports both Linux and macOS (Darwin) hosts with automatic OS detection:
-
-- **Linux**: Uses paths `/etc/puppet/ronin_settings` (override), `/root/vault.yaml` (vault)
-- **macOS**: Uses paths `/opt/puppet_environments/ronin_settings` (override), `/var/root/vault.yaml` (vault)
-- **Both**: Use `/etc/puppet_role` (role)
-
-Paths are automatically detected based on the remote host's operating system.
-
-**Note**: Puppet run data collection is not yet available on macOS hosts.
 
 ## Functionality
 
-Fleetroll and Fleetroll MVP aim to provide tooling around managing and updating fleets of hosts running Puppet.
+Fleetroll MVP aims to solve a subset of the issues (see [spec](specs/README_FleetRoll_MVP.md) ) described in the `Problem Statement` section of [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
 
-Fleetroll MVP aims to solve a subset of the issues described in the `Problem Statement` section in [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
+Fleetroll MVP current functionality includes:
 
-Fleetroll MVP currently provides the ability to:
-
-- deploy overrides and vault.yaml files
-- validate override file syntax
-- collect host information (including vault.yml, override state, and puppet run information) and Taskcluster information
-- view the collected host information
-- make a decision about the state of a rollout (if the override has been applied and the host is healthy in Taskcluster)
+- host file management: files critical to the deployment process
+  - override file management: read/set/unset actions
+    - set performs file syntax validation
+  - vault.yaml file management: read/set actions
+  - audit logging: all write (set/unset) operations are logged
+- host data collection
+  - override and vault.yaml information, uptime, and other various system metrics.
+  - puppet run metadata generation and collection: collector script gathers data generated via provided shell function
+    - ensures a more positive confirmation that (an override or git sha has been applied)
+- taskcluster data collection: gathers data on connectivity and job status on monitored hosts
+- reporting: view all (or almost all) of the collected data
+  - two display modes: live-updating interactive curses TUI or non-interactive single report mode
+  - includes columns to help make a decision about the state of a rollout
 
 Fleetroll MVP lacks the full features of Fleetroll including:
 
+- fleet management (integration with other datasources, global state database, ingestion of hosts)
 - orchestration of the rollout process
   - define a rollout including branch to test (to generate the override) and an optional vault.yaml, rollout speed, hosts
   - start/stop/pause/rollback the rollout
   - monitoring of the rollout process
+- distributed application architecture
+  - network-accessible API with authentication and authorization
+  - persistence / data store
+
 
 ## Background: Puppet Lifecycle
 
-Because puppet changes can affect the system under test, we only run puppet when tests aren't running (either via Taskcluster quarantine or when the generic-worker process isn't running).
+For background on the puppet lifecycle in our environement, see [README.puppet_lifecycle.md](README.puppet_lifecycle.md).
 
-For the Linux workers, we do puppet runs at boot and then start the Taskcluster worker (generic-worker).
-
-TODO: move this section lower once fully implemented/thought out.
-
-### Linux hosts
-
-The taskcluster worker (generic-worker) is only run if puppet passes.
-- Good: Guarantees hosts are converged if the taskcluster client is working.
-- Bad: Puppet failures can break every worker. Recovery involves updating the client to a better commit and running run-puppet.sh manually (or rebooting).
-
-#### puppet
-
-- systemd runs `run-puppet.sh` script at boot
-	- `run-puppet.sh` writes `/tmp/puppet_run_done` on success
-
-#### generic-worker
-
-- `generic-worker launch script` (real name TBD) is launched by one of:
-  - Ubuntu 18.04: Gnome autostarts gnome-terminal, then a Gnome Terminal autostart file
-  - Ubuntu 24.04: systemd unit
-- `generic-worker launch script` waits for /tmp/puppet_run_done to run, then launches g-w
-
-
-### Mac hosts
-
-generic-worker will start on Mac even if the puppet run is unsuccesful.
-- Good: Bad puppet won't take out the fleet.
-- Bad: No or less of a guarantee that the host is in the desired state.
-
-#### puppet
-
-- TODO: verify mac is running at boot... not sure if it is
-
-#### generic-worker
-
-- /Library/LaunchDaemons/org.mozilla.worker-runner.plist starts g-w if /var/tmp/semaphore/run-buildbot exists
 
 ## Setup
 
@@ -95,6 +59,16 @@ A modern terminal emulator is required for the curses-based monitor interface:
 - **WezTerm**: Works well (recommended)
 - **Ghostty**: Works well (minor help menu rendering issue)
 - Traditional terminals (Terminal.app, older xterm) may have display issues
+
+### Supported Platforms
+
+FleetRoll supports both Linux and macOS (Darwin) hosts with automatic OS detection:
+
+- **Linux**: Uses paths `/etc/puppet/ronin_settings` (override), `/root/vault.yaml` (vault)
+- **macOS**: Uses paths `/opt/puppet_environments/ronin_settings` (override), `/var/root/vault.yaml` (vault)
+- **Both**: Use `/etc/puppet_role` (role)
+
+Paths are automatically detected based on the remote host's operating system.
 
 ### Installation
 
@@ -107,6 +81,7 @@ uv sync
 # if you run `. ./.venv/bin/activate` to activate the uv venv you can drop
 # the `uv run` from fleetroll commands (below and in general).
 ```
+
 
 ## Usage
 
@@ -192,6 +167,7 @@ uv run fleetroll debug-host-script
 # wrap as ssh-ready command
 uv run fleetroll debug-host-script --wrap
 ```
+
 
 ## Development
 
