@@ -276,14 +276,21 @@ class MonitorDisplay:
 
         return result
 
-    def handle_key(self, key: int) -> bool:
+    def handle_key(self, key: int, *, draw: bool = True) -> bool:
+        """Handle a keypress. Returns True if we should exit.
+
+        Args:
+            key: The key code from getch()
+            draw: Whether to redraw immediately (default True)
+        """
         # Handle help popup dismissal - any key closes help (except '?' which opens it)
         if self.show_help:
             # Don't dismiss on '?' to avoid immediate close when opening
             # Don't dismiss on -1 (timeout/no key pressed)
             if key != ord("?") and key != -1:
                 self.show_help = False
-                self.draw_screen()
+                if draw:
+                    self.draw_screen()
             return False  # Don't process the key that closed help
 
         if key in (ord("q"), ord("Q")):

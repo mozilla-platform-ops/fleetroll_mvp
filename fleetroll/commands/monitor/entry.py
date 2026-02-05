@@ -182,8 +182,25 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         )
         while True:
             key = stdscr.getch()
-            if display.handle_key(key):
+            needs_draw = key != -1  # Track if we got any input
+
+            if display.handle_key(key, draw=False):
                 return
+
+            # Drain any additional pending input (for trackpad scrolling)
+            # This prevents lag from processing scroll events one-by-one
+            while True:
+                next_key = stdscr.getch()
+                if next_key == -1:  # No more pending input
+                    break
+                needs_draw = True
+                if display.handle_key(next_key, draw=False):
+                    return
+
+            # Redraw once after processing all pending input
+            if needs_draw:
+                display.draw_screen()
+
             record = tailer.poll()
             if record:
                 display.update_record(record)
