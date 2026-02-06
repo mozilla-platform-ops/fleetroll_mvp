@@ -137,13 +137,13 @@ uv run fleetroll show-override 0328af8c9d6f
 uv run fleetroll show-override freddie-arkansas
 
 # set override (single host)
-uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d6f t-linux64-ms-229.test.releng.mdc1.mozilla.com --confirm
+uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d6f t-linux64-ms-229.test.releng.mdc1.mozilla.com
 
 # set override (host list)
-uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d6f configs/host-lists/1804.list --confirm
+uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d6f configs/host-lists/1804.list
 
 # unset override (host list)
-uv run fleetroll host-unset-override configs/host-lists/1804.list --confirm
+uv run fleetroll host-unset-override configs/host-lists/1804.list
 ```
 
 ### vault.yaml management
@@ -154,10 +154,10 @@ uv run fleetroll show-vault 0328af8c9d6f
 uv run fleetroll show-vault jupiter-lactose
 
 # set vault (single host) - defaults to /root/vault.yaml
-uv run fleetroll host-set-vault --from-file vault.yaml t-linux64-ms-229.test.releng.mdc1.mozilla.com --confirm
+uv run fleetroll host-set-vault --from-file vault.yaml t-linux64-ms-229.test.releng.mdc1.mozilla.com
 
 # set vault (host list)
-uv run fleetroll host-set-vault --from-file vault.yaml configs/host-lists/1804.list --confirm
+uv run fleetroll host-set-vault --from-file vault.yaml configs/host-lists/1804.list
 ```
 
 ### Debugging
