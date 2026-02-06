@@ -27,7 +27,7 @@ Fleetroll MVP current functionality includes:
 - host data collection
   - override and vault.yaml information, uptime, and other various system metrics.
   - puppet run metadata generation and collection: collector script gathers data generated via provided shell function
-    - ensures a more positive confirmation that (an override or git sha has been applied)
+    - ensures a more positive confirmation that an override or git sha has been applied
 - taskcluster data collection: gathers data on connectivity and job status on monitored hosts
 - reporting: view all (or almost all) of the collected data
   - two display modes: live-updating interactive curses TUI or non-interactive single report mode
