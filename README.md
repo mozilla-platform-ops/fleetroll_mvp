@@ -95,22 +95,24 @@ Running these with `watch -n 300 <command>` is how I'm currently using them. In 
 
 #### Host data
 
+The `host-audit` command places all observed overrides and vault.yamls in `~/.fleetroll/overrides` and `~/.fleetroll/vault_yamls`.
+
 ```bash
 # audit a single host
 uv run fleetroll host-audit t-linux64-ms-238.test.releng.mdc1.mozilla.com
 
 # audit a list of hosts
-uv run fleetroll host-audit 1804.list
+uv run fleetroll host-audit configs/host-lists/1804.list
 ```
 
 #### TaskCluster data
 
 ```bash
 # fetch TaskCluster worker data for hosts (stores in ~/.fleetroll/taskcluster_workers.jsonl)
-uv run fleetroll tc-fetch 1804.list
+uv run fleetroll tc-fetch configs/host-lists/1804.list
 
 # verbose output (shows API calls)
-uv run fleetroll tc-fetch -v 1804.list
+uv run fleetroll tc-fetch -v configs/host-lists/1804.list
 ```
 
 ### Viewing Data
@@ -118,12 +120,12 @@ uv run fleetroll tc-fetch -v 1804.list
 #### Once
 
 ```bash
-uv run fleetroll host-monitor 1804.list --once
+uv run fleetroll host-monitor configs/host-lists/1804.list --once
 ```
 
 #### Live-Updating Curses Interface
 ```bash
-uv run fleetroll host-monitor 1804.list
+uv run fleetroll host-monitor configs/host-lists/1804.list
 # keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
 ```
 
@@ -138,10 +140,10 @@ uv run fleetroll show-override freddie-arkansas
 uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d6f t-linux64-ms-229.test.releng.mdc1.mozilla.com --confirm
 
 # set override (host list)
-uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d6f 1804.list --confirm
+uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d6f configs/host-lists/1804.list --confirm
 
 # unset override (host list)
-uv run fleetroll host-unset-override 1804.list --confirm
+uv run fleetroll host-unset-override configs/host-lists/1804.list --confirm
 ```
 
 ### vault.yaml management
@@ -155,7 +157,7 @@ uv run fleetroll show-vault jupiter-lactose
 uv run fleetroll host-set-vault --from-file vault.yaml t-linux64-ms-229.test.releng.mdc1.mozilla.com --confirm
 
 # set vault (host list)
-uv run fleetroll host-set-vault --from-file vault.yaml 1804.list --confirm
+uv run fleetroll host-set-vault --from-file vault.yaml configs/host-lists/1804.list --confirm
 ```
 
 ### Debugging
