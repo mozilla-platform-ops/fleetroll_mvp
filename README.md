@@ -74,6 +74,9 @@ Paths are automatically detected based on the remote host's operating system.
 Install dependencies with the following commands.
 
 ```bash
+# install uv (https://docs.astral.sh/uv/getting-started/installation/)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # install python deps
 uv sync
 
