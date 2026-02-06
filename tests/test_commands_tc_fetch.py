@@ -178,6 +178,7 @@ class TestWriteWorkerRecord:
             last_date_active="2024-01-15T10:25:00Z",
             task_started="2024-01-15T10:20:00Z",
             task_resolved="2024-01-15T10:28:00Z",
+            task_state="completed",
             quarantine_until=None,
         )
 
@@ -195,6 +196,7 @@ class TestWriteWorkerRecord:
         assert record["last_date_active"] == "2024-01-15T10:25:00Z"
         assert record["task_started"] == "2024-01-15T10:20:00Z"
         assert record["task_resolved"] == "2024-01-15T10:28:00Z"
+        assert record["task_state"] == "completed"
         assert record["quarantine_until"] is None
 
     def test_handles_null_optional_fields(self):
@@ -211,6 +213,7 @@ class TestWriteWorkerRecord:
             last_date_active=None,
             task_started=None,
             task_resolved=None,
+            task_state=None,
             quarantine_until=None,
         )
 

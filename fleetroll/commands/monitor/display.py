@@ -219,6 +219,29 @@ class MonitorDisplay:
             return self.curses_mod.color_pair(6)  # RED
         return 0  # gray/default for "-"
 
+    def tc_j_sf_attr(self, task_state: str | None) -> int:
+        """Color TC_T_DUR based on task completion state.
+
+        Args:
+            task_state: TaskCluster task state (COMPLETED/EXCEPTION/FAILED/RUNNING/PENDING)
+
+        Returns:
+            Color attribute: green=completed, yellow=exception, red=failed, default=other
+        """
+        if not self.color_enabled:
+            return 0
+        if not task_state:
+            return 0
+        # TaskCluster returns state in uppercase
+        state_upper = task_state.upper()
+        if state_upper == "COMPLETED":
+            return self.curses_mod.color_pair(4)  # GREEN
+        if state_upper == "EXCEPTION":
+            return self.curses_mod.color_pair(5)  # YELLOW
+        if state_upper == "FAILED":
+            return self.curses_mod.color_pair(6)  # RED
+        return 0  # gray/default for running/pending/unknown
+
     def build_color_map(
         self,
         values: Iterable[str],
@@ -849,6 +872,7 @@ class MonitorDisplay:
             - tc_worker_data: TC worker data dict
             - uptime_s: Uptime in seconds for coloring
             - tc_last_s: TC last active in seconds for coloring
+            - tc_task_state: TaskCluster task state for coloring TC_T_DUR
             - pp_age_s: Puppet age in seconds for coloring
             - pp_failed: Whether puppet run failed
         """
@@ -887,6 +911,9 @@ class MonitorDisplay:
                 except (ValueError, AttributeError):
                     pass
 
+        # Extract TC task state for coloring TC_T_DUR
+        tc_task_state = tc_worker_data.get("task_state") if tc_worker_data else None
+
         # Calculate puppet data for coloring (relative to audit time)
         host_record = self.latest_ok.get(host) or self.latest.get(host) or {}
         observed = host_record.get("observed", {})
@@ -911,6 +938,7 @@ class MonitorDisplay:
             "tc_worker_data": tc_worker_data,
             "uptime_s": uptime_s,
             "tc_last_s": tc_last_s,
+            "tc_task_state": tc_task_state,
             "pp_age_s": pp_age_s,
             "pp_failed": pp_success is False,
         }
@@ -970,6 +998,7 @@ class MonitorDisplay:
         tc_ts_value = render_data["tc_ts_value"]
         uptime_s = render_data["uptime_s"]
         tc_last_s = render_data["tc_last_s"]
+        tc_task_state = render_data["tc_task_state"]
         pp_age_s = render_data["pp_age_s"]
         pp_failed = render_data["pp_failed"]
 
@@ -1023,6 +1052,12 @@ class MonitorDisplay:
                 continue
             if col_name == "tc_quar":
                 attr = self.tc_quar_attr(values.get("tc_quar", "-"))
+                self.safe_addstr(row, col, cell, attr)
+                col += len(cell)
+                continue
+            if col_name == "tc_j_sf":
+                # Color TC_T_DUR based on task completion state
+                attr = self.tc_j_sf_attr(tc_task_state)
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue

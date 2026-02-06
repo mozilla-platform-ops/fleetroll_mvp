@@ -138,6 +138,7 @@ def write_worker_record(
     last_date_active: str | None,
     task_started: str | None,
     task_resolved: str | None,
+    task_state: str | None,
     quarantine_until: str | None,
 ) -> None:
     """Write a worker record to the JSONL file."""
@@ -152,6 +153,7 @@ def write_worker_record(
         "last_date_active": last_date_active,
         "task_started": task_started,
         "task_resolved": task_resolved,
+        "task_state": task_state,
         "quarantine_until": quarantine_until,
     }
     f.write(json.dumps(record) + "\n")
@@ -276,12 +278,14 @@ def match_workers_to_hosts(
             # Extract task data from latestTask.run (GraphQL structure)
             task_started = None
             task_resolved = None
+            task_state = None
             latest_task = worker_data.get("latestTask")
             if latest_task:
                 run = latest_task.get("run")
                 if run:
                     task_started = run.get("started")
                     task_resolved = run.get("resolved")
+                    task_state = run.get("state")
 
             record = {
                 "type": "worker",
@@ -294,6 +298,7 @@ def match_workers_to_hosts(
                 "last_date_active": last_date_active,
                 "task_started": task_started,
                 "task_resolved": task_resolved,
+                "task_state": task_state,
                 "quarantine_until": quarantine_until,
             }
             records.append(record)
