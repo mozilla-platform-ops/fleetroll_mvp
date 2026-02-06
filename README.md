@@ -80,7 +80,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # install python deps
 uv sync
 
-# if you run `. ./.venv/bin/activate` to activate the uv venv you can drop
+# if you run `source ./.venv/bin/activate` to activate the uv venv you can drop
 # the `uv run` from fleetroll commands (below and in general).
 ```
 
