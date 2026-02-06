@@ -13,7 +13,7 @@ Fleetroll MVP streamlines host state visibility and configuration management. It
 
 Fleetroll MVP spec: [`specs/README_FleetRoll_MVP.md`](specs/README_FleetRoll_MVP.md)
 
-Fleetroll MVP aims to solve the problems mentioned in `Problem Statement` section of [`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md).
+Fleetroll MVP aims to solve the problems mentioned in `Problem Statement` section of the Fleetroll (non MVP) spec ([`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md)).
 
 ## Functionality
 
