@@ -1,7 +1,7 @@
 # Fleetroll MVP
 
-[![CI](https://github.com/aerickson/fleetroll_mvp/actions/workflows/ci.yml/badge.svg)](https://github.com/aerickson/fleetroll_mvp/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/aerickson/fleetroll_mvp/branch/main/graph/badge.svg)](https://codecov.io/gh/aerickson/fleetroll_mvp)
+[![CI](https://github.com/mozilla-platform-ops/fleetroll_mvp/actions/workflows/ci.yml/badge.svg)](https://github.com/mozilla-platform-ops/fleetroll_mvp/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/mozilla-platform-ops/fleetroll_mvp/branch/main/graph/badge.svg)](https://codecov.io/gh/mozilla-platform-ops/fleetroll_mvp)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
