@@ -282,11 +282,38 @@ def build_ok_row_values(
     # Puppet fields
     puppet_last_run_epoch = observed.get("puppet_last_run_epoch")
     puppet_success = observed.get("puppet_success")
+    puppet_state_ts = observed.get("puppet_state_ts")
+    puppet_git_sha = observed.get("puppet_git_sha")
+    puppet_override_sha_applied = observed.get("puppet_override_sha_applied")
+
+    # PP_SHA: 7-char truncated git SHA
+    pp_sha = "-"
+    if puppet_git_sha:
+        pp_sha = puppet_git_sha[:7]
 
     # PP_LAST: time since last puppet run (relative to audit time) + FAIL indicator
+    # Prefer puppet_state_ts (new) over puppet_last_run_epoch (old) for backward compat
     pp_last = "--"
-    if puppet_last_run_epoch is not None:
-        # Use audit timestamp for consistency with uptime (both are snapshots)
+    pp_epoch = None
+
+    if puppet_state_ts:
+        # New path: use puppet_state_ts
+        audit_ts = record.get("ts")
+        if audit_ts:
+            try:
+                audit_dt = dt.datetime.fromisoformat(audit_ts)
+                puppet_dt = dt.datetime.fromisoformat(puppet_state_ts)
+                if puppet_dt.tzinfo is None:
+                    puppet_dt = puppet_dt.replace(tzinfo=dt.UTC)
+                if audit_dt.tzinfo is None:
+                    audit_dt = audit_dt.replace(tzinfo=dt.UTC)
+                pp_age_s = max(int((audit_dt - puppet_dt).total_seconds()), 0)
+                pp_last = humanize_duration(pp_age_s)
+                pp_epoch = int(puppet_dt.timestamp())
+            except (ValueError, AttributeError):
+                pp_last = "--"
+    elif puppet_last_run_epoch is not None:
+        # Fallback path: use puppet_last_run_epoch
         audit_ts = record.get("ts")
         if audit_ts:
             try:
@@ -294,28 +321,39 @@ def build_ok_row_values(
                 audit_epoch = int(audit_dt.timestamp())
                 pp_age_s = max(audit_epoch - puppet_last_run_epoch, 0)
                 pp_last = humanize_duration(pp_age_s)
+                pp_epoch = puppet_last_run_epoch
             except (ValueError, AttributeError):
                 pp_last = "--"
-        if puppet_success is False and pp_last != "--":
-            pp_last = f"{pp_last} FAIL"
 
-    # APPLIED: override present AND puppet ran after mtime AND succeeded
+    if puppet_success is False and pp_last != "--":
+        pp_last = f"{pp_last} FAIL"
+
+    # APPLIED: Dual-path approach
+    # Primary: SHA-based comparison (puppet_override_sha_applied vs current override SHA)
+    # Fallback: Timestamp-based heuristic (for older puppet setups)
     applied = "-"
     if override_present:
-        # If we can't detect puppet runs (e.g., Mac hosts without JSON state file),
-        # show "-" (unknown) instead of "N" (known not applied)
-        if puppet_last_run_epoch is None:
-            applied = "-"
-        else:
+        # SHA-based path (primary): Use SHA comparison if available
+        if puppet_override_sha_applied is not None:
+            # Compare the SHA that puppet applied vs current override SHA
+            if puppet_override_sha_applied == sha_full and puppet_success is True:
+                applied = "Y"
+            else:
+                applied = "N"
+        # Timestamp-based path (fallback): Use mtime comparison for older puppet setups
+        elif pp_epoch is not None:
             applied = "N"
             override_mtime_epoch = meta.get("mtime_epoch")
             if override_mtime_epoch is not None and puppet_success is True:
                 try:
                     mtime_int = int(override_mtime_epoch)
-                    if puppet_last_run_epoch > mtime_int:
+                    if pp_epoch > mtime_int:
                         applied = "Y"
                 except (ValueError, TypeError):
                     pass
+        # Unknown state: No puppet data available
+        else:
+            applied = "-"
 
     # HEALTHY: applied AND TC_LAST < 1 hour
     healthy = "-"
@@ -438,6 +476,7 @@ def build_ok_row_values(
         "tc_last": tc_last,
         "tc_j_sf": tc_j_sf,
         "pp_last": pp_last,
+        "pp_sha": pp_sha,
         "applied": applied,
         "healthy": healthy,
         "data": data,
@@ -479,6 +518,7 @@ def build_row_values(
             "tc_last": "-",
             "tc_j_sf": "-",
             "pp_last": "?",
+            "pp_sha": "?",
             "applied": "?",
             "healthy": "?",
             "data": f"?/{tc_str}",
@@ -514,6 +554,7 @@ def build_row_values(
             "tc_last": "-",
             "tc_j_sf": "-",
             "pp_last": "-",
+            "pp_sha": "-",
             "applied": "-",
             "healthy": "-",
             "data": f"{audit_str}/{tc_str}",
