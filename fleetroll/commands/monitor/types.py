@@ -26,7 +26,7 @@ UPTIME    Host uptime since last boot
 PP_LAST   Time since last puppet run (FAIL if failed)
 PP_EXP    Expected puppet SHA (branch HEAD or master HEAD)
 PP_SHA    Actual puppet SHA that was applied
-PP_MATCH  Puppet running latest branch code
+PP_MATCH  Puppet SHA matches expected (master or override branch)
           Y = puppet git SHA matches expected
           N = SHA mismatch or puppet failed
           - = no puppet/GitHub data available
@@ -36,7 +36,7 @@ TC_T_DUR  TC task duration (or time since start if in progress)
 TC_QUAR   TC quarantine status (Y if quarantined)
 DATA      Data freshness: audit_age/tc_age
 
-RO_HEALTH Overall rollout health status
+HEALTHY   Overall host health status
           Y = PP_MATCH and TC worker active (< 1 hour)
           N = not matched or TC worker stale
           - = no puppet/GitHub data available

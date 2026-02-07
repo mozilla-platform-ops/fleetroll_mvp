@@ -85,7 +85,7 @@ def compute_columns_and_widths(
         "pp_exp": "PP_EXP",
         "pp_sha": "PP_SHA",
         "pp_match": "PP_MATCH",
-        "healthy": "RO_HEALTH",
+        "healthy": "HEALTHY",
         "data": "DATA",
     }
     caps = {
@@ -233,7 +233,7 @@ def render_monitor_lines(
         "pp_exp": "PP_EXP",
         "pp_sha": "PP_SHA",
         "pp_match": "PP_MATCH",
-        "healthy": "RO_HEALTH",
+        "healthy": "HEALTHY",
         "data": "DATA",
     }
     header_parts = [clip_cell(labels[col], widths[col]) for col in columns]

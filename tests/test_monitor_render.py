@@ -56,7 +56,7 @@ def test_render_row_cells_alignment() -> None:
         "pp_exp": "PP_EXP",
         "pp_sha": "PP_SHA",
         "pp_match": "PP_MATCH",
-        "healthy": "RO_HEALTH",
+        "healthy": "HEALTHY",
         "data": "DATA",
     }
     header_cells = render_row_cells(labels, columns=columns, widths=widths, include_marker=False)
