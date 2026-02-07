@@ -370,8 +370,8 @@ def build_ok_row_values(
         pp_last = f"{pp_last} FAIL"
 
     # PP_EXP: expected puppet SHA from GitHub branch data
-    # APPLIED: SHA-based comparison against GitHub branch data
-    applied = "-"
+    # PP_MATCH: SHA-based comparison against GitHub branch data
+    pp_match = "-"
     pp_exp = "-"
     puppet_git_sha = observed.get("puppet_git_sha")
 
@@ -394,12 +394,12 @@ def build_ok_row_values(
                     pp_exp = github_sha[:7]
                 if puppet_git_sha:
                     if puppet_git_sha == github_sha and puppet_success is True:
-                        applied = "Y"
+                        pp_match = "Y"
                     else:
-                        applied = "N"
+                        pp_match = "N"
             # else: branch not in github_refs, fall through to "-"
 
-    # HEALTHY: applied AND TC_ACT < 1 hour
+    # HEALTHY: pp_match AND TC_ACT < 1 hour
     healthy = "-"
     tc_act_s = None
     if tc_data:
@@ -417,13 +417,13 @@ def build_ok_row_values(
             except (ValueError, AttributeError):
                 pass
 
-    # HEALTHY: APPLIED=Y AND TC_ACT < 1 hour
-    # (Now applies to both override and non-override hosts since APPLIED can be computed for both)
-    if applied == "-":
+    # HEALTHY: PP_MATCH=Y AND TC_ACT < 1 hour
+    # (Now applies to both override and non-override hosts since PP_MATCH can be computed for both)
+    if pp_match == "-":
         healthy = "-"
     else:
         healthy = "N"
-        if applied == "Y" and tc_act_s is not None and tc_act_s < 3600:
+        if pp_match == "Y" and tc_act_s is not None and tc_act_s < 3600:
             healthy = "Y"
 
     # Add TaskCluster fields
@@ -522,7 +522,7 @@ def build_ok_row_values(
         "pp_last": pp_last,
         "pp_sha": pp_sha,
         "pp_exp": pp_exp,
-        "applied": applied,
+        "pp_match": pp_match,
         "healthy": healthy,
         "data": data,
     }
@@ -566,7 +566,7 @@ def build_row_values(
             "pp_last": "?",
             "pp_sha": "?",
             "pp_exp": "?",
-            "applied": "?",
+            "pp_match": "?",
             "healthy": "?",
             "data": f"?/{tc_str}",
         }
@@ -608,7 +608,7 @@ def build_row_values(
             "pp_last": "-",
             "pp_sha": "-",
             "pp_exp": "-",
-            "applied": "-",
+            "pp_match": "-",
             "healthy": "-",
             "data": f"{audit_str}/{tc_str}",
         }

@@ -214,8 +214,8 @@ class MonitorDisplay:
             return self.curses_mod.color_pair(6)  # RED
         return self.threshold_color_attr(seconds_value, (60 * 60, 6 * 60 * 60))
 
-    def applied_attr(self, value: str) -> int:
-        """Color APPLIED: green=Y, yellow=N, gray=-."""
+    def pp_match_attr(self, value: str) -> int:
+        """Color PP_MATCH: green=Y, yellow=N, gray=-."""
         if not self.color_enabled:
             return 0
         if value == "Y":
@@ -542,11 +542,11 @@ class MonitorDisplay:
             "pp_last",
             "pp_exp",
             "pp_sha",
+            "pp_match",
             "tc_act",
             "tc_j_sf",
             "tc_quar",
             "data",
-            "applied",
             "healthy",
         ]
 
@@ -562,7 +562,7 @@ class MonitorDisplay:
             "pp_last": "PP_LAST",
             "pp_exp": "PP_EXP",
             "pp_sha": "PP_SHA",
-            "applied": "APPLIED",
+            "pp_match": "PP_MATCH",
             "healthy": "RO_HEALTH",
             "data": "DATA",
         }
@@ -1190,8 +1190,8 @@ class MonitorDisplay:
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
-            if col_name == "applied":
-                attr = self.applied_attr(values.get("applied", "-"))
+            if col_name == "pp_match":
+                attr = self.pp_match_attr(values.get("pp_match", "-"))
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue

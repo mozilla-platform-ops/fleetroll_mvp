@@ -54,7 +54,8 @@ def test_render_row_cells_alignment() -> None:
         "tc_j_sf": "TC_J_SF",
         "pp_last": "PP_LAST",
         "pp_exp": "PP_EXP",
-        "applied": "APPLIED",
+        "pp_sha": "PP_SHA",
+        "pp_match": "PP_MATCH",
         "healthy": "RO_HEALTH",
         "data": "DATA",
     }
@@ -201,8 +202,8 @@ def test_quarantine_status_checks_future():
     assert values["tc_quar"] == "-"
 
 
-def test_puppet_columns_applied_healthy():
-    """Test PP_LAST, APPLIED, HEALTHY columns with SHA-based logic."""
+def test_puppet_columns_pp_match_healthy():
+    """Test PP_LAST, PP_MATCH, HEALTHY columns with SHA-based logic."""
     from datetime import datetime
 
     from fleetroll.commands.monitor.cache import ShaInfoCache
@@ -217,7 +218,7 @@ def test_puppet_columns_applied_healthy():
         "last_date_active": now.isoformat(),
     }
 
-    # Test 1: SHA-based comparison - puppet SHA matches GitHub branch SHA -> APPLIED=Y
+    # Test 1: SHA-based comparison - puppet SHA matches GitHub branch SHA -> PP_MATCH=Y
     github_refs = {
         "testuser/ronin_puppet:test-branch": {
             "sha": "test_git_sha_1234",  # pragma: allowlist secret
@@ -253,10 +254,10 @@ def test_puppet_columns_applied_healthy():
         sha_cache=sha_cache,
         github_refs=github_refs,
     )
-    assert values["applied"] == "Y"
+    assert values["pp_match"] == "Y"
     assert values["healthy"] == "Y"
 
-    # Test 2: SHA-based comparison - puppet SHA mismatch -> APPLIED=N
+    # Test 2: SHA-based comparison - puppet SHA mismatch -> PP_MATCH=N
     record_sha_mismatch = {
         "ok": True,
         "ts": now.isoformat(),
@@ -279,7 +280,7 @@ def test_puppet_columns_applied_healthy():
         sha_cache=sha_cache,
         github_refs=github_refs,
     )
-    assert values["applied"] == "N"
+    assert values["pp_match"] == "N"
     assert values["healthy"] == "N"
 
     # Test 3: No override - check against master branch
@@ -307,10 +308,10 @@ def test_puppet_columns_applied_healthy():
     values = build_row_values(
         "host1", record_no_override_match, tc_data=tc_data_fresh, github_refs=github_refs_master
     )
-    assert values["applied"] == "Y"
+    assert values["pp_match"] == "Y"
     assert values["healthy"] == "Y"
 
-    # Test 4: No SHA data (no github_refs) → applied=dash, healthy=dash
+    # Test 4: No SHA data (no github_refs) → pp_match=dash, healthy=dash
     record_no_sha = {
         "ok": True,
         "ts": now.isoformat(),
@@ -327,10 +328,10 @@ def test_puppet_columns_applied_healthy():
         },
     }
     values = build_row_values("host1", record_no_sha, tc_data=tc_data_fresh, github_refs=None)
-    assert values["applied"] == "-"
+    assert values["pp_match"] == "-"
     assert values["healthy"] == "-"
 
-    # Test 5: Puppet failed with SHA data -> APPLIED=N
+    # Test 5: Puppet failed with SHA data -> PP_MATCH=N
     record_puppet_failed = {
         "ok": True,
         "ts": now.isoformat(),
@@ -353,10 +354,10 @@ def test_puppet_columns_applied_healthy():
         sha_cache=sha_cache,
         github_refs=github_refs,
     )
-    assert values["applied"] == "N"
+    assert values["pp_match"] == "N"
     assert values["healthy"] == "N"
 
-    # Test 6: No puppet_git_sha (e.g., Mac host) -> APPLIED=-
+    # Test 6: No puppet_git_sha (e.g., Mac host) -> PP_MATCH=-
     record_no_puppet_sha = {
         "ok": True,
         "ts": now.isoformat(),
@@ -379,7 +380,7 @@ def test_puppet_columns_applied_healthy():
         sha_cache=sha_cache,
         github_refs=github_refs,
     )
-    assert values["applied"] == "-"  # Unknown
+    assert values["pp_match"] == "-"  # Unknown
     assert values["healthy"] == "-"  # Unknown
 
 

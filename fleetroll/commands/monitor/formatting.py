@@ -64,11 +64,12 @@ def compute_columns_and_widths(
         "uptime",
         "pp_last",
         "pp_exp",
+        "pp_sha",
+        "pp_match",
         "tc_act",
         "tc_j_sf",
         "tc_quar",
         "data",
-        "applied",
         "healthy",
     ]
     labels = {
@@ -82,7 +83,8 @@ def compute_columns_and_widths(
         "tc_j_sf": "TC_T_DUR",
         "pp_last": "PP_LAST",
         "pp_exp": "PP_EXP",
-        "applied": "APPLIED",
+        "pp_sha": "PP_SHA",
+        "pp_match": "PP_MATCH",
         "healthy": "RO_HEALTH",
         "data": "DATA",
     }
@@ -97,7 +99,8 @@ def compute_columns_and_widths(
         "tc_j_sf": 20,
         "pp_last": 12,
         "pp_exp": 7,
-        "applied": 7,
+        "pp_sha": 7,
+        "pp_match": 8,
         "healthy": 7,
         "data": 12,
     }
@@ -228,7 +231,8 @@ def render_monitor_lines(
         "tc_j_sf": "TC_T_DUR",
         "pp_last": "PP_LAST",
         "pp_exp": "PP_EXP",
-        "applied": "APPLIED",
+        "pp_sha": "PP_SHA",
+        "pp_match": "PP_MATCH",
         "healthy": "RO_HEALTH",
         "data": "DATA",
     }
