@@ -338,7 +338,6 @@ def build_ok_row_values(
     # PP_LAST: time since last puppet run (relative to audit time) + FAIL indicator
     # Prefer puppet_state_ts (new) over puppet_last_run_epoch (old) for backward compat
     pp_last = "--"
-    pp_epoch = None
 
     if puppet_state_ts:
         # New path: use puppet_state_ts
@@ -353,7 +352,6 @@ def build_ok_row_values(
                     audit_dt = audit_dt.replace(tzinfo=dt.UTC)
                 pp_age_s = max(int((audit_dt - puppet_dt).total_seconds()), 0)
                 pp_last = humanize_duration(pp_age_s)
-                pp_epoch = int(puppet_dt.timestamp())
             except (ValueError, AttributeError):
                 pp_last = "--"
     elif puppet_last_run_epoch is not None:
@@ -365,7 +363,6 @@ def build_ok_row_values(
                 audit_epoch = int(audit_dt.timestamp())
                 pp_age_s = max(audit_epoch - puppet_last_run_epoch, 0)
                 pp_last = humanize_duration(pp_age_s)
-                pp_epoch = puppet_last_run_epoch
             except (ValueError, AttributeError):
                 pp_last = "--"
 
@@ -396,20 +393,6 @@ def build_ok_row_values(
                 else:
                     applied = "N"
             # else: branch not in github_refs, fall through to "-"
-
-    elif override_present:
-        # Fallback: timestamp heuristic when no GitHub data or no puppet_git_sha
-        if pp_epoch is not None:
-            applied = "N"
-            override_mtime_epoch = meta.get("mtime_epoch")
-            if override_mtime_epoch is not None and puppet_success is True:
-                try:
-                    mtime_int = int(override_mtime_epoch)
-                    if pp_epoch > mtime_int:
-                        applied = "Y"
-                except (ValueError, TypeError):
-                    pass
-        # else: no puppet state → applied stays "-"
 
     # HEALTHY: applied AND TC_LAST < 1 hour
     healthy = "-"

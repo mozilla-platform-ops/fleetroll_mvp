@@ -309,8 +309,8 @@ def test_puppet_columns_applied_healthy():
     assert values["applied"] == "Y"
     assert values["healthy"] == "Y"
 
-    # Test 4: Fallback to timestamp heuristic when no github_refs
-    record_timestamp_fallback = {
+    # Test 4: No SHA data (no github_refs) → applied=dash, healthy=dash
+    record_no_sha = {
         "ok": True,
         "ts": now.isoformat(),
         "observed": {
@@ -321,15 +321,13 @@ def test_puppet_columns_applied_healthy():
             "vault_sha256": None,
             "override_meta": {"mtime_epoch": str(now_epoch - 3600)},  # 1 hour ago
             "uptime_s": 3600,
-            "puppet_last_run_epoch": now_epoch - 1800,  # 30 min ago (after mtime)
+            "puppet_last_run_epoch": now_epoch - 1800,  # 30 min ago
             "puppet_success": True,
         },
     }
-    values = build_row_values(
-        "host1", record_timestamp_fallback, tc_data=tc_data_fresh, github_refs=None
-    )
-    assert values["applied"] == "Y"
-    assert values["healthy"] == "Y"
+    values = build_row_values("host1", record_no_sha, tc_data=tc_data_fresh, github_refs=None)
+    assert values["applied"] == "-"
+    assert values["healthy"] == "-"
 
     # Test 5: Puppet failed with SHA data -> APPLIED=N
     record_puppet_failed = {
