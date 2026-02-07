@@ -60,13 +60,25 @@ prek
 
 **IMPORTANT**: Always use `prek` instead of `pre-commit run --all-files` for better performance.
 
-Run `prek` before suggesting commits to ensure all checks pass.
+Run `prek` before suggesting commits to ensure all checks pass. Note that `prek` may reformat files in-place, requiring a re-stage-and-rerun loop:
+
+```bash
+git add src/fleetroll/commands/monitor.py
+prek                    # ruff reformats the file
+git add src/fleetroll/commands/monitor.py   # re-stage formatted version
+prek                    # all checks pass now
+```
 
 ## Testing Workflow
 
 When implementing features:
 
-1. **Test incrementally** - Run specific tests as you implement:
+1. **Choose the right tool**:
+   - `uv run verify-imports` — quick smoke test that new imports resolve correctly
+   - `uv run pytest tests/test_specific.py -v` — test actual functionality for the module you changed
+   - `uv run pytest -v` — full suite, run before suggesting a commit
+
+2. **Test incrementally** - Run specific tests as you implement:
    ```bash
    # Test a specific function
    uv run pytest tests/test_file.py::test_function_name -v
@@ -78,18 +90,18 @@ When implementing features:
    uv run pytest -v
    ```
 
-2. **Follow TDD pattern when appropriate**:
+3. **Follow TDD pattern when appropriate**:
    - Write test for new functionality
    - Implement minimum code to pass test
    - Refactor if needed
    - Run full test suite
 
-3. **Extract pure functions for testability**:
+4. **Extract pure functions for testability**:
    - Complex logic → pure function → easy to test
    - Example: `compute_header_layout(left, right, width) -> int`
    - Place before class definitions or in separate modules
 
-4. **Iterative cycle**:
+5. **Iterative cycle**:
    ```bash
    # 1. Implement change
    # 2. Run relevant tests
@@ -107,7 +119,13 @@ When implementing features:
 
 ## Cass - Agent Session Search
 
-Use `cass` to search previous Claude Code chat sessions and extend your context with relevant information from past conversations. When working on a task, search for related topics, error messages, or implementations to learn from previous solutions and avoid repeating past mistakes.
+Use `cass` to search previous Claude Code chat sessions for relevant context from past conversations.
+
+**When to search:**
+- Before starting unfamiliar work — check if it was attempted before
+- When hitting an error you suspect was seen in a previous session
+- When implementing a pattern that may already exist in the codebase history
+- When reviewing docs like this one — search for past failures and lessons
 
 ⚠️ **Never run bare `cass` in an agent context** — it launches the interactive TUI. Always use `--robot` or `--json`.
 
@@ -138,20 +156,27 @@ When we're ready to commit the work, stage the files and ensure tests and pre-co
 
 The user will handle committing and pushing. When changes are ready to commit:
 
-1. **Do NOT** run git commit, or git push commands
-2. **Do** prompt the user with a suggested commit message (1 main line, newline, and then max 2 more lines)
-4. The user will handle the actual git operations
+1. **Do NOT** run `git commit` or `git push` commands
+2. **Do** prompt the user with a suggested commit message
+3. The user will handle the actual git operations
+
+Format: one summary line, then optionally 1-2 detail lines after a blank line.
 
 Example:
 ```
 Description of what changed:
-  DESCRIPTION
+  Refactored monitor rendering into smaller methods
 
 Suggested commit message:
-  Add feature X
+  Refactor draw_screen into focused methods
+
+  Extract header, row, and footer rendering into separate
+  methods for testability.
 ```
 
-## Function arguments (positional vs keyword)
+## Code Quality Practices
+
+### Function Arguments (positional vs keyword)
 
 - Prefer keyword arguments for readability and API stability.
 - Default to **one positional argument** — the primary subject of the operation.
@@ -162,8 +187,6 @@ Suggested commit message:
   ```
 - Avoid positional booleans.
 - Exceptions: well-known stdlib patterns, simple value objects (coordinates/colors), and functional patterns.
-
-## Code Quality Practices
 
 ### Read Before Editing
 
@@ -182,20 +205,6 @@ When `ty check` reports errors:
 2. **Early returns help**: Return early from branches to clarify control flow
 
 3. **Type annotations**: Add them when they clarify intent, not just for the checker
-
-### Handling prek Failures
-
-```bash
-# Common pattern when prek fails:
-git add <files>
-prek
-# If formatting changes files:
-git add <files>
-prek
-# Repeat until all checks pass
-```
-
-**Note**: `prek` may format files, so you may need to stage and run multiple times.
 
 ## Development Patterns
 
@@ -248,14 +257,11 @@ This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) 
 ### Essential Commands
 
 ```bash
-br
-
-# CLI commands for agents (use these instead)
 br ready              # Show issues ready to work (no blockers)
 br list --status=open # All open issues
 br show <id>          # Full issue details with dependencies
 # create options
-# --type <TYPE>  # valid types:  task, bug, feature, epic, chore
+# --type <TYPE>  # valid types: task, bug, feature, epic, chore, docs
 # --parent <PARENT>  # parent issue (epics usually)
 br create --type task --priority 2 --description "Description text" "Issue Title"
 br update <id> --description="..."  # Update description, priority, type, etc
@@ -296,7 +302,7 @@ When files have changed during the work, suggest a git commit message that menti
 
 - **Dependencies**: Issues can block other issues. `br ready` shows only unblocked work.
 - **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers, not words)
-- **Types**: task, bug, feature, epic, question, docs
+- **Types**: task, bug, feature, epic, chore, docs
 - **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
 
 ### Design Documents
