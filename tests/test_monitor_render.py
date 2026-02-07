@@ -53,6 +53,7 @@ def test_render_row_cells_alignment() -> None:
         "tc_act": "TC_ACT",
         "tc_j_sf": "TC_J_SF",
         "pp_last": "PP_LAST",
+        "pp_exp": "PP_EXP",
         "applied": "APPLIED",
         "healthy": "RO_HEALTH",
         "data": "DATA",
@@ -380,6 +381,89 @@ def test_puppet_columns_applied_healthy():
     )
     assert values["applied"] == "-"  # Unknown
     assert values["healthy"] == "-"  # Unknown
+
+
+def test_pp_exp_column():
+    """Test PP_EXP column shows expected puppet SHA."""
+    from datetime import datetime
+
+    from fleetroll.commands.monitor.cache import ShaInfoCache
+    from fleetroll.constants import DEFAULT_GITHUB_REPO
+
+    now = datetime.now(UTC)
+    now_epoch = int(now.timestamp())
+
+    # Test 1: Override present - PP_EXP shows branch HEAD SHA
+    github_refs = {
+        "testuser/ronin_puppet:test-branch": {
+            "sha": "test_branch_sha_1234",
+        }
+    }
+    sha_cache = ShaInfoCache(overrides_dir="/nonexistent", vault_dir="/nonexistent")
+    sha_cache.override_cache["abc123"] = {
+        "user": "testuser",
+        "repo": "ronin_puppet",
+        "branch": "test-branch",
+    }
+
+    record = {
+        "ok": True,
+        "ts": now.isoformat(),
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "override_present": True,
+            "override_sha256": "abc123",
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": str(now_epoch)},
+            "uptime_s": 3600,
+            "puppet_git_sha": "test_branch_sha_1234",
+            "puppet_success": True,
+        },
+    }
+    values = build_row_values("host1", record, sha_cache=sha_cache, github_refs=github_refs)
+    assert values["pp_exp"] == "test_br"
+
+    # Test 2: No override - PP_EXP shows master HEAD SHA
+    github_refs_master = {
+        f"{DEFAULT_GITHUB_REPO}:master": {
+            "sha": "test_master_sha_5678",
+        }
+    }
+    record_no_ovr = {
+        "ok": True,
+        "ts": now.isoformat(),
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "uptime_s": 3600,
+            "puppet_git_sha": "test_master_sha_5678",
+            "puppet_success": True,
+        },
+    }
+    values = build_row_values("host1", record_no_ovr, github_refs=github_refs_master)
+    assert values["pp_exp"] == "test_ma"
+
+    # Test 3: No github_refs - PP_EXP shows dash
+    values = build_row_values("host1", record_no_ovr, github_refs=None)
+    assert values["pp_exp"] == "-"
+
+    # Test 4: No record (unknown host) - PP_EXP shows "?"
+    values = build_row_values("host1", None)
+    assert values["pp_exp"] == "?"
+
+    # Test 5: Failed audit with no last_ok - PP_EXP shows "-"
+    failed_record = {
+        "ok": False,
+        "ts": now.isoformat(),
+        "error": "ssh timeout",
+    }
+    values = build_row_values("host1", failed_record)
+    assert values["pp_exp"] == "-"
 
 
 def _sep_positions(line: str) -> list[int]:

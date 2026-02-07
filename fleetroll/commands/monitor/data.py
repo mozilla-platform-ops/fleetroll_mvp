@@ -369,11 +369,13 @@ def build_ok_row_values(
     if puppet_success is False and pp_last != "--":
         pp_last = f"{pp_last} FAIL"
 
+    # PP_EXP: expected puppet SHA from GitHub branch data
     # APPLIED: SHA-based comparison against GitHub branch data
     applied = "-"
+    pp_exp = "-"
     puppet_git_sha = observed.get("puppet_git_sha")
 
-    if puppet_git_sha and github_refs:
+    if github_refs:
         # Determine expected branch
         ref_key = None
         if override_present and sha_cache:
@@ -388,10 +390,13 @@ def build_ok_row_values(
             ref_record = github_refs.get(ref_key)
             if ref_record:
                 github_sha = ref_record.get("sha", "")
-                if puppet_git_sha == github_sha and puppet_success is True:
-                    applied = "Y"
-                else:
-                    applied = "N"
+                if github_sha:
+                    pp_exp = github_sha[:7]
+                if puppet_git_sha:
+                    if puppet_git_sha == github_sha and puppet_success is True:
+                        applied = "Y"
+                    else:
+                        applied = "N"
             # else: branch not in github_refs, fall through to "-"
 
     # HEALTHY: applied AND TC_ACT < 1 hour
@@ -516,6 +521,7 @@ def build_ok_row_values(
         "tc_j_sf": tc_j_sf,
         "pp_last": pp_last,
         "pp_sha": pp_sha,
+        "pp_exp": pp_exp,
         "applied": applied,
         "healthy": healthy,
         "data": data,
@@ -559,6 +565,7 @@ def build_row_values(
             "tc_j_sf": "-",
             "pp_last": "?",
             "pp_sha": "?",
+            "pp_exp": "?",
             "applied": "?",
             "healthy": "?",
             "data": f"?/{tc_str}",
@@ -600,6 +607,7 @@ def build_row_values(
             "tc_j_sf": "-",
             "pp_last": "-",
             "pp_sha": "-",
+            "pp_exp": "-",
             "applied": "-",
             "healthy": "-",
             "data": f"{audit_str}/{tc_str}",

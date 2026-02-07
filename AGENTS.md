@@ -117,6 +117,12 @@ When implementing features:
    prek
    ```
 
+6. **Test secrets — avoid hex strings**:
+   - `detect-secrets` flags high-entropy hex strings (e.g., `deadbeef12345678`)
+   - Use obviously-fake, non-hex values instead: `test_git_sha_1234`, `test_branch_sha_5678`
+   - This avoids needing `# pragma: allowlist secret` comments
+   - See existing pattern in `test_monitor_render.py::test_puppet_columns_applied_healthy`
+
 ## Cass - Agent Session Search
 
 Use `cass` to search previous Claude Code chat sessions for relevant context from past conversations.
