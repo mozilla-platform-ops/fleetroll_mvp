@@ -1330,11 +1330,13 @@ class MonitorDisplay:
                 row, render_data=render_data, columns=columns, widths=widths, color_maps=color_maps
             )
 
-        # Draw help popup if active
+        # Refresh main screen first, then draw help popup on top
         if self.show_help:
+            self.stdscr.noutrefresh()
             self.draw_help_popup()
-
-        self.stdscr.refresh()
+            self.curses_mod.doupdate()
+        else:
+            self.stdscr.refresh()
 
     def draw_help_popup(self) -> None:
         """Draw a centered help popup with the column guide."""
@@ -1359,18 +1361,24 @@ class MonitorDisplay:
 
         # Calculate popup dimensions
         content_width = max(len(line) for line in all_lines)
-        popup_width = content_width + 2 + (h_pad * 2)  # 2 for borders, h_pad on each side
-        popup_height = len(all_lines) + 2 + (v_pad * 2)  # 2 for borders, v_pad top and bottom
+        popup_width = content_width + (h_pad * 2)
+        popup_height = len(all_lines) + (v_pad * 2)
 
         # Center the popup
         start_y = max((height - popup_height) // 2, 0)
         start_x = max((width - popup_width) // 2, 0)
 
-        # Clip to screen
-        if start_y + popup_height > height:
-            popup_height = max(height - start_y, 3)
-        if start_x + popup_width > width:
-            popup_width = max(width - start_x, 10)
+        # Clip to screen (leave room for border)
+        if start_y + popup_height + 2 > height:
+            popup_height = max(height - start_y - 2, 1)
+        if start_x + popup_width + 2 > width:
+            popup_width = max(width - start_x - 2, 10)
+
+        # Create a window for the popup with border
+        try:
+            popup_win = self.curses_mod.newwin(popup_height + 2, popup_width + 2, start_y, start_x)
+        except curses_error:
+            return
 
         # Get attributes for popup (black on white - pair 18)
         popup_attr = (
@@ -1381,28 +1389,19 @@ class MonitorDisplay:
             self.curses_mod.color_pair(17) if self.color_enabled else self.curses_mod.A_REVERSE
         )
 
-        # Draw top border
-        top_border = "┌" + "─" * (popup_width - 2) + "┐"
-        self.safe_addstr(start_y, start_x, top_border, popup_attr)
+        # Fill background and draw border using curses built-in
+        popup_win.bkgd(" ", popup_attr)
+        popup_win.border()
 
-        # Track current row
-        current_row = start_y + 1
+        # Draw content lines with padding
+        current_row = v_pad + 1  # Start after border and top padding
+        max_content_rows = popup_height - (v_pad * 2)
 
-        # Draw top padding lines
-        for _ in range(v_pad):
-            if current_row >= height - 1:
-                break
-            blank_line = "│" + " " * (popup_width - 2) + "│"
-            self.safe_addstr(current_row, start_x, blank_line, popup_attr)
-            current_row += 1
-
-        # Draw content lines with side borders
-        max_content_rows = popup_height - 2 - (v_pad * 2)
         for i, line in enumerate(all_lines[:max_content_rows]):
-            if current_row >= height - 1:
+            if current_row >= popup_height + 1:
                 break
-            # Pad line to fill popup width with horizontal padding
-            # Center mascot lines
+
+            # Center mascot lines, left-align others
             if i < mascot_line_count:
                 padding_needed = content_width - len(line)
                 left_pad = padding_needed // 2
@@ -1410,27 +1409,20 @@ class MonitorDisplay:
                 padded = " " * h_pad + " " * left_pad + line + " " * right_pad + " " * h_pad
             else:
                 padded = " " * h_pad + line.ljust(content_width) + " " * h_pad
-            if len(padded) > popup_width - 2:
-                padded = padded[: popup_width - 2]
 
-            # Draw borders in normal attr, content in mascot attr if mascot line
-            self.safe_addstr(current_row, start_x, "│", popup_attr)
-            if i < mascot_line_count:
-                self.safe_addstr(current_row, start_x + 1, padded, mascot_attr)
-            else:
-                self.safe_addstr(current_row, start_x + 1, padded, popup_attr)
-            self.safe_addstr(current_row, start_x + popup_width - 1, "│", popup_attr)
+            # Clip if too long
+            if len(padded) > popup_width:
+                padded = padded[:popup_width]
+
+            # Draw content with appropriate attribute
+            try:
+                if i < mascot_line_count:
+                    popup_win.addstr(current_row, 1, padded, mascot_attr)
+                else:
+                    popup_win.addstr(current_row, 1, padded, popup_attr)
+            except curses_error:
+                pass
+
             current_row += 1
 
-        # Draw bottom padding lines
-        for _ in range(v_pad):
-            if current_row >= height - 1:
-                break
-            blank_line = "│" + " " * (popup_width - 2) + "│"
-            self.safe_addstr(current_row, start_x, blank_line, popup_attr)
-            current_row += 1
-
-        # Draw bottom border
-        if current_row < height:
-            bottom_border = "└" + "─" * (popup_width - 2) + "┘"
-            self.safe_addstr(current_row, start_x, bottom_border, popup_attr)
+        popup_win.noutrefresh()
