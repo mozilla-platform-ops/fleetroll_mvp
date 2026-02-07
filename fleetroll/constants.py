@@ -31,6 +31,8 @@ HOST_OBSERVATIONS_FILE_NAME = "host_observations.jsonl"
 OVERRIDES_DIR_NAME = "overrides"
 VAULT_YAMLS_DIR_NAME = "vault_yamls"
 TC_WORKERS_FILE_NAME = "taskcluster_workers.jsonl"
+GITHUB_REFS_FILE_NAME = "github_refs.jsonl"
+DEFAULT_GITHUB_REPO = "mozilla-platform-ops/ronin_puppet"
 
 # TaskCluster role to (provisioner, workerType) mapping
 ROLE_TO_TASKCLUSTER = {

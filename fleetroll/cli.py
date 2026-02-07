@@ -21,6 +21,7 @@ from .cli_types import (
     VaultShowArgs,
 )
 from .commands import (
+    cmd_gh_fetch,
     cmd_host_audit,
     cmd_host_monitor,
     cmd_host_set,
@@ -521,6 +522,23 @@ def tc_fetch(host: str, verbose: int, quiet: bool):
 
     args = TcFetchArgs(host=host, verbose=verbose, quiet=quiet)
     cmd_tc_fetch(args)
+
+
+@cli.command("gh-fetch")
+@click.option(
+    "--override-delay",
+    is_flag=True,
+    help="Fetch regardless of throttle interval.",
+)
+@click.option(
+    "--quiet",
+    "-q",
+    is_flag=True,
+    help="Single-line output.",
+)
+def gh_fetch(override_delay: bool, quiet: bool):
+    """Fetch GitHub branch refs for puppet repos."""
+    cmd_gh_fetch(override_delay=override_delay, quiet=quiet)
 
 
 @cli.command("rotate-logs")

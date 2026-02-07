@@ -25,6 +25,7 @@ from .data import (
     detect_common_fqdn_suffix,
     get_host_sort_key,
     humanize_duration,
+    load_github_refs,
     load_tc_worker_data,
     resolve_last_ok_ts,
     strip_fqdn,
@@ -46,6 +47,8 @@ class MonitorDisplay:
         latest_ok: dict[str, dict[str, Any]],
         tc_data: dict[str, dict[str, Any]],
         tc_workers_path: Path,
+        github_refs: dict[str, dict[str, Any]],
+        github_refs_path: Path,
         sha_cache: ShaInfoCache | None = None,
     ) -> None:
         self.stdscr = stdscr
@@ -56,8 +59,11 @@ class MonitorDisplay:
         self.latest_ok = latest_ok
         self.tc_data = tc_data
         self.tc_workers_path = tc_workers_path
+        self.github_refs = github_refs
+        self.github_refs_path = github_refs_path
         self.sha_cache = sha_cache
         self.tc_file_mtime = None
+        self.github_file_mtime = None
         self.offset = 0
         self.col_offset = 0
         self.page_step = 1
@@ -78,6 +84,7 @@ class MonitorDisplay:
         self.warning_attr = 0
         self._init_curses()
         self._update_tc_mtime()
+        self._update_github_mtime()
         self.log_size_warnings = self._check_log_sizes()
 
     def _init_curses(self) -> None:
@@ -374,6 +381,14 @@ class MonitorDisplay:
         except FileNotFoundError:
             self.tc_file_mtime = None
 
+    def _update_github_mtime(self) -> None:
+        """Update stored mtime of GitHub refs file."""
+        try:
+            stat = self.github_refs_path.stat()
+            self.github_file_mtime = stat.st_mtime
+        except FileNotFoundError:
+            self.github_file_mtime = None
+
     def _check_log_sizes(self) -> list[str]:
         """Check log file sizes and return warnings for files over threshold.
 
@@ -421,6 +436,24 @@ class MonitorDisplay:
         if self.tc_file_mtime is None or current_mtime != self.tc_file_mtime:
             self.tc_data = load_tc_worker_data(self.tc_workers_path)
             self.tc_file_mtime = current_mtime
+            return True
+        return False
+
+    def poll_github_data(self) -> bool:
+        """Check if GitHub refs file changed and reload if needed. Returns True if reloaded."""
+        try:
+            stat = self.github_refs_path.stat()
+            current_mtime = stat.st_mtime
+        except FileNotFoundError:
+            if self.github_file_mtime is not None:
+                self.github_refs = {}
+                self.github_file_mtime = None
+                return True
+            return False
+
+        if self.github_file_mtime is None or current_mtime != self.github_file_mtime:
+            self.github_refs = load_github_refs(self.github_refs_path)
+            self.github_file_mtime = current_mtime
             return True
         return False
 

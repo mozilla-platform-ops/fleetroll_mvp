@@ -9,7 +9,7 @@ from curses import wrapper as curses_wrapper
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ...constants import HOST_OBSERVATIONS_FILE_NAME, TC_WORKERS_FILE_NAME
+from ...constants import GITHUB_REFS_FILE_NAME, HOST_OBSERVATIONS_FILE_NAME, TC_WORKERS_FILE_NAME
 from ...exceptions import FleetRollError
 from ...utils import (
     default_audit_log_path,
@@ -21,6 +21,7 @@ from .cache import ShaInfoCache
 from .data import (
     AuditLogTailer,
     get_host_sort_key,
+    load_github_refs,
     load_latest_records,
     load_tc_worker_data,
     strip_fqdn,
@@ -62,6 +63,10 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
     # Load TaskCluster worker data
     tc_workers_path = Path.home() / ".fleetroll" / TC_WORKERS_FILE_NAME
     tc_data = load_tc_worker_data(tc_workers_path)
+
+    # Load GitHub refs data
+    github_refs_path = Path.home() / ".fleetroll" / GITHUB_REFS_FILE_NAME
+    github_refs = load_github_refs(github_refs_path)
 
     # Load SHA info cache
     fleetroll_dir = Path.home() / ".fleetroll"
@@ -173,6 +178,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
             latest_ok=latest_ok,
             tc_data=tc_data,
             tc_workers_path=tc_workers_path,
+            github_refs=github_refs,
+            github_refs_path=github_refs_path,
             sha_cache=sha_cache,
         )
         display.draw_screen()
@@ -204,6 +211,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 display.update_record(record)
                 display.draw_screen()
             if display.poll_tc_data():
+                display.draw_screen()
+            if display.poll_github_data():
                 display.draw_screen()
 
     curses_wrapper(curses_main)

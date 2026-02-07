@@ -518,3 +518,8 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             f"{scan_records_written} scan record(s) to {output_path}"
         )
         click.echo(msg)
+
+    # Also refresh GitHub branch refs (throttled)
+    from ..github import do_github_fetch
+
+    do_github_fetch(quiet=quiet)

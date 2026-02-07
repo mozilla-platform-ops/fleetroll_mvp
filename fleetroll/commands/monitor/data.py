@@ -154,6 +154,50 @@ def load_tc_worker_data(path: Path) -> dict[str, dict[str, Any]]:
     return host_data
 
 
+def load_github_refs(path: Path) -> dict[str, dict[str, Any]]:
+    """Load GitHub ref data from JSONL file.
+
+    Returns a dict mapping 'owner/repo:branch' to the latest branch_ref record.
+    If multiple records exist for the same branch, uses most recent by ts.
+    """
+    if not path.exists():
+        return {}
+
+    ref_data: dict[str, dict[str, Any]] = {}
+
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                    if record.get("type") != "branch_ref":
+                        continue
+
+                    owner = record.get("owner")
+                    repo = record.get("repo")
+                    branch = record.get("branch")
+                    ts = record.get("ts")
+                    if not owner or not repo or not branch or not ts:
+                        continue
+
+                    # Use 'owner/repo:branch' as key
+                    key = f"{owner}/{repo}:{branch}"
+
+                    # Keep most recent record
+                    if key not in ref_data or ts > ref_data[key].get("ts", ""):
+                        ref_data[key] = record
+
+                except json.JSONDecodeError:
+                    continue
+    except Exception:
+        return {}
+
+    return ref_data
+
+
 def humanize_age(ts_value: str) -> str:
     """Return a humanized age string for an ISO timestamp."""
     if not ts_value or ts_value == "?":
@@ -284,7 +328,6 @@ def build_ok_row_values(
     puppet_success = observed.get("puppet_success")
     puppet_state_ts = observed.get("puppet_state_ts")
     puppet_git_sha = observed.get("puppet_git_sha")
-    puppet_override_sha_applied = observed.get("puppet_override_sha_applied")
 
     # PP_SHA: 7-char truncated git SHA
     pp_sha = "-"
@@ -328,20 +371,11 @@ def build_ok_row_values(
     if puppet_success is False and pp_last != "--":
         pp_last = f"{pp_last} FAIL"
 
-    # APPLIED: Dual-path approach
-    # Primary: SHA-based comparison (puppet_override_sha_applied vs current override SHA)
-    # Fallback: Timestamp-based heuristic (for older puppet setups)
+    # APPLIED: Timestamp-based heuristic
+    # Uses improved pp_epoch (prefers puppet_state_ts over puppet_last_run_epoch)
     applied = "-"
     if override_present:
-        # SHA-based path (primary): Use SHA comparison if available
-        if puppet_override_sha_applied is not None:
-            # Compare the SHA that puppet applied vs current override SHA
-            if puppet_override_sha_applied == sha_full and puppet_success is True:
-                applied = "Y"
-            else:
-                applied = "N"
-        # Timestamp-based path (fallback): Use mtime comparison for older puppet setups
-        elif pp_epoch is not None:
+        if pp_epoch is not None:
             applied = "N"
             override_mtime_epoch = meta.get("mtime_epoch")
             if override_mtime_epoch is not None and puppet_success is True:
@@ -351,7 +385,6 @@ def build_ok_row_values(
                         applied = "Y"
                 except (ValueError, TypeError):
                     pass
-        # Unknown state: No puppet data available
         else:
             applied = "-"
 

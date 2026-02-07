@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .audit import cmd_host_audit
+from .gh_fetch import cmd_gh_fetch
 from .monitor import cmd_host_monitor
 from .override import cmd_override_show
 from .rotate_logs import cmd_rotate_logs
@@ -12,6 +13,7 @@ from .unset import cmd_host_unset
 from .vault import cmd_host_set_vault, cmd_vault_show
 
 __all__ = [
+    "cmd_gh_fetch",
     "cmd_host_audit",
     "cmd_host_monitor",
     "cmd_host_set",
