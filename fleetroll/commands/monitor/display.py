@@ -760,7 +760,9 @@ class MonitorDisplay:
                 arrows += "◀ "
             if self.col_offset < self.max_col_offset:
                 arrows += "▶"
-            scroll_indicator = f" [{arrows.strip()} cols {first_visible_idx}-{last_visible_idx}/{total_scrollable}]"
+            scroll_indicator = (
+                f" [{arrows.strip()} {first_visible_idx}-{last_visible_idx}/{total_scrollable}]"
+            )
 
         return columns, scroll_indicator
 
@@ -905,11 +907,18 @@ class MonitorDisplay:
             ver = get_version("fleetroll")
         except Exception:
             ver = "?"
-        left = f"fleetroll {ver}: host-monitor [? for help], sort={self.sort_field}"
+        left = f"fleetroll {ver} [? for help] sort={self.sort_field}"
         if self.show_only_overrides:
             left = f"{left}, filter=overrides"
         if total_pages > 1:
-            left = f"{left}, page={current_page}/{total_pages}"
+            # Add page indicator with up/down arrows
+            arrows = ""
+            if current_page > 1:
+                arrows += "▲ "
+            if current_page < total_pages:
+                arrows += "▼"
+            page_indicator = f" [{arrows.strip()} {current_page}/{total_pages}]"
+            left = f"{left}{page_indicator}"
         if scroll_indicator:
             left = f"{left}{scroll_indicator}"
 
