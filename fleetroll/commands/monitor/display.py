@@ -34,6 +34,22 @@ from .formatting import clip_cell, render_row_cells
 from .types import COLUMN_GUIDE_TEXT, FLEETROLL_MASCOT
 
 
+def compute_header_layout(left: str, right: str, usable_width: int) -> int:
+    """Compute the number of rows needed for the header.
+
+    Args:
+        left: Left side text
+        right: Right side text
+        usable_width: Available screen width
+
+    Returns:
+        Number of rows needed (1 or 2)
+    """
+    if usable_width > 0 and len(left) + 1 + len(right) > usable_width:
+        return 2
+    return 1
+
+
 class MonitorDisplay:
     """Curses-based monitor display with encapsulated state."""
 
@@ -752,6 +768,7 @@ class MonitorDisplay:
         labels: dict[str, str],
         columns: list[str],
         widths: dict[str, int],
+        header_row: int = 1,
     ) -> None:
         """Render the column header labels with separators.
 
@@ -759,6 +776,7 @@ class MonitorDisplay:
             labels: Column name to label text mapping
             columns: Ordered list of columns to display
             widths: Column name to width mapping
+            header_row: Row number for the column header (default 1)
         """
         # Colored asterisk attribute (yellow to stand out from magenta headers)
         asterisk_attr = self.curses_mod.color_pair(2) if self.color_enabled else 0
@@ -772,7 +790,7 @@ class MonitorDisplay:
             col = 0
             for idx, part in enumerate(parts):
                 if idx:
-                    self.safe_addstr(1, col, " | ")
+                    self.safe_addstr(header_row, col, " | ")
                     col += 3
                 # Check if this part contains the sort indicator (strip padding first)
                 if " *" in part:
@@ -780,27 +798,85 @@ class MonitorDisplay:
                     asterisk_pos = part.find(" *")
                     base_part = part[:asterisk_pos]
                     padding = part[asterisk_pos + 2 :]  # Everything after " *"
-                    self.safe_addstr(1, col, base_part, self.column_attr)
+                    self.safe_addstr(header_row, col, base_part, self.column_attr)
                     col += len(base_part)
-                    self.safe_addstr(1, col, " *", asterisk_attr)
+                    self.safe_addstr(header_row, col, " *", asterisk_attr)
                     col += 2
                     if padding:
-                        self.safe_addstr(1, col, padding, self.column_attr)
+                        self.safe_addstr(header_row, col, padding, self.column_attr)
                         col += len(padding)
                 else:
-                    self.safe_addstr(1, col, part, self.column_attr)
+                    self.safe_addstr(header_row, col, part, self.column_attr)
                     col += len(part)
         # Single column case
         elif " *" in header_line:
             asterisk_pos = header_line.find(" *")
             base_line = header_line[:asterisk_pos]
             padding = header_line[asterisk_pos + 2 :]
-            self.safe_addstr(1, 0, base_line, self.column_attr)
-            self.safe_addstr(1, len(base_line), " *", asterisk_attr)
+            self.safe_addstr(header_row, 0, base_line, self.column_attr)
+            self.safe_addstr(header_row, len(base_line), " *", asterisk_attr)
             if padding:
-                self.safe_addstr(1, len(base_line) + 2, padding, self.column_attr)
+                self.safe_addstr(header_row, len(base_line) + 2, padding, self.column_attr)
         else:
-            self.safe_addstr(1, 0, header_line, self.column_attr)
+            self.safe_addstr(header_row, 0, header_line, self.column_attr)
+
+    def _render_header_line(self, text: str, *, row: int, is_right_side: bool = False) -> None:
+        """Render a single header line with appropriate coloring.
+
+        Args:
+            text: The text to render
+            row: The row number to render on
+            is_right_side: Whether this is the right side (data) section
+        """
+        if is_right_side:
+            # Right side: color fqdn=/source= sections
+            right_start = "fqdn=" if "fqdn=" in text else "source="
+            if right_start in text:
+                # Handle log warnings on the right side
+                if self.log_size_warnings and "⚠ Large logs:" in text:
+                    # Split: warning | data
+                    if " | " in text:
+                        warning_part, data_part = text.split(" | ", 1)
+                        col = 0
+                        # Write warning in yellow
+                        if warning_part:
+                            self.safe_addstr(row, col, warning_part, self.warning_attr)
+                            col += len(warning_part)
+                            self.safe_addstr(row, col, " | ")
+                            col += 3
+                        # Write data part
+                        if right_start in data_part:
+                            before_data, after_data = data_part.split(right_start, 1)
+                            self.safe_addstr(row, col, before_data)
+                            col += len(before_data)
+                            self.safe_addstr(row, col, right_start, self.header_data_attr)
+                            col += len(right_start)
+                            self.safe_addstr(row, col, after_data, self.header_data_attr)
+                        else:
+                            self.safe_addstr(row, col, data_part)
+                    else:
+                        self.safe_addstr(row, 0, text)
+                else:
+                    # No warning, just color the data section
+                    left_part, right_part = text.rsplit(right_start, 1)
+                    self.safe_addstr(row, 0, left_part)
+                    self.safe_addstr(row, len(left_part), right_start, self.header_data_attr)
+                    self.safe_addstr(
+                        row, len(left_part) + len(right_start), right_part, self.header_data_attr
+                    )
+            else:
+                self.safe_addstr(row, 0, text)
+        # Left side: color "fleetroll X.Y.Z"
+        elif text.startswith("fleetroll"):
+            colon_pos = text.find(":")
+            if colon_pos > 0:
+                fleetroll_with_version = text[:colon_pos]
+            else:
+                fleetroll_with_version = "fleetroll"
+            self.safe_addstr(row, 0, fleetroll_with_version, self.fleetroll_attr)
+            self.safe_addstr(row, len(fleetroll_with_version), text[len(fleetroll_with_version) :])
+        else:
+            self.safe_addstr(row, 0, text)
 
     def _draw_top_header(
         self,
@@ -810,7 +886,7 @@ class MonitorDisplay:
         scroll_indicator: str,
         updated: str,
         usable_width: int,
-    ) -> None:
+    ) -> int:
         """Render the top information banner with metadata.
 
         Args:
@@ -819,6 +895,9 @@ class MonitorDisplay:
             scroll_indicator: Column scroll status text
             updated: Human-readable last update time
             usable_width: Available screen width
+
+        Returns:
+            Number of rows used by the header (1 or 2)
         """
         try:
             ver = get_version("fleetroll")
@@ -838,14 +917,30 @@ class MonitorDisplay:
         if self.log_size_warnings:
             warnings_text = ", ".join(self.log_size_warnings)
             right = f"⚠ Large logs: {warnings_text} (run 'fleetroll rotate-logs') | {right}"
+        # Determine if we need two-line mode
+        use_two_lines = usable_width > 0 and len(left) + 1 + len(right) > usable_width
+
+        if use_two_lines:
+            # Two-line mode: left on row 0, right on row 1
+            # Truncate left only if it exceeds usable_width on its own
+            if len(left) > usable_width:
+                left = clip_cell(left, usable_width).rstrip()
+            # Truncate right only if it exceeds usable_width on its own
+            if len(right) > usable_width:
+                right = clip_cell(right, usable_width).rstrip()
+            # Render left on row 0, right on row 1
+            self._render_header_line(left, row=0)
+            self._render_header_line(right, row=1, is_right_side=True)
+            return 2
+
+        # Single-line mode: fit both on one line
         if usable_width > 0:
-            if len(left) + 1 + len(right) > usable_width:
-                left_max = max(usable_width - len(right) - 1, 0)
-                left = clip_cell(left, left_max).rstrip()
             padding = max(usable_width - len(left) - len(right), 1)
             header = f"{left}{' ' * padding}{right}"
         else:
             header = left
+
+        # Render single-line header on row 0
         if header.startswith("fleetroll"):
             # Color "fleetroll X.Y.Z" (find first colon to know where version ends)
             colon_pos = header.find(":")
@@ -904,6 +999,7 @@ class MonitorDisplay:
                     self.safe_addstr(0, header_offset, header[header_offset:])
         else:
             self.safe_addstr(0, 0, header)
+        return 1
 
     def _compute_row_render_data(
         self,
@@ -1197,27 +1293,34 @@ class MonitorDisplay:
         )
 
         # Draw headers
-        self._draw_top_header(
+        header_rows = self._draw_top_header(
             total_pages=metrics["total_pages"],
             current_page=metrics["current_page"],
             scroll_indicator=scroll_indicator,
             updated=metrics["updated"],
             usable_width=metrics["usable_width"],
         )
-        self._draw_column_header(labels=labels, columns=columns, widths=widths)
+        self._draw_column_header(
+            labels=labels, columns=columns, widths=widths, header_row=header_rows
+        )
+
+        # Adjust page size if using two-line header
+        page_size = metrics["page_size"]
+        if header_rows == 2:
+            page_size = max(page_size - 1, 0)
 
         # Prepare categorical colors
         color_maps = self._prepare_categorical_colors(sorted_hosts)
 
         host_slice = (
             sorted_hosts[self.offset :]
-            if metrics["page_size"] <= 0
-            else sorted_hosts[self.offset : self.offset + metrics["page_size"]]
+            if page_size <= 0
+            else sorted_hosts[self.offset : self.offset + page_size]
         )
 
         # Draw host rows
         for idx, host in enumerate(host_slice, start=1):
-            row = idx + 1
+            row = idx + header_rows
             if row >= metrics["height"]:
                 break
             render_data = self._compute_row_render_data(host)

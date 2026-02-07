@@ -695,3 +695,47 @@ def test_pp_last_no_puppet_data():
 
     values = build_row_values("host1", record, last_ok=record)
     assert values["pp_last"] == "--"
+
+
+def test_header_layout_fits_one_line():
+    """Left + right fit on one line."""
+    from fleetroll.commands.monitor.display import compute_header_layout
+
+    left = "fleetroll 1.0.0"
+    right = "hosts=5"
+    usable_width = 50
+    result = compute_header_layout(left, right, usable_width)
+    assert result == 1
+
+
+def test_header_layout_requires_two_lines():
+    """Left + right overlap requires two lines."""
+    from fleetroll.commands.monitor.display import compute_header_layout
+
+    left = "fleetroll 1.0.0: very long status line with lots of information"
+    right = "fqdn=example.com, hosts=100, updated=5m ago"
+    usable_width = 50
+    result = compute_header_layout(left, right, usable_width)
+    assert result == 2
+
+
+def test_header_layout_exactly_fits():
+    """Exactly fits (left + 1 + right == usable_width) uses one line."""
+    from fleetroll.commands.monitor.display import compute_header_layout
+
+    left = "a" * 20
+    right = "b" * 29
+    usable_width = 50  # 20 + 1 + 29 = 50
+    result = compute_header_layout(left, right, usable_width)
+    assert result == 1
+
+
+def test_header_layout_narrow_terminal():
+    """Extremely narrow terminal uses two lines."""
+    from fleetroll.commands.monitor.display import compute_header_layout
+
+    left = "fleetroll 1.0.0"
+    right = "hosts=5"
+    usable_width = 20  # Too narrow for both
+    result = compute_header_layout(left, right, usable_width)
+    assert result == 2
