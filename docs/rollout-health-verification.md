@@ -16,31 +16,56 @@ Override Set/Unset → Puppet Ran (after change) → Puppet Succeeded → TC_ACT
 
 ## Solution
 
-### 1. Add Puppet Run Data to SSH Audit
+### 1. Puppet State Metadata File
 
-Collect from Puppet state files on the host:
+The puppet wrapper script writes ground-truth state after each run:
 
-```bash
-# Puppet state file locations (check in order):
-/opt/puppetlabs/puppet/cache/state/last_run_report.yaml   # Puppet 7+ (preferred)
-/opt/puppetlabs/puppet/cache/state/last_run_summary.yaml  # Puppet 4-6
-/var/lib/puppet/state/last_run_summary.yaml               # Legacy
-```
+**Location**: `/etc/puppet/last_run_metadata.json` (both Linux and macOS)
 
-Extract from YAML:
-- **Report file (Puppet 7+)**: `time` (ISO timestamp) and `status` (failed/changed/unchanged)
-- **Summary file (older)**: `time.last_run` (Unix epoch) and `events.failure` (count)
+**Format**: JSON with these key fields:
+- `ts` - ISO 8601 timestamp when puppet completed
+- `success` - Boolean (true if exit codes 0 or 2)
+- `exit_code` - Actual puppet exit code
+- `git_sha` - Full commit SHA that was applied
+- `git_branch` - Branch name
+- `git_repo` - Repository URL
+- `override_sha` - SHA256 of override file applied (null if none)
+- `vault_sha` - SHA256 of vault file used
+- `role` - Puppet role applied
+- `duration_s` - Run duration in seconds
 
-### 2. Extend Audit Data Model
+See [`docs/puppet-state-tracking.md`](puppet-state-tracking.md) for complete specification.
 
-Add to `observed` in audit records:
+### 2. Audit Data Model
+
+The SSH audit script reads the state file and extracts fields into `observed`:
 
 ```python
-"puppet_last_run_epoch": int,   # Unix timestamp of last puppet run
-"puppet_success": bool,         # True if events.failure == 0
+"puppet_state_ts": str,                    # ISO timestamp from state file
+"puppet_success": bool,                    # success field from state file
+"puppet_git_sha": str,                     # git SHA puppet applied
+"puppet_override_sha_applied": str,        # SHA256 of override puppet applied (null if none)
+"puppet_vault_sha_applied": str,           # SHA256 of vault puppet used
+"puppet_role": str,                        # role puppet applied
+"puppet_exit_code": int,                   # puppet exit code
+"puppet_duration_s": int,                  # run duration
+# ... plus git_repo, git_branch, git_dirty
 ```
 
-### 3. Add Monitor Columns
+Backward compatibility: Falls back to legacy YAML parsing if JSON file not present.
+
+### 3. Monitor Columns
+
+#### PP_SHA - Git SHA Applied
+
+Shows the 7-character git SHA that puppet applied (truncated from full SHA).
+
+| Value | Meaning |
+|-------|---------|
+| `abc1234` | Puppet applied git commit abc1234 |
+| `--` | No puppet state data available |
+
+Color coding: Gray (informational)
 
 #### PP_LAST - Time Since Last Puppet Run
 
@@ -53,6 +78,8 @@ Shows **time since last puppet run** (regardless of success/failure).
 | `--` | No puppet run data available |
 | `FAIL` | Last run failed (time still shown, e.g. `2m FAIL`) |
 
+Uses `puppet_state_ts` from state file (falls back to legacy `puppet_last_run_epoch` if unavailable).
+
 Color coding:
 - Green: < 1 hour and succeeded
 - Yellow: < 6 hours and succeeded
@@ -60,15 +87,21 @@ Color coding:
 
 #### APPLIED - Override Applied Successfully
 
-Shows whether the current override has been applied by puppet.
+Shows whether the current override has been applied by puppet using **SHA comparison** (ground truth).
 
 | Value | Meaning |
 |-------|---------|
-| `Y` | Override set AND puppet ran after AND succeeded |
-| `N` | Override set but puppet hasn't run after, or failed |
+| `Y` | Override SHA matches what puppet applied AND succeeded |
+| `N` | Override present but not applied by puppet, or puppet failed |
 | `-` | No override present |
 
-Logic:
+Logic (primary method using state file):
+```
+APPLIED = puppet_override_sha_applied == current_override_sha256
+          AND puppet_success
+```
+
+Fallback (legacy timestamp heuristic if state file unavailable):
 ```
 APPLIED = override_present
           AND puppet_last_run_epoch > override_mtime_epoch
@@ -113,25 +146,43 @@ Override Set → Puppet Ran (after mtime) → Puppet Succeeded → TC Active
                                     HEALTHY = Y
 ```
 
-Key timestamps used:
-- `override_mtime_epoch` - when override file was last modified
-- `puppet_last_run_epoch` - when puppet last ran
+Key data used:
+- `override_sha256` - SHA256 of current override file on host
+- `puppet_override_sha_applied` - SHA256 of override puppet applied (from state file)
+- `puppet_state_ts` - when puppet last ran (from state file)
 - `tc_act_date_active` - when TC worker was last active
 
-### 5. Implementation Tasks
+### 5. Implementation
 
-1. **Update SSH audit script** (`fleetroll/ssh.py`)
-   - Add puppet state file detection and parsing
-   - Extract last_run timestamp and success status
+The puppet state tracking feature has been implemented. See epic mvp-3kp for details.
 
-2. **Extend audit data model** (`fleetroll/audit.py`)
-   - Add puppet fields to observed schema
+**Components**:
 
-3. **Update monitor display** (`fleetroll/commands/monitor.py`)
-   - Add PP_LAST column (time since last puppet run + FAIL indicator)
-   - Add APPLIED column (override applied by puppet)
-   - Add HEALTHY column (applied + TC active)
-   - Implement color coding for all new columns
+1. **State writing function** (`references/puppet_state_functions.sh`)
+   - Reusable bash function for writing state metadata
+   - OS detection for SHA commands (Linux/macOS)
+   - Atomic writes with error handling
+
+2. **Reference puppet scripts** (`references/run-puppet-*.sh`)
+   - Linux (ERB template) and macOS implementations
+   - Integration with state writing function
+
+3. **SSH audit script** (`fleetroll/ssh.py`)
+   - Reads `/etc/puppet/last_run_metadata.json` via SSH
+   - Parses JSON fields into PP_* key-value pairs
+   - Falls back to legacy YAML if JSON unavailable
+
+4. **Audit parser** (`fleetroll/audit.py`)
+   - Processes PP_* fields into observed dict
+   - Backward compatibility with old field names
+
+5. **Monitor display** (`fleetroll/commands/monitor/`)
+   - PP_SHA column (7-char git SHA)
+   - PP_LAST column (time since last run)
+   - APPLIED logic (SHA comparison with timestamp fallback)
+   - HEALTHY column (applied + TC active)
+
+**Deployment**: See [`references/README.md`](../references/README.md) for deployment guide.
 
 ### 6. Verification Workflow
 
