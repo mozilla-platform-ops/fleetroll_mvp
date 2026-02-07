@@ -2,12 +2,39 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
-from fleetroll.audit import append_jsonl, process_audit_result, store_override_file
+from fleetroll.audit import (
+    append_jsonl,
+    iter_audit_records,
+    process_audit_result,
+    store_override_file,
+)
 from fleetroll.cli_types import HostAuditArgs
 from fleetroll.constants import CONTENT_SENTINEL
+
+
+def _make_pp_state_json_line(**overrides) -> str:
+    """Build a PP_STATE_JSON=<b64> line from a JSON state dict."""
+    state = {
+        "ts": "2024-01-25T12:34:56+00:00",
+        "git_sha": "test" + "0" * 36,
+        "git_repo": "https://github.com/example/repo.git",
+        "git_branch": "main",
+        "git_dirty": False,
+        "override_sha": "fake" + "0" * 60,
+        "vault_sha": "mock" + "0" * 60,
+        "role": "gecko-t-linux-talos",
+        "exit_code": 0,
+        "duration_s": 100,
+        "success": True,
+    }
+    state.update(overrides)
+    json_str = json.dumps(state)
+    b64_str = base64.b64encode(json_str.encode("utf-8")).decode("utf-8")
+    return f"PP_STATE_JSON={b64_str}"
 
 
 class TestAppendJsonl:
@@ -598,3 +625,577 @@ PP_SUCCESS=1
         # New fields are None
         assert result["observed"]["puppet_state_ts"] is None
         assert result["observed"]["puppet_git_sha"] is None
+
+
+class TestProcessAuditResultJsonPath:
+    """Tests for JSON state parsing (base64-encoded PP_STATE_JSON)."""
+
+    def test_parses_json_state_all_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Complete JSON state parses all 12 puppet fields correctly."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line()
+        out = f"""ROLE_PRESENT=1
+ROLE=test-role
+OVERRIDE_PRESENT=0
+{json_line}
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        # Verify all fields
+        assert result["observed"]["puppet_state_ts"] == "2024-01-25T12:34:56+00:00"
+        assert result["observed"]["puppet_git_sha"] == "test" + "0" * 36
+        assert result["observed"]["puppet_git_repo"] == "https://github.com/example/repo.git"
+        assert result["observed"]["puppet_git_branch"] == "main"
+        assert result["observed"]["puppet_git_dirty"] is False
+        assert result["observed"]["puppet_override_sha_applied"] == "fake" + "0" * 60
+        assert result["observed"]["puppet_vault_sha_applied"] == "mock" + "0" * 60
+        assert result["observed"]["puppet_role"] == "gecko-t-linux-talos"
+        assert result["observed"]["puppet_exit_code"] == 0
+        assert result["observed"]["puppet_duration_s"] == 100
+        assert result["observed"]["puppet_success"] is True
+        assert result["observed"]["puppet_last_run_epoch"] == 1706186096
+
+    def test_json_state_ts_converts_to_epoch(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """JSON state timestamp converts to epoch correctly."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line(ts="2024-01-25T12:34:56+00:00")
+        out = f"""ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+{json_line}
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_last_run_epoch"] == 1706186096
+
+    def test_json_state_success_false(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """JSON state with success=false parses correctly."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line(success=False)
+        out = f"""ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+{json_line}
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_success"] is False
+
+    def test_json_state_git_dirty_true(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """JSON state with git_dirty=true parses correctly."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line(git_dirty=True)
+        out = f"""ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+{json_line}
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_git_dirty"] is True
+
+    def test_json_state_null_optional_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """JSON state with null optional fields returns None for those fields."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line(
+            git_sha=None,
+            git_repo=None,
+            git_branch=None,
+            override_sha=None,
+            vault_sha=None,
+        )
+        out = f"""ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+{json_line}
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_git_sha"] is None
+        assert result["observed"]["puppet_git_repo"] is None
+        assert result["observed"]["puppet_git_branch"] is None
+        assert result["observed"]["puppet_override_sha_applied"] is None
+        assert result["observed"]["puppet_vault_sha_applied"] is None
+
+    def test_json_state_invalid_base64_graceful(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+    ):
+        """Corrupt base64 results in all puppet fields being None."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+PP_STATE_JSON=not_valid_base64!!!
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_state_ts"] is None
+        assert result["observed"]["puppet_git_sha"] is None
+        assert result["observed"]["puppet_success"] is None
+
+    def test_json_state_invalid_json_graceful(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Valid base64 but invalid JSON results in all puppet fields being None."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        # Base64 of "not json at all"
+        bad_b64 = base64.b64encode(b"not json at all").decode("utf-8")
+        out = f"""ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+PP_STATE_JSON={bad_b64}
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_state_ts"] is None
+        assert result["observed"]["puppet_git_sha"] is None
+        assert result["observed"]["puppet_success"] is None
+
+    def test_json_state_invalid_ts_no_epoch(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Invalid timestamp preserves puppet_state_ts but puppet_last_run_epoch is None."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line(ts="invalid-timestamp")
+        out = f"""ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+{json_line}
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_state_ts"] == "invalid-timestamp"
+        assert result["observed"]["puppet_last_run_epoch"] is None
+
+    def test_json_state_takes_priority_over_kv(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """When both PP_STATE_JSON and KV lines present, JSON values win."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line(
+            success=True,
+            git_sha="json_sha",
+            exit_code=0,
+        )
+        out = f"""ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+{json_line}
+PP_SUCCESS=0
+PP_GIT_SHA=kv_sha
+PP_EXIT_CODE=99
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        # JSON values win
+        assert result["observed"]["puppet_success"] is True
+        assert result["observed"]["puppet_git_sha"] == "json_sha"
+        assert result["observed"]["puppet_exit_code"] == 0
+
+
+class TestBackwardCompatibilityKvFields:
+    """Tests for KV fallback parsing when PP_STATE_JSON not present."""
+
+    def test_kv_fallback_all_string_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """All string KV fields parse correctly."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+PP_STATE_TS=2024-01-25T12:34:56Z
+PP_GIT_SHA=kv_git_sha
+PP_GIT_REPO=https://github.com/kv/repo.git
+PP_GIT_BRANCH=kv-branch
+PP_OVERRIDE_SHA_APPLIED=kv_override_sha
+PP_VAULT_SHA_APPLIED=kv_vault_sha
+PP_ROLE=kv-role
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_state_ts"] == "2024-01-25T12:34:56Z"
+        assert result["observed"]["puppet_git_sha"] == "kv_git_sha"
+        assert result["observed"]["puppet_git_repo"] == "https://github.com/kv/repo.git"
+        assert result["observed"]["puppet_git_branch"] == "kv-branch"
+        assert result["observed"]["puppet_override_sha_applied"] == "kv_override_sha"
+        assert result["observed"]["puppet_vault_sha_applied"] == "kv_vault_sha"
+        assert result["observed"]["puppet_role"] == "kv-role"
+
+    def test_kv_fallback_integer_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Integer KV fields parse correctly."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+PP_EXIT_CODE=42
+PP_DURATION_S=300
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_exit_code"] == 42
+        assert result["observed"]["puppet_duration_s"] == 300
+
+    def test_kv_fallback_boolean_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Boolean KV fields (0/1) parse correctly."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+PP_SUCCESS=1
+PP_GIT_DIRTY=0
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_success"] is True
+        assert result["observed"]["puppet_git_dirty"] is False
+
+    def test_kv_fallback_invalid_integers_are_none(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+    ):
+        """Invalid integer values result in None."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        out = """ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+PP_EXIT_CODE=not_an_int
+PP_DURATION_S=also_not_int
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        assert result["observed"]["puppet_exit_code"] is None
+        assert result["observed"]["puppet_duration_s"] is None
+
+    def test_json_overrides_kv_for_every_field(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """JSON values take priority over KV values for all fields."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line(
+            ts="2024-01-01T00:00:00Z",
+            git_sha="json_sha",
+            git_repo="json_repo",
+            git_branch="json_branch",
+            git_dirty=True,
+            override_sha="json_override",
+            vault_sha="json_vault",
+            role="json_role",
+            exit_code=1,
+            duration_s=50,
+            success=False,
+        )
+        out = f"""ROLE_PRESENT=0
+OVERRIDE_PRESENT=0
+{json_line}
+PP_STATE_TS=kv_ts
+PP_GIT_SHA=kv_sha
+PP_GIT_REPO=kv_repo
+PP_GIT_BRANCH=kv_branch
+PP_GIT_DIRTY=0
+PP_OVERRIDE_SHA_APPLIED=kv_override
+PP_VAULT_SHA_APPLIED=kv_vault
+PP_ROLE=kv_role
+PP_EXIT_CODE=99
+PP_DURATION_S=999
+PP_SUCCESS=1
+"""
+        result = process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+        # All JSON values win
+        assert result["observed"]["puppet_state_ts"] == "2024-01-01T00:00:00Z"
+        assert result["observed"]["puppet_git_sha"] == "json_sha"
+        assert result["observed"]["puppet_git_repo"] == "json_repo"
+        assert result["observed"]["puppet_git_branch"] == "json_branch"
+        assert result["observed"]["puppet_git_dirty"] is True
+        assert result["observed"]["puppet_override_sha_applied"] == "json_override"
+        assert result["observed"]["puppet_vault_sha_applied"] == "json_vault"
+        assert result["observed"]["puppet_role"] == "json_role"
+        assert result["observed"]["puppet_exit_code"] == 1
+        assert result["observed"]["puppet_duration_s"] == 50
+        assert result["observed"]["puppet_success"] is False
+
+
+class TestIterAuditRecords:
+    """Tests for iter_audit_records function."""
+
+    def test_reads_valid_jsonl(self, tmp_dir: Path):
+        """Reads valid JSONL records correctly."""
+        path = tmp_dir / "test.jsonl"
+        append_jsonl(path, {"key1": "value1"})
+        append_jsonl(path, {"key2": "value2"})
+        append_jsonl(path, {"key3": "value3"})
+
+        records = list(iter_audit_records(path))
+        assert len(records) == 3
+        assert records[0]["key1"] == "value1"
+        assert records[1]["key2"] == "value2"
+        assert records[2]["key3"] == "value3"
+
+    def test_skips_invalid_lines(self, tmp_dir: Path):
+        """Skips invalid JSON lines gracefully."""
+        path = tmp_dir / "test.jsonl"
+        path.write_text('{"valid": 1}\ninvalid json line\n{"also_valid": 2}\nmore junk\n')
+
+        records = list(iter_audit_records(path))
+        assert len(records) == 2
+        assert records[0]["valid"] == 1
+        assert records[1]["also_valid"] == 2
+
+    def test_returns_empty_for_missing_file(self, tmp_dir: Path):
+        """Returns empty iterator for nonexistent file."""
+        path = tmp_dir / "nonexistent.jsonl"
+        records = list(iter_audit_records(path))
+        assert len(records) == 0
+
+    def test_skips_blank_lines(self, tmp_dir: Path):
+        """Skips blank lines in JSONL file."""
+        path = tmp_dir / "test.jsonl"
+        path.write_text('{"key1": "value1"}\n\n{"key2": "value2"}\n  \n{"key3": "value3"}\n')
+
+        records = list(iter_audit_records(path))
+        assert len(records) == 3
+        assert records[0]["key1"] == "value1"
+        assert records[1]["key2"] == "value2"
+        assert records[2]["key3"] == "value3"
+
+
+class TestJsonlRoundTrip:
+    """Tests for JSONL write/read round-trip."""
+
+    def test_write_read_roundtrip(self, tmp_dir: Path):
+        """Write and read back a full audit record."""
+        path = tmp_dir / "roundtrip.jsonl"
+        record = {
+            "host": "test.example.com",
+            "ts": "2024-01-25T12:34:56+00:00",
+            "ok": True,
+            "observed": {
+                "role_present": True,
+                "role": "test-role",
+                "puppet_state_ts": "2024-01-25T12:30:00+00:00",
+                "puppet_success": True,
+            },
+        }
+
+        append_jsonl(path, record)
+        records = list(iter_audit_records(path))
+
+        assert len(records) == 1
+        assert records[0] == record
+
+    def test_multiple_records_roundtrip(self, tmp_dir: Path):
+        """Write and read back multiple records."""
+        path = tmp_dir / "multi.jsonl"
+        records_to_write = [{"host": f"host{i}", "value": i, "ok": True} for i in range(5)]
+
+        for record in records_to_write:
+            append_jsonl(path, record)
+
+        records_read = list(iter_audit_records(path))
+
+        assert len(records_read) == 5
+        for i, record in enumerate(records_read):
+            assert record["host"] == f"host{i}"
+            assert record["value"] == i
+            assert record["ok"] is True
+
+
+class TestEndToEndJsonState:
+    """End-to-end tests for JSON state processing."""
+
+    def test_full_flow_json_state_to_observations(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+    ):
+        """Full flow: SSH output with PP_STATE_JSON → observations file."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line()
+        out = f"""ROLE_PRESENT=1
+ROLE=test-role
+OVERRIDE_PRESENT=0
+{json_line}
+"""
+        process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+        )
+
+        # Read back from host_observations.jsonl
+        observations_log = tmp_dir / "host_observations.jsonl"
+        records = list(iter_audit_records(observations_log))
+
+        assert len(records) == 1
+        record = records[0]
+        assert record["host"] == "test.example.com"
+        obs = record["observed"]
+        assert obs["puppet_state_ts"] == "2024-01-25T12:34:56+00:00"
+        assert obs["puppet_git_sha"] == "test" + "0" * 36
+        assert obs["puppet_success"] is True
+        # override_contents_for_display should not be in observations file
+        assert "override_contents_for_display" not in obs
+
+    def test_full_flow_multiple_hosts(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Process multiple hosts and verify all records in observations file."""
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        for i in range(3):
+            json_line = _make_pp_state_json_line(role=f"role-{i}")
+            out = f"""ROLE_PRESENT=1
+ROLE=test-role-{i}
+OVERRIDE_PRESENT=0
+{json_line}
+"""
+            process_audit_result(
+                f"host{i}.example.com",
+                rc=0,
+                out=out,
+                err="",
+                audit_log=audit_log,
+                actor="test-actor",
+            )
+
+        # Read back from host_observations.jsonl
+        observations_log = tmp_dir / "host_observations.jsonl"
+        records = list(iter_audit_records(observations_log))
+
+        assert len(records) == 3
+        for i, record in enumerate(records):
+            assert record["host"] == f"host{i}.example.com"
+            assert record["observed"]["puppet_role"] == f"role-{i}"
+
+    def test_full_flow_with_override_storage(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+        """Process with overrides_dir and verify both JSONL record and stored file."""
+        audit_log = tmp_dir / "audit.jsonl"
+        overrides_dir = tmp_dir / "overrides"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line()
+        out = f"""ROLE_PRESENT=1
+ROLE=test-role
+OVERRIDE_PRESENT=1
+OVERRIDE_MODE=644
+OVERRIDE_OWNER=root
+OVERRIDE_GROUP=root
+OVERRIDE_SIZE=100
+OVERRIDE_MTIME=1704067200
+{json_line}
+{CONTENT_SENTINEL}
+test content
+"""
+        process_audit_result(
+            "test.example.com",
+            rc=0,
+            out=out,
+            err="",
+            audit_log=audit_log,
+            actor="test-actor",
+            overrides_dir=overrides_dir,
+        )
+
+        # Verify JSONL record
+        observations_log = tmp_dir / "host_observations.jsonl"
+        records = list(iter_audit_records(observations_log))
+        assert len(records) == 1
+        record = records[0]
+        assert "override_file_path" in record["observed"]
+
+        # Verify stored override file
+        stored_path = Path(record["observed"]["override_file_path"])
+        assert stored_path.exists()
+        assert stored_path.read_text() == "test content\n"

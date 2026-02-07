@@ -390,3 +390,38 @@ class TestOsXScriptGeneration:
         )
         assert "uname -s" in script
         assert "Darwin" in script
+
+
+class TestAuditScriptJsonCollection:
+    """Tests for JSON metadata collection in audit script."""
+
+    def test_script_reads_json_metadata_file(self):
+        """Script contains JSON metadata file path and PP_STATE_JSON output."""
+        script = remote_audit_script(include_content=True)
+        assert "/etc/puppet/last_run_metadata.json" in script
+        assert "PP_STATE_JSON" in script
+
+    def test_script_base64_encodes_json(self):
+        """Script contains base64 encoding and newline stripping."""
+        script = remote_audit_script(include_content=True)
+        assert "base64" in script
+        assert "tr -d" in script or "tr -d '\\n'" in script
+
+    def test_script_falls_back_to_yaml(self):
+        """Script contains YAML fallback paths and KV field extraction."""
+        script = remote_audit_script(include_content=True)
+        assert "last_run_report.yaml" in script
+        assert "last_run_summary.yaml" in script
+        assert "PP_LAST_RUN_EPOCH" in script
+        assert "PP_SUCCESS" in script
+
+    def test_script_json_before_yaml(self):
+        """JSON path check appears before YAML fallback in script logic."""
+        script = remote_audit_script(include_content=True)
+        # Find the position of the JSON file check (if test)
+        json_check_pos = script.find("pp_json_file=")
+        # Find the position of the else clause with YAML fallback
+        else_pos = script.find("else\n  # Fall back to YAML parsing")
+        assert json_check_pos > 0, "JSON file check not found"
+        assert else_pos > 0, "YAML fallback else clause not found"
+        assert json_check_pos < else_pos, "JSON check should appear before YAML fallback"

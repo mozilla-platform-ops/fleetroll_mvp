@@ -619,3 +619,79 @@ def test_humanize_duration_min_unit_minutes():
 def test_humanize_duration_negative_clamped():
     """Negative durations are clamped to 0."""
     assert humanize_duration(-10) == "0s"
+
+
+def test_pp_last_from_puppet_state_ts():
+    """PP_LAST calculated from puppet_state_ts with fixed audit time."""
+    now = datetime.now(UTC)
+    audit_time = now
+    puppet_time = now - timedelta(minutes=30)
+
+    record = {
+        "ok": True,
+        "ts": audit_time.isoformat(),
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "uptime_s": 3600,
+            "puppet_state_ts": puppet_time.isoformat(),
+            "puppet_success": True,
+        },
+    }
+
+    values = build_row_values("host1", record, last_ok=record)
+    assert values["pp_last"] == "30m"
+
+
+def test_pp_last_fail_suffix_with_state_ts():
+    """PP_LAST with FAIL suffix when puppet_success is False."""
+    now = datetime.now(UTC)
+    audit_time = now
+    puppet_time = now - timedelta(minutes=15)
+
+    record = {
+        "ok": True,
+        "ts": audit_time.isoformat(),
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "uptime_s": 3600,
+            "puppet_state_ts": puppet_time.isoformat(),
+            "puppet_success": False,
+        },
+    }
+
+    values = build_row_values("host1", record, last_ok=record)
+    assert "FAIL" in values["pp_last"]
+    assert values["pp_last"].startswith("15m")
+
+
+def test_pp_last_no_puppet_data():
+    """PP_LAST shows '--' when no puppet data available."""
+    now = datetime.now(UTC)
+
+    record = {
+        "ok": True,
+        "ts": now.isoformat(),
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "uptime_s": 3600,
+            # No puppet_state_ts, no puppet_last_run_epoch
+        },
+    }
+
+    values = build_row_values("host1", record, last_ok=record)
+    assert values["pp_last"] == "--"
