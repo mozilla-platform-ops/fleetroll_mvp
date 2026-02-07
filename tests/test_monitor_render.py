@@ -94,9 +94,9 @@ def test_build_row_values_includes_humanhash() -> None:
         },
     }
     values = build_row_values("host1", record, last_ok=record)
-    assert values["sha"].startswith(sha[:12])
+    assert values["sha"].startswith(sha[:8])
     assert humanize(sha, words=2) in values["sha"]
-    assert values["vlt_sha"].startswith(vlt[:12])
+    assert values["vlt_sha"].startswith(vlt[:8])
     assert humanize(vlt, words=2) in values["vlt_sha"]
 
 

@@ -304,8 +304,8 @@ def build_ok_row_values(
     override_state = "present" if override_present else "absent"
     sha_full = observed.get("override_sha256") or ""
     vault_sha_full = observed.get("vault_sha256") or ""
-    sha = sha_full[:12] if sha_full else "-"
-    vault_sha = vault_sha_full[:12] if vault_sha_full else "-"
+    sha = sha_full[:8] if sha_full else "-"
+    vault_sha = vault_sha_full[:8] if vault_sha_full else "-"
     if sha_full:
         sha = f"{sha} {humanize(sha_full, words=2)}"
     if vault_sha_full:
