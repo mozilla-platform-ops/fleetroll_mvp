@@ -336,7 +336,9 @@ class MonitorDisplay:
             if key != ord("?") and key != -1:
                 self.show_help = False
                 if draw:
-                    self.draw_screen()
+                    # Fast refresh from cached screen instead of expensive redraw
+                    self.stdscr.touchwin()
+                    self.stdscr.refresh()
             return False  # Don't process the key that closed help
 
         if key in (ord("q"), ord("Q")):
@@ -824,13 +826,16 @@ class MonitorDisplay:
         else:
             self.safe_addstr(header_row, 0, header_line, self.column_attr)
 
-    def _render_header_line(self, text: str, *, row: int, is_right_side: bool = False) -> None:
+    def _render_header_line(
+        self, text: str, *, row: int, is_right_side: bool = False, start_col: int = 0
+    ) -> None:
         """Render a single header line with appropriate coloring.
 
         Args:
             text: The text to render
             row: The row number to render on
             is_right_side: Whether this is the right side (data) section
+            start_col: Starting column position (for right-alignment)
         """
         if is_right_side:
             # Right side: color fqdn=/source= sections
@@ -841,7 +846,7 @@ class MonitorDisplay:
                     # Split: warning | data
                     if " | " in text:
                         warning_part, data_part = text.split(" | ", 1)
-                        col = 0
+                        col = start_col
                         # Write warning in yellow
                         if warning_part:
                             self.safe_addstr(row, col, warning_part, self.warning_attr)
@@ -859,17 +864,22 @@ class MonitorDisplay:
                         else:
                             self.safe_addstr(row, col, data_part)
                     else:
-                        self.safe_addstr(row, 0, text)
+                        self.safe_addstr(row, start_col, text)
                 else:
                     # No warning, just color the data section
                     left_part, right_part = text.rsplit(right_start, 1)
-                    self.safe_addstr(row, 0, left_part)
-                    self.safe_addstr(row, len(left_part), right_start, self.header_data_attr)
+                    self.safe_addstr(row, start_col, left_part)
                     self.safe_addstr(
-                        row, len(left_part) + len(right_start), right_part, self.header_data_attr
+                        row, start_col + len(left_part), right_start, self.header_data_attr
+                    )
+                    self.safe_addstr(
+                        row,
+                        start_col + len(left_part) + len(right_start),
+                        right_part,
+                        self.header_data_attr,
                     )
             else:
-                self.safe_addstr(row, 0, text)
+                self.safe_addstr(row, start_col, text)
         # Left side: color "fleetroll X.Y.Z"
         elif text.startswith("fleetroll"):
             colon_pos = text.find(":")
@@ -932,16 +942,17 @@ class MonitorDisplay:
         use_two_lines = usable_width > 0 and len(left) + 1 + len(right) > usable_width
 
         if use_two_lines:
-            # Two-line mode: left on row 0, right on row 1
+            # Two-line mode: left on row 0, right on row 1 (right-aligned)
             # Truncate left only if it exceeds usable_width on its own
             if len(left) > usable_width:
                 left = clip_cell(left, usable_width).rstrip()
             # Truncate right only if it exceeds usable_width on its own
             if len(right) > usable_width:
                 right = clip_cell(right, usable_width).rstrip()
-            # Render left on row 0, right on row 1
+            # Render left on row 0, right on row 1 (right-aligned)
             self._render_header_line(left, row=0)
-            self._render_header_line(right, row=1, is_right_side=True)
+            right_start_col = max(usable_width - len(right), 0)
+            self._render_header_line(right, row=1, is_right_side=True, start_col=right_start_col)
             return 2
 
         # Single-line mode: fit both on one line
