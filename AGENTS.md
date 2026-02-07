@@ -91,23 +91,21 @@ cass robot-docs schemas
 
 ## Git Operations
 
-The user handles all git operations (staging, committing, pushing). When changes are ready to commit:
+When we're ready to commit the work, stage the files and ensure tests and pre-commit passes.
 
-1. **Do NOT** run git add, git commit, or git push commands
-2. **Do** prompt the user with a suggested commit message (1 main line, newlinee, and then max 2 more lines)
-3. **Do** list which files should be staged
+The user will handle committing and pushing. When changes are ready to commit:
+
+1. **Do NOT** run git commit, or git push commands
+2. **Do** prompt the user with a suggested commit message (1 main line, newline, and then max 2 more lines)
 4. The user will handle the actual git operations
 
 Example:
 ```
-Please stage and commit these changes:
-- file1.py (modified)
-- file2.py (new)
+Description of what changed:
+  DESCRIPTION
 
 Suggested commit message:
-Add feature X
-
-Description of what changed and why.
+  Add feature X
 ```
 
 ## Function arguments (positional vs keyword)
