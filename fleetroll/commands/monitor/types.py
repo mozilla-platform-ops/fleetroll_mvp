@@ -24,7 +24,7 @@ VLT_SHA   Vault file SHA256 hash (symlink name in parentheses)
 OVR_SHA   Override file SHA256 hash (branch name in parentheses)
 UPTIME    Host uptime since last boot
 PP_LAST   Time since last puppet run (FAIL if failed)
-TC_LAST   Time since TC worker was last active
+TC_ACT    Time since TC worker was last active
 TC_T_DUR  TC task duration (or time since start if in progress)
           Color: green=completed, yellow=exception, red=failed
 TC_QUAR   TC quarantine status (Y if quarantined)

@@ -50,7 +50,7 @@ def test_render_row_cells_alignment() -> None:
         "sha": "OVR_SHA",
         "vlt_sha": "VLT_SHA",
         "tc_quar": "TC_QUAR",
-        "tc_last": "TC_LAST",
+        "tc_act": "TC_ACT",
         "tc_j_sf": "TC_J_SF",
         "pp_last": "PP_LAST",
         "applied": "APPLIED",

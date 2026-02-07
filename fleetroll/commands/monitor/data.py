@@ -394,9 +394,9 @@ def build_ok_row_values(
                     applied = "N"
             # else: branch not in github_refs, fall through to "-"
 
-    # HEALTHY: applied AND TC_LAST < 1 hour
+    # HEALTHY: applied AND TC_ACT < 1 hour
     healthy = "-"
-    tc_last_s = None
+    tc_act_s = None
     if tc_data:
         last_date_active = tc_data.get("last_date_active")
         scan_ts = tc_data.get("ts")
@@ -408,22 +408,22 @@ def build_ok_row_values(
                 last_active_dt = dt.datetime.fromisoformat(last_date_active)
                 if last_active_dt.tzinfo is None:
                     last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
-                tc_last_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
+                tc_act_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
             except (ValueError, AttributeError):
                 pass
 
-    # HEALTHY: APPLIED=Y AND TC_LAST < 1 hour
+    # HEALTHY: APPLIED=Y AND TC_ACT < 1 hour
     # (Now applies to both override and non-override hosts since APPLIED can be computed for both)
     if applied == "-":
         healthy = "-"
     else:
         healthy = "N"
-        if applied == "Y" and tc_last_s is not None and tc_last_s < 3600:
+        if applied == "Y" and tc_act_s is not None and tc_act_s < 3600:
             healthy = "Y"
 
     # Add TaskCluster fields
     tc_quar = "-"
-    tc_last = "-"
+    tc_act = "-"
     tc_j_sf = "-"
     tc_ts_age = None
 
@@ -449,7 +449,7 @@ def build_ok_row_values(
         # Calculate ages relative to scan time, not current time
         scan_ts = tc_data.get("ts")
 
-        # TC_LAST: Last date active (at scan time)
+        # TC_ACT: Last date active (at scan time)
         last_date_active = tc_data.get("last_date_active")
         if last_date_active and scan_ts:
             try:
@@ -460,7 +460,7 @@ def build_ok_row_values(
                 if last_active_dt.tzinfo is None:
                     last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
                 delta_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
-                tc_last = humanize_duration(delta_s)
+                tc_act = humanize_duration(delta_s)
             except (ValueError, AttributeError):
                 pass
 
@@ -512,7 +512,7 @@ def build_ok_row_values(
         "mtime": str(mtime),
         "err": "-",
         "tc_quar": tc_quar,
-        "tc_last": tc_last,
+        "tc_act": tc_act,
         "tc_j_sf": tc_j_sf,
         "pp_last": pp_last,
         "pp_sha": pp_sha,
@@ -555,7 +555,7 @@ def build_row_values(
             "mtime": "?",
             "err": "?",
             "tc_quar": "-",
-            "tc_last": "-",
+            "tc_act": "-",
             "tc_j_sf": "-",
             "pp_last": "?",
             "pp_sha": "?",
@@ -596,7 +596,7 @@ def build_row_values(
             "mtime": "-",
             "err": err,
             "tc_quar": "-",
-            "tc_last": "-",
+            "tc_act": "-",
             "tc_j_sf": "-",
             "pp_last": "-",
             "pp_sha": "-",

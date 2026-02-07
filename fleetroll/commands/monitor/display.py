@@ -186,7 +186,7 @@ class MonitorDisplay:
         """Color last_ok age: green < 5m, yellow < 30m, red >= 30m."""
         return self.threshold_color_attr(seconds_value, (5 * 60, 30 * 60))
 
-    def tc_last_attr(self, seconds_value: int | None) -> int:
+    def tc_act_attr(self, seconds_value: int | None) -> int:
         """Color TC last active: green < 5m, yellow < 1h, red >= 1h."""
         return self.threshold_color_attr(seconds_value, (5 * 60, 60 * 60))
 
@@ -525,7 +525,7 @@ class MonitorDisplay:
             "uptime",
             "pp_last",
             "pp_sha",
-            "tc_last",
+            "tc_act",
             "tc_j_sf",
             "tc_quar",
             "data",
@@ -540,7 +540,7 @@ class MonitorDisplay:
             "sha": "OVR_SHA",
             "vlt_sha": "VLT_SHA",
             "tc_quar": "TC_QUAR",
-            "tc_last": "TC_LAST",
+            "tc_act": "TC_ACT",
             "tc_j_sf": "TC_T_DUR",
             "pp_last": "PP_LAST",
             "pp_sha": "PP_SHA",
@@ -945,8 +945,8 @@ class MonitorDisplay:
             observed = (self.latest_ok.get(host) or self.latest.get(host) or {}).get("observed", {})
             uptime_s = observed.get("uptime_s")
 
-        # Calculate TC_LAST in seconds for coloring
-        tc_last_s = None
+        # Calculate TC_ACT in seconds for coloring
+        tc_act_s = None
         if tc_worker_data:
             last_date_active = tc_worker_data.get("last_date_active")
             scan_ts = tc_worker_data.get("ts")
@@ -958,7 +958,7 @@ class MonitorDisplay:
                     last_active_dt = dt.datetime.fromisoformat(last_date_active)
                     if last_active_dt.tzinfo is None:
                         last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
-                    tc_last_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
+                    tc_act_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
                 except (ValueError, AttributeError):
                     pass
 
@@ -988,7 +988,7 @@ class MonitorDisplay:
             "tc_ts_value": tc_ts_value,
             "tc_worker_data": tc_worker_data,
             "uptime_s": uptime_s,
-            "tc_last_s": tc_last_s,
+            "tc_act_s": tc_act_s,
             "tc_task_state": tc_task_state,
             "pp_age_s": pp_age_s,
             "pp_failed": pp_success is False,
@@ -1049,7 +1049,7 @@ class MonitorDisplay:
         ts_value = render_data["ts_value"]
         tc_ts_value = render_data["tc_ts_value"]
         uptime_s = render_data["uptime_s"]
-        tc_last_s = render_data["tc_last_s"]
+        tc_act_s = render_data["tc_act_s"]
         tc_task_state = render_data["tc_task_state"]
         pp_age_s = render_data["pp_age_s"]
         pp_failed = render_data["pp_failed"]
@@ -1081,9 +1081,9 @@ class MonitorDisplay:
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
-            if col_name == "tc_last":
+            if col_name == "tc_act":
                 # Apply color based on TC last active time
-                attr = self.tc_last_attr(tc_last_s)
+                attr = self.tc_act_attr(tc_act_s)
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue

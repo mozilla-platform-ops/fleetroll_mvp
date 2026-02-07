@@ -5,7 +5,7 @@
 Users need to verify that a rollout (setting or unsetting an override) has taken effect. The verification chain is:
 
 ```
-Override Set/Unset → Puppet Ran (after change) → Puppet Succeeded → TC_LAST Updated (agent healthy)
+Override Set/Unset → Puppet Ran (after change) → Puppet Succeeded → TC_ACT Updated (agent healthy)
 ```
 
 ## Current Gaps
@@ -86,13 +86,13 @@ Shows overall health: override applied AND worker is active.
 
 | Value | Meaning |
 |-------|---------|
-| `Y` | Applied AND TC_LAST < 1 hour |
-| `N` | Not applied OR TC_LAST stale |
+| `Y` | Applied AND TC_ACT < 1 hour |
+| `N` | Not applied OR TC_ACT stale |
 | `-` | No override present |
 
 Logic:
 ```
-HEALTHY = APPLIED AND tc_last_active_age < 1 hour
+HEALTHY = APPLIED AND tc_act_age < 1 hour
 ```
 
 Color coding:
@@ -116,7 +116,7 @@ Override Set → Puppet Ran (after mtime) → Puppet Succeeded → TC Active
 Key timestamps used:
 - `override_mtime_epoch` - when override file was last modified
 - `puppet_last_run_epoch` - when puppet last ran
-- `tc_last_date_active` - when TC worker was last active
+- `tc_act_date_active` - when TC worker was last active
 
 ### 5. Implementation Tasks
 
@@ -150,5 +150,5 @@ The `HEALTHY` column is the single indicator for rollout success.
 ## Future Enhancements
 
 - Rollout progress summary showing % of hosts where HEALTHY=Y
-- Configurable thresholds for "healthy" TC_LAST age (currently hardcoded to 1 hour)
+- Configurable thresholds for "healthy" TC_ACT age (currently hardcoded to 1 hour)
 - Automated alerts when rollout is stuck (APPLIED=N for extended period)
