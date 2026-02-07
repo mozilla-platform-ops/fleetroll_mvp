@@ -62,6 +62,49 @@ prek
 
 Run `prek` before suggesting commits to ensure all checks pass.
 
+## Testing Workflow
+
+When implementing features:
+
+1. **Test incrementally** - Run specific tests as you implement:
+   ```bash
+   # Test a specific function
+   uv run pytest tests/test_file.py::test_function_name -v
+
+   # Test a module
+   uv run pytest tests/test_file.py -v
+
+   # Run all tests
+   uv run pytest -v
+   ```
+
+2. **Follow TDD pattern when appropriate**:
+   - Write test for new functionality
+   - Implement minimum code to pass test
+   - Refactor if needed
+   - Run full test suite
+
+3. **Extract pure functions for testability**:
+   - Complex logic → pure function → easy to test
+   - Example: `compute_header_layout(left, right, width) -> int`
+   - Place before class definitions or in separate modules
+
+4. **Iterative cycle**:
+   ```bash
+   # 1. Implement change
+   # 2. Run relevant tests
+   uv run pytest tests/test_specific.py -v
+   # 3. Fix any failures
+   # 4. Run full test suite
+   uv run pytest -v
+   # 5. Stage and format
+   git add <files>
+   prek
+   # 6. Re-stage if formatted, run prek again until it passes
+   git add <files>
+   prek
+   ```
+
 ## Cass - Agent Session Search
 
 Use `cass` to search previous Claude Code chat sessions and extend your context with relevant information from past conversations. When working on a task, search for related topics, error messages, or implementations to learn from previous solutions and avoid repeating past mistakes.
@@ -120,6 +163,73 @@ Suggested commit message:
 - Avoid positional booleans.
 - Exceptions: well-known stdlib patterns, simple value objects (coordinates/colors), and functional patterns.
 
+## Code Quality Practices
+
+### Read Before Editing
+
+- **Always read files before editing** - Understand existing code structure
+- Use `Read` tool to examine context, not just the specific lines you plan to change
+- Look for existing patterns and follow them
+
+### Type Checking Issues
+
+When `ty check` reports errors:
+
+1. **Possibly-unresolved-reference**: Variable may not be defined in all code paths
+   - Solution: Restructure control flow or initialize variable earlier
+   - Example: Define variable before if/else, not just in branches
+
+2. **Early returns help**: Return early from branches to clarify control flow
+
+3. **Type annotations**: Add them when they clarify intent, not just for the checker
+
+### Handling prek Failures
+
+```bash
+# Common pattern when prek fails:
+git add <files>
+prek
+# If formatting changes files:
+git add <files>
+prek
+# Repeat until all checks pass
+```
+
+**Note**: `prek` may format files, so you may need to stage and run multiple times.
+
+## Development Patterns
+
+### When to Extract Functions
+
+Extract logic into standalone functions when:
+- It needs unit testing
+- It has complex conditional logic
+- It could be reused
+- It would clarify the calling code
+
+**Example from this codebase**:
+```python
+# Extracted pure function (easy to test)
+def compute_header_layout(left: str, right: str, usable_width: int) -> int:
+    """Compute the number of rows needed for the header."""
+    if usable_width > 0 and len(left) + 1 + len(right) > usable_width:
+        return 2
+    return 1
+
+# Method uses extracted function
+def _draw_top_header(self, ...) -> int:
+    use_two_lines = compute_header_layout(left, right, usable_width)
+    # ... rest of implementation
+```
+
+### Incremental Implementation
+
+For complex features:
+1. **Start small**: Get one part working first
+2. **Test each piece**: Don't wait until everything is done
+3. **Commit working states**: Use git to track progress
+4. **Refactor incrementally**: Small improvements, test after each
+
 <!-- bv-agent-instructions-v1 -->
 
 ---
@@ -133,8 +243,7 @@ This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) 
 - **Session start**: Check `br ready` at session start to find available work
 - **Starting work on a bead**: Set the bead's status to in_progress.
 - **Creating new beads**: Use descriptive titles, descriptions, and set appropriate priority and type.
-- **Closing beads**: When asked to close a bead and files have changed during the
-  work, suggest a git commit message that mentions any relevant beads (e.g. `Refactor draw_screen into 8 focused methods (mvp-5jc <bead state>)`)
+- **Closing beads**: Provide descriptive reasons that explain what was accomplished (see examples below)
 
 ### Essential Commands
 
@@ -166,6 +275,22 @@ br close <id1> <id2>  # Close multiple issues at once
 2. **Claim**: Use `br update <id> --status=in_progress`
 3. **Work**: Implement the task
 4. **Complete**: Use `br close <id>`
+
+### Closing Beads
+
+Provide **descriptive reasons** that explain what was accomplished:
+
+❌ **Bad**: `br close mvp-38w --reason="Completed"`
+
+✅ **Good**: `br close mvp-38w --reason="Implemented two-line header layout with tests. When terminal width is insufficient for left+right content, header uses two rows with automatic column header offset adjustment."`
+
+**Good close reasons include**:
+- What was implemented
+- How it works (briefly)
+- What was tested
+- Any important architectural decisions
+
+When files have changed during the work, suggest a git commit message that mentions the relevant bead (e.g. `Refactor draw_screen into 8 focused methods (mvp-5jc)`)
 
 ### Key Concepts
 
