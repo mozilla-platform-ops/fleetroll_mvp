@@ -820,7 +820,11 @@ class MonitorDisplay:
             updated: Human-readable last update time
             usable_width: Available screen width
         """
-        left = f"fleetroll: host-monitor [? for help], sort={self.sort_field}"
+        try:
+            ver = get_version("fleetroll")
+        except Exception:
+            ver = "?"
+        left = f"fleetroll {ver}: host-monitor [? for help], sort={self.sort_field}"
         if self.show_only_overrides:
             left = f"{left}, filter=overrides"
         if total_pages > 1:
@@ -843,18 +847,25 @@ class MonitorDisplay:
         else:
             header = left
         if header.startswith("fleetroll"):
-            self.safe_addstr(0, 0, "fleetroll", self.fleetroll_attr)
+            # Color "fleetroll X.Y.Z" (find first colon to know where version ends)
+            colon_pos = header.find(":")
+            if colon_pos > 0:
+                fleetroll_with_version = header[:colon_pos]
+            else:
+                fleetroll_with_version = "fleetroll"
+            self.safe_addstr(0, 0, fleetroll_with_version, self.fleetroll_attr)
+            header_offset = len(fleetroll_with_version)
             # Handle warning section separately if present
             if self.log_size_warnings and "⚠ Large logs:" in header:
                 # Split into left part, warning, and data part
-                middle = header[9:]  # After "fleetroll"
+                middle = header[header_offset:]  # After "fleetroll X.Y.Z"
                 if " | " in middle:
                     warning_part, data_part = middle.split(" | ", 1)
                     # Find where data starts (fqdn= or source=)
                     right_start = "fqdn=" if "fqdn=" in data_part else "source="
                     if right_start in data_part:
                         before_data, after_data = data_part.split(right_start, 1)
-                        col = 9
+                        col = header_offset
                         # Write left part before warning
                         if warning_part:
                             self.safe_addstr(0, col, before_data)
@@ -871,24 +882,26 @@ class MonitorDisplay:
                         col += len(right_start)
                         self.safe_addstr(0, col, after_data, self.header_data_attr)
                     else:
-                        self.safe_addstr(0, 9, middle)
+                        self.safe_addstr(0, header_offset, middle)
                 else:
-                    self.safe_addstr(0, 9, middle)
+                    self.safe_addstr(0, header_offset, middle)
             else:
                 # No warning, original logic
                 right_start = "fqdn=" if "fqdn=" in header else "source="
                 if right_start in header:
-                    left_part, right_part = header[9:].rsplit(right_start, 1)
-                    self.safe_addstr(0, 9, left_part)
-                    self.safe_addstr(0, 9 + len(left_part), right_start, self.header_data_attr)
+                    left_part, right_part = header[header_offset:].rsplit(right_start, 1)
+                    self.safe_addstr(0, header_offset, left_part)
+                    self.safe_addstr(
+                        0, header_offset + len(left_part), right_start, self.header_data_attr
+                    )
                     self.safe_addstr(
                         0,
-                        9 + len(left_part) + len(right_start),
+                        header_offset + len(left_part) + len(right_start),
                         right_part,
                         self.header_data_attr,
                     )
                 else:
-                    self.safe_addstr(0, 9, header[9:])
+                    self.safe_addstr(0, header_offset, header[header_offset:])
         else:
             self.safe_addstr(0, 0, header)
 
