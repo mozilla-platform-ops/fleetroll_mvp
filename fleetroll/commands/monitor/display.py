@@ -570,6 +570,7 @@ class MonitorDisplay:
                 tc_data=tc_worker_data,
                 fqdn_suffix=self.fqdn_suffix,
                 sha_cache=self.sha_cache,
+                github_refs=self.github_refs,
             )
             for col in all_columns:
                 widths[col] = max(widths[col], len(values[col]))
@@ -611,6 +612,7 @@ class MonitorDisplay:
                 tc_data=tc_worker_data,
                 fqdn_suffix=self.fqdn_suffix,
                 sha_cache=self.sha_cache,
+                github_refs=self.github_refs,
             )
             sha = values.get("sha", "")
             vlt_sha = values.get("vlt_sha", "")
@@ -920,6 +922,7 @@ class MonitorDisplay:
             tc_data=tc_worker_data,
             fqdn_suffix=self.fqdn_suffix,
             sha_cache=self.sha_cache,
+            github_refs=self.github_refs,
         )
         ts_value = resolve_last_ok_ts(self.latest.get(host), last_ok=self.latest_ok.get(host))
         tc_ts_value = tc_worker_data.get("ts") if tc_worker_data else None
@@ -1006,6 +1009,7 @@ class MonitorDisplay:
             tc_data=tc_worker_data,
             fqdn_suffix=self.fqdn_suffix,
             sha_cache=self.sha_cache,
+            github_refs=self.github_refs,
         )
         sha_value = values.get("sha", "")
         return sha_value not in ("-", "?", "")

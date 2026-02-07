@@ -24,6 +24,7 @@ PUPPET_MAIL='rcurran@mozilla.com'
         result = parse_override_file(override_file)
         assert result is not None
         assert result["user"] == "rcurranmoz"
+        assert result["repo"] == "ronin_puppet"
         assert result["branch"] == "disable_spotlight_2"
 
 
@@ -39,6 +40,7 @@ PUPPET_BRANCH="my-branch"
         result = parse_override_file(override_file)
         assert result is not None
         assert result["user"] == "user123"
+        assert result["repo"] == "repo"
         assert result["branch"] == "my-branch"
 
 
@@ -51,6 +53,7 @@ def test_parse_override_file_missing_repo():
         assert result is not None
         assert result["branch"] == "branch"
         assert result["user"] is None
+        assert result["repo"] is None
 
 
 def test_parse_override_file_missing_branch():

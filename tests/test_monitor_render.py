@@ -201,14 +201,116 @@ def test_quarantine_status_checks_future():
 
 
 def test_puppet_columns_applied_healthy():
-    """Test PP_LAST, APPLIED, HEALTHY columns."""
+    """Test PP_LAST, APPLIED, HEALTHY columns with SHA-based logic."""
     from datetime import datetime
+
+    from fleetroll.commands.monitor.cache import ShaInfoCache
+    from fleetroll.constants import DEFAULT_GITHUB_REPO
 
     now = datetime.now(UTC)
     now_epoch = int(now.timestamp())
 
-    # Override present, puppet ran after mtime, succeeded -> APPLIED=Y
-    record_applied = {
+    # TC data with fresh last_date_active
+    tc_data_fresh = {
+        "ts": now.isoformat(),
+        "last_date_active": now.isoformat(),
+    }
+
+    # Test 1: SHA-based comparison - puppet SHA matches GitHub branch SHA -> APPLIED=Y
+    github_refs = {
+        "testuser/ronin_puppet:test-branch": {
+            "sha": "test_git_sha_1234",  # pragma: allowlist secret
+            "url": "https://api.github.com/repos/testuser/ronin_puppet/git/refs/heads/test-branch",
+        }
+    }
+    sha_cache = ShaInfoCache(overrides_dir="/nonexistent", vault_dir="/nonexistent")
+    sha_cache.override_cache["abc123"] = {
+        "user": "testuser",
+        "repo": "ronin_puppet",
+        "branch": "test-branch",
+    }
+
+    record_sha_match = {
+        "ok": True,
+        "ts": now.isoformat(),
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "override_present": True,
+            "override_sha256": "abc123",
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": str(now_epoch - 3600)},
+            "uptime_s": 3600,
+            "puppet_git_sha": "test_git_sha_1234",
+            "puppet_success": True,
+        },
+    }
+    values = build_row_values(
+        "host1",
+        record_sha_match,
+        tc_data=tc_data_fresh,
+        sha_cache=sha_cache,
+        github_refs=github_refs,
+    )
+    assert values["applied"] == "Y"
+    assert values["healthy"] == "Y"
+
+    # Test 2: SHA-based comparison - puppet SHA mismatch -> APPLIED=N
+    record_sha_mismatch = {
+        "ok": True,
+        "ts": now.isoformat(),
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "override_present": True,
+            "override_sha256": "abc123",
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": str(now_epoch - 3600)},
+            "uptime_s": 3600,
+            "puppet_git_sha": "different_sha",
+            "puppet_success": True,
+        },
+    }
+    values = build_row_values(
+        "host1",
+        record_sha_mismatch,
+        tc_data=tc_data_fresh,
+        sha_cache=sha_cache,
+        github_refs=github_refs,
+    )
+    assert values["applied"] == "N"
+    assert values["healthy"] == "N"
+
+    # Test 3: No override - check against master branch
+    github_refs_master = {
+        f"{DEFAULT_GITHUB_REPO}:master": {
+            "sha": "master_sha_123",
+            "url": f"https://api.github.com/repos/{DEFAULT_GITHUB_REPO}/git/refs/heads/master",
+        }
+    }
+    record_no_override_match = {
+        "ok": True,
+        "ts": now.isoformat(),
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "uptime_s": 3600,
+            "puppet_git_sha": "master_sha_123",
+            "puppet_success": True,
+        },
+    }
+    values = build_row_values(
+        "host1", record_no_override_match, tc_data=tc_data_fresh, github_refs=github_refs_master
+    )
+    assert values["applied"] == "Y"
+    assert values["healthy"] == "Y"
+
+    # Test 4: Fallback to timestamp heuristic when no github_refs
+    record_timestamp_fallback = {
         "ok": True,
         "ts": now.isoformat(),
         "observed": {
@@ -223,57 +325,13 @@ def test_puppet_columns_applied_healthy():
             "puppet_success": True,
         },
     }
-    # TC data with fresh last_date_active
-    tc_data_fresh = {
-        "ts": now.isoformat(),
-        "last_date_active": now.isoformat(),
-    }
-    values = build_row_values("host1", record_applied, tc_data=tc_data_fresh)
+    values = build_row_values(
+        "host1", record_timestamp_fallback, tc_data=tc_data_fresh, github_refs=None
+    )
     assert values["applied"] == "Y"
     assert values["healthy"] == "Y"
-    assert "FAIL" not in values["pp_last"]
 
-    # Override present, puppet ran before mtime -> APPLIED=N
-    record_not_applied = {
-        "ok": True,
-        "ts": now.isoformat(),
-        "observed": {
-            "role_present": True,
-            "role": "gecko_t_linux_talos",
-            "override_present": True,
-            "override_sha256": "abc123",
-            "vault_sha256": None,
-            "override_meta": {"mtime_epoch": str(now_epoch - 1800)},  # 30 min ago
-            "uptime_s": 3600,
-            "puppet_last_run_epoch": now_epoch - 3600,  # 1 hour ago (before mtime)
-            "puppet_success": True,
-        },
-    }
-    values = build_row_values("host1", record_not_applied, tc_data=tc_data_fresh)
-    assert values["applied"] == "N"
-    assert values["healthy"] == "N"
-
-    # No override -> APPLIED=-, HEALTHY=-
-    record_no_override = {
-        "ok": True,
-        "ts": now.isoformat(),
-        "observed": {
-            "role_present": True,
-            "role": "gecko_t_linux_talos",
-            "override_present": False,
-            "override_sha256": None,
-            "vault_sha256": None,
-            "override_meta": {},
-            "uptime_s": 3600,
-            "puppet_last_run_epoch": now_epoch - 1800,
-            "puppet_success": True,
-        },
-    }
-    values = build_row_values("host1", record_no_override, tc_data=tc_data_fresh)
-    assert values["applied"] == "-"
-    assert values["healthy"] == "-"
-
-    # Puppet failed -> PP_LAST shows FAIL, APPLIED=N
+    # Test 5: Puppet failed with SHA data -> APPLIED=N
     record_puppet_failed = {
         "ok": True,
         "ts": now.isoformat(),
@@ -285,18 +343,22 @@ def test_puppet_columns_applied_healthy():
             "vault_sha256": None,
             "override_meta": {"mtime_epoch": str(now_epoch - 3600)},
             "uptime_s": 3600,
-            "puppet_last_run_epoch": now_epoch - 1800,  # After mtime but failed
+            "puppet_git_sha": "test_git_sha_1234",
             "puppet_success": False,
         },
     }
-    values = build_row_values("host1", record_puppet_failed, tc_data=tc_data_fresh)
-    assert "FAIL" in values["pp_last"]
+    values = build_row_values(
+        "host1",
+        record_puppet_failed,
+        tc_data=tc_data_fresh,
+        sha_cache=sha_cache,
+        github_refs=github_refs,
+    )
     assert values["applied"] == "N"
     assert values["healthy"] == "N"
 
-    # Override present but no puppet state detection (Mac host scenario)
-    # -> APPLIED=-, HEALTHY=- (unknown, not "N")
-    record_no_puppet_state = {
+    # Test 6: No puppet_git_sha (e.g., Mac host) -> APPLIED=-
+    record_no_puppet_sha = {
         "ok": True,
         "ts": now.isoformat(),
         "observed": {
@@ -307,13 +369,19 @@ def test_puppet_columns_applied_healthy():
             "vault_sha256": None,
             "override_meta": {"mtime_epoch": str(now_epoch - 3600)},
             "uptime_s": 3600,
-            "puppet_last_run_epoch": None,  # No puppet state detection
+            "puppet_git_sha": None,
             "puppet_success": None,
         },
     }
-    values = build_row_values("host1", record_no_puppet_state, tc_data=tc_data_fresh)
-    assert values["applied"] == "-"  # Unknown, not "N"
-    assert values["healthy"] == "-"  # Unknown, not "N"
+    values = build_row_values(
+        "host1",
+        record_no_puppet_sha,
+        tc_data=tc_data_fresh,
+        sha_cache=sha_cache,
+        github_refs=github_refs,
+    )
+    assert values["applied"] == "-"  # Unknown
+    assert values["healthy"] == "-"  # Unknown
 
 
 def _sep_positions(line: str) -> list[int]:

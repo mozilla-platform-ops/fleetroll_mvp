@@ -53,6 +53,7 @@ def compute_columns_and_widths(
     sep_len: int = 1,
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
+    github_refs: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     """Compute columns and widths that fit within max_width."""
     columns = [
@@ -111,6 +112,7 @@ def compute_columns_and_widths(
             tc_data=tc_data.get(short_host),
             fqdn_suffix=fqdn_suffix,
             sha_cache=sha_cache,
+            github_refs=github_refs,
         )
         for col in columns:
             widths[col] = max(widths[col], len(values[col]))
@@ -166,10 +168,17 @@ def format_monitor_row(
     col_sep: str = " ",
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
+    github_refs: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     """Format a single table row for a host."""
     values = build_row_values(
-        host, record, last_ok=last_ok, tc_data=tc_data, fqdn_suffix=fqdn_suffix, sha_cache=sha_cache
+        host,
+        record,
+        last_ok=last_ok,
+        tc_data=tc_data,
+        fqdn_suffix=fqdn_suffix,
+        sha_cache=sha_cache,
+        github_refs=github_refs,
     )
     parts = [clip_cell(values[col], widths[col]) for col in columns]
     return col_sep.join(parts)
@@ -188,6 +197,7 @@ def render_monitor_lines(
     limit: int | None = None,
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
+    github_refs: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[str, list[str]]:
     """Render monitor header + lines in the provided host order."""
     tc_data = tc_data or {}
@@ -201,6 +211,7 @@ def render_monitor_lines(
         sep_len=len(col_sep),
         fqdn_suffix=fqdn_suffix,
         sha_cache=sha_cache,
+        github_refs=github_refs,
     )
     labels = {
         "host": "HOST",
@@ -234,6 +245,7 @@ def render_monitor_lines(
             col_sep=col_sep,
             fqdn_suffix=fqdn_suffix,
             sha_cache=sha_cache,
+            github_refs=github_refs,
         )
         for host in host_slice
     ]

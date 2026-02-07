@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ...audit import iter_audit_records
-from ...constants import HOST_OBSERVATIONS_FILE_NAME
+from ...constants import DEFAULT_GITHUB_REPO, HOST_OBSERVATIONS_FILE_NAME
 from ...humanhash import humanize
 from ...utils import natural_sort_key
 
@@ -289,6 +289,7 @@ def build_ok_row_values(
     tc_data: dict[str, Any] | None = None,
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
+    github_refs: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     """Build string values for an OK monitor row."""
     # Strip common FQDN suffix if provided
@@ -371,10 +372,33 @@ def build_ok_row_values(
     if puppet_success is False and pp_last != "--":
         pp_last = f"{pp_last} FAIL"
 
-    # APPLIED: Timestamp-based heuristic
-    # Uses improved pp_epoch (prefers puppet_state_ts over puppet_last_run_epoch)
+    # APPLIED: SHA-based comparison against GitHub branch data
     applied = "-"
-    if override_present:
+    puppet_git_sha = observed.get("puppet_git_sha")
+
+    if puppet_git_sha and github_refs:
+        # Determine expected branch
+        ref_key = None
+        if override_present and sha_cache:
+            details = sha_cache.get_override_details(sha_full)
+            if details and details.get("user") and details.get("repo") and details.get("branch"):
+                ref_key = f"{details['user']}/{details['repo']}:{details['branch']}"
+        else:
+            # No override: check against default repo master
+            ref_key = f"{DEFAULT_GITHUB_REPO}:master"
+
+        if ref_key:
+            ref_record = github_refs.get(ref_key)
+            if ref_record:
+                github_sha = ref_record.get("sha", "")
+                if puppet_git_sha == github_sha and puppet_success is True:
+                    applied = "Y"
+                else:
+                    applied = "N"
+            # else: branch not in github_refs, fall through to "-"
+
+    elif override_present:
+        # Fallback: timestamp heuristic when no GitHub data or no puppet_git_sha
         if pp_epoch is not None:
             applied = "N"
             override_mtime_epoch = meta.get("mtime_epoch")
@@ -385,8 +409,7 @@ def build_ok_row_values(
                         applied = "Y"
                 except (ValueError, TypeError):
                     pass
-        else:
-            applied = "-"
+        # else: no puppet state → applied stays "-"
 
     # HEALTHY: applied AND TC_LAST < 1 hour
     healthy = "-"
@@ -406,14 +429,14 @@ def build_ok_row_values(
             except (ValueError, AttributeError):
                 pass
 
-    if override_present:
-        # If APPLIED is unknown ("-"), we can't determine health either
-        if applied == "-":
-            healthy = "-"
-        else:
-            healthy = "N"
-            if applied == "Y" and tc_last_s is not None and tc_last_s < 3600:
-                healthy = "Y"
+    # HEALTHY: APPLIED=Y AND TC_LAST < 1 hour
+    # (Now applies to both override and non-override hosts since APPLIED can be computed for both)
+    if applied == "-":
+        healthy = "-"
+    else:
+        healthy = "N"
+        if applied == "Y" and tc_last_s is not None and tc_last_s < 3600:
+            healthy = "Y"
 
     # Add TaskCluster fields
     tc_quar = "-"
@@ -524,6 +547,7 @@ def build_row_values(
     tc_data: dict[str, Any] | None = None,
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
+    github_refs: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     """Build string values for a monitor row."""
     # Strip common FQDN suffix if provided
@@ -561,7 +585,12 @@ def build_row_values(
         err = record.get("error") or record.get("stderr") or "error"
         if last_ok and last_ok.get("ok"):
             values = build_ok_row_values(
-                host, last_ok, tc_data=tc_data, fqdn_suffix=fqdn_suffix, sha_cache=sha_cache
+                host,
+                last_ok,
+                tc_data=tc_data,
+                fqdn_suffix=fqdn_suffix,
+                sha_cache=sha_cache,
+                github_refs=github_refs,
             )
             values["status"] = "FAIL"
             values["err"] = err
@@ -594,7 +623,12 @@ def build_row_values(
         }
 
     return build_ok_row_values(
-        host, record, tc_data=tc_data, fqdn_suffix=fqdn_suffix, sha_cache=sha_cache
+        host,
+        record,
+        tc_data=tc_data,
+        fqdn_suffix=fqdn_suffix,
+        sha_cache=sha_cache,
+        github_refs=github_refs,
     )
 
 

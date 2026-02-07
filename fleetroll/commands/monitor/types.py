@@ -30,10 +30,10 @@ TC_T_DUR  TC task duration (or time since start if in progress)
 TC_QUAR   TC quarantine status (Y if quarantined)
 DATA      Data freshness: audit_age/tc_age
 
-APPLIED   Override applied by puppet
-          Y = override present, puppet ran after, succeeded
-          N = override present, puppet hasn't run or failed
-          - = no override present
+APPLIED   Puppet running latest branch code
+          Y = puppet git SHA matches latest on branch
+          N = SHA mismatch or puppet failed
+          - = no puppet/GitHub data available
 
 RO_HEALTH Overall rollout health status
           Y = APPLIED and TC worker active (< 1 hour)

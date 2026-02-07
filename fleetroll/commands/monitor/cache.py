@@ -8,14 +8,14 @@ from typing import cast
 
 
 def parse_override_file(path: Path) -> dict[str, str | None] | None:
-    """Parse override file to extract user/branch info.
+    """Parse override file to extract user/branch/repo info.
 
     Args:
         path: Path to override file
 
     Returns:
-        Dict with "user" and "branch" keys, or None on error.
-        User will be None if repo is not a GitHub URL.
+        Dict with "user", "repo", and "branch" keys, or None on error.
+        User and repo will be None if repo is not a GitHub URL.
     """
     try:
         content = path.read_text(encoding="utf-8")
@@ -31,16 +31,18 @@ def parse_override_file(path: Path) -> dict[str, str | None] | None:
 
     branch = branch_match.group(1)
 
-    # Extract username from GitHub URL if available
-    # e.g., https://github.com/rcurranmoz/ronin_puppet.git -> rcurranmoz
+    # Extract username and repo name from GitHub URL if available
+    # e.g., https://github.com/rcurranmoz/ronin_puppet.git -> rcurranmoz, ronin_puppet
     user = None
+    repo_name = None
     if repo_match:
         repo_url = repo_match.group(1)
-        user_match = re.search(r"github\.com[:/]([^/]+)/", repo_url)
+        user_match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", repo_url)
         if user_match:
             user = user_match.group(1)
+            repo_name = user_match.group(2)
 
-    return {"user": user, "branch": branch}
+    return {"user": user, "repo": repo_name, "branch": branch}
 
 
 def find_vault_symlink(sha256: str, vault_dir: Path) -> str | None:
@@ -151,6 +153,32 @@ class ShaInfoCache:
             # None if branch_match fails, so when info exists, branch is always set
             return cast("str", info["branch"])
         return "-"
+
+    def get_override_details(self, sha256: str) -> dict[str, str | None] | None:
+        """Get full override details (user, repo, branch) for a SHA.
+
+        Args:
+            sha256: Full SHA256 hash
+
+        Returns:
+            Dict with "user", "repo", and "branch" keys, or None if not found
+        """
+        if not sha256:
+            return None
+
+        # Check cache with full SHA and 12-char prefix
+        sha_prefix = sha256[:12]
+        info = self.override_cache.get(sha256) or self.override_cache.get(sha_prefix)
+
+        if not info:
+            # Try on-demand lookup
+            override_file = self.overrides_dir / sha_prefix
+            if override_file.exists():
+                info = parse_override_file(override_file)
+                if info:
+                    self.override_cache[sha_prefix] = info
+
+        return info
 
     def get_vault_info(self, sha256: str) -> str:
         """Get human-readable vault info (symlink name) for a SHA.

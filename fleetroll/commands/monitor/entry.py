@@ -127,6 +127,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 cap_widths=False,
                 sep_len=2,
                 sha_cache=sha_cache,
+                github_refs=github_refs,
             )
             header, lines = render_monitor_lines(
                 hosts=sorted_hosts,
@@ -137,6 +138,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 cap_widths=False,
                 col_sep="  ",
                 sha_cache=sha_cache,
+                github_refs=github_refs,
             )
             print(header)
             for line in lines:
@@ -162,6 +164,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                         columns=columns,
                         widths=widths,
                         col_sep="  ",
+                        github_refs=github_refs,
                         sha_cache=sha_cache,
                     )
                 )
