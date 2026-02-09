@@ -467,7 +467,6 @@ def remote_unset_script(*, backup: bool, backup_suffix: str) -> str:
     suf = shlex.quote(backup_suffix)
     script = f"""
 set -eu
-trap 'sudo -n rm -f "$tmp" 2>/dev/null' EXIT
 
 # Detect OS and set override path
 os_type=$(uname -s)

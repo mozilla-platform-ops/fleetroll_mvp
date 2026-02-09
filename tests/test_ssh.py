@@ -302,15 +302,6 @@ class TestRemoteUnsetScript:
         # Script should test for file existence
         assert "test -e" in script
 
-    def test_includes_exit_trap_defensive(self):
-        """Script includes EXIT trap for defensive cleanup."""
-        script = remote_unset_script(
-            backup=True,
-            backup_suffix="20240101T000000Z",
-        )
-        assert "trap" in script
-        assert "EXIT" in script
-
 
 class TestOsXScriptGeneration:
     """Tests for OS X (Darwin) support in generated audit scripts."""
