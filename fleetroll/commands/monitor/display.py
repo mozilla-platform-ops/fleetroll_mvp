@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import sqlite3
+import time
 from collections.abc import Iterable
 from curses import error as curses_error
 from importlib.metadata import version as get_version
@@ -12,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .cache import ShaInfoCache
 
-from ...constants import TC_WORKERS_FILE_NAME
 from ...utils import get_log_file_size
 from .colors import (
     EXTENDED_COLORS,
@@ -26,7 +27,7 @@ from .data import (
     get_host_sort_key,
     humanize_duration,
     load_github_refs,
-    load_tc_worker_data,
+    load_tc_worker_data_from_db,
     resolve_last_ok_ts,
     strip_fqdn,
 )
@@ -62,7 +63,7 @@ class MonitorDisplay:
         latest: dict[str, dict[str, Any]],
         latest_ok: dict[str, dict[str, Any]],
         tc_data: dict[str, dict[str, Any]],
-        tc_workers_path: Path,
+        db_conn: sqlite3.Connection,
         github_refs: dict[str, dict[str, Any]],
         github_refs_path: Path,
         sha_cache: ShaInfoCache | None = None,
@@ -74,11 +75,11 @@ class MonitorDisplay:
         self.latest = latest
         self.latest_ok = latest_ok
         self.tc_data = tc_data
-        self.tc_workers_path = tc_workers_path
+        self.db_conn = db_conn
         self.github_refs = github_refs
         self.github_refs_path = github_refs_path
         self.sha_cache = sha_cache
-        self.tc_file_mtime = None
+        self._tc_poll_time = 0.0
         self.github_file_mtime = None
         self.offset = 0
         self.col_offset = 0
@@ -99,7 +100,6 @@ class MonitorDisplay:
         self.column_attr = 0
         self.warning_attr = 0
         self._init_curses()
-        self._update_tc_mtime()
         self._update_github_mtime()
         self.log_size_warnings = self._check_log_sizes()
 
@@ -391,14 +391,6 @@ class MonitorDisplay:
             self.draw_screen()
         return False
 
-    def _update_tc_mtime(self) -> None:
-        """Update stored mtime of TC workers file."""
-        try:
-            stat = self.tc_workers_path.stat()
-            self.tc_file_mtime = stat.st_mtime
-        except FileNotFoundError:
-            self.tc_file_mtime = None
-
     def _update_github_mtime(self) -> None:
         """Update stored mtime of GitHub refs file."""
         try:
@@ -433,29 +425,17 @@ class MonitorDisplay:
         if db_size_mb >= warn_threshold_mb:
             warnings.append(f"db: {db_size_mb:.0f}M")
 
-        # Check taskcluster_workers.jsonl
-        tc_path = fleetroll_dir / TC_WORKERS_FILE_NAME
-        tc_size_mb = get_log_file_size(tc_path) / bytes_per_mb
-        if tc_size_mb >= warn_threshold_mb:
-            warnings.append(f"tc: {tc_size_mb:.0f}M")
-
         return warnings
 
     def poll_tc_data(self) -> bool:
-        """Check if TC data file changed and reload if needed. Returns True if reloaded."""
-        try:
-            stat = self.tc_workers_path.stat()
-            current_mtime = stat.st_mtime
-        except FileNotFoundError:
-            if self.tc_file_mtime is not None:
-                self.tc_data = {}
-                self.tc_file_mtime = None
-                return True
+        """Check if TC data changed and reload if needed. Returns True if reloaded."""
+        now = time.monotonic()
+        if now - self._tc_poll_time < 5.0:
             return False
-
-        if self.tc_file_mtime is None or current_mtime != self.tc_file_mtime:
-            self.tc_data = load_tc_worker_data(self.tc_workers_path)
-            self.tc_file_mtime = current_mtime
+        self._tc_poll_time = now
+        new_data = load_tc_worker_data_from_db(self.db_conn, hosts=self.hosts)
+        if new_data != self.tc_data:
+            self.tc_data = new_data
             return True
         return False
 

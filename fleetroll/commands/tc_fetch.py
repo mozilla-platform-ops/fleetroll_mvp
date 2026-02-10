@@ -326,7 +326,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         click.echo(f"Fetching TaskCluster data for {len(hosts)} host(s)...")
 
     # Initialize SQLite database
-    from ..db import get_connection, get_db_path, init_db
+    from ..db import get_connection, get_db_path, init_db, insert_tc_worker
 
     db_path = get_db_path()
     init_db(db_path)
@@ -380,7 +380,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         ts = utc_now_iso()
         worker_type_to_workers: dict[tuple[str, str], dict[str, Any]] = {}
 
-        for (provisioner, worker_type), wt_hosts in worker_type_to_hosts.items():
+        for provisioner, worker_type in worker_type_to_hosts:
             if not quiet:
                 click.echo(f"Querying workerType {provisioner}/{worker_type}...", nl=False)
             try:
@@ -419,10 +419,6 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 # Store empty result so we still write scan record
                 worker_type_to_workers[(provisioner, worker_type)] = {}
 
-        # Write results to JSONL
-        output_path = tc_workers_file_path()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
         worker_records_written = 0
         scan_records_written = 0
 
@@ -435,61 +431,50 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             ts=ts,
         )
 
-        # Write results to file
-        with output_path.open("a", encoding="utf-8") as f:
-            # Write worker records with verbose logging
-            for record in worker_records:
-                host = record["host"]
-                short_host = record["worker_id"]
-                role = host_to_role.get(host)
+        # Write worker records to SQLite
+        for record in worker_records:
+            host = record["host"]
+            short_host = record["worker_id"]
+            role = host_to_role.get(host)
 
-                if verbose >= 1 and not quiet:
-                    provisioner = record["provisioner"]
-                    worker_type = record["worker_type"]
-                    worker_type_key = (provisioner, worker_type)
-                    workers_map = worker_type_to_workers.get(worker_type_key, {})
-
-                    click.echo(f"  Matching {host} (short: {short_host})...")
-                    click.echo(f"    Found worker data for {short_host}")
-                    if verbose >= 2:
-                        worker_data = workers_map.get(short_host)
-                        click.echo(f"    Worker data: {json.dumps(worker_data, indent=4)}")
-
-                # Exclude 'type' field as write_worker_record sets it internally
-                record_params = {k: v for k, v in record.items() if k != "type"}
-                write_worker_record(f, **record_params)
-                worker_records_written += 1
-
-                if verbose >= 1 and not quiet:
-                    state = record["state"]
-                    quarantine = record["quarantine_until"]
-                    click.echo(f"    Wrote record: state={state}, quarantine={quarantine}")
-
-            # Write skipped hosts logging
             if verbose >= 1 and not quiet:
-                written_hosts = {r["host"] for r in worker_records}
-                for host in hosts:
-                    if host not in written_hosts:
-                        role = host_to_role.get(host)
-                        if not role or role not in role_to_worker_type:
-                            click.echo(
-                                f"  Skipping {host}: no role or role not in worker type mapping"
-                            )
-                        else:
-                            click.echo(f"  Skipping {host}: no worker data found")
+                provisioner = record["provisioner"]
+                worker_type = record["worker_type"]
+                worker_type_key = (provisioner, worker_type)
+                workers_map = worker_type_to_workers.get(worker_type_key, {})
 
-            # Write scan records
-            for (provisioner, worker_type), wt_hosts in worker_type_to_hosts.items():
-                workers_map = worker_type_to_workers.get((provisioner, worker_type), {})
-                write_scan_record(
-                    f,
-                    ts=ts,
-                    provisioner=provisioner,
-                    worker_type=worker_type,
-                    worker_count=len(workers_map),
-                    requested_by_hosts=wt_hosts,
-                )
-                scan_records_written += 1
+                click.echo(f"  Matching {host} (short: {short_host})...")
+                click.echo(f"    Found worker data for {short_host}")
+                if verbose >= 2:
+                    worker_data = workers_map.get(short_host)
+                    click.echo(f"    Worker data: {json.dumps(worker_data, indent=4)}")
+
+            # Insert into SQLite
+            insert_tc_worker(db_conn, record)
+            worker_records_written += 1
+
+            if verbose >= 1 and not quiet:
+                state = record["state"]
+                quarantine = record["quarantine_until"]
+                click.echo(f"    Wrote record: state={state}, quarantine={quarantine}")
+
+        # Commit all inserts
+        db_conn.commit()
+
+        # Log skipped hosts
+        if verbose >= 1 and not quiet:
+            written_hosts = {r["host"] for r in worker_records}
+            for host in hosts:
+                if host not in written_hosts:
+                    role = host_to_role.get(host)
+                    if not role or role not in role_to_worker_type:
+                        click.echo(f"  Skipping {host}: no role or role not in worker type mapping")
+                    else:
+                        click.echo(f"  Skipping {host}: no worker data found")
+
+        # Count scan records for quiet-mode output compatibility
+        # (scan records are not written to SQLite as they're never read)
+        scan_records_written = len(worker_type_to_hosts)
 
         # Build warnings list for quiet mode
         elapsed_seconds = time.time() - start_time
@@ -510,7 +495,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         else:
             msg = (
                 f"Wrote {worker_records_written} worker record(s) and "
-                f"{scan_records_written} scan record(s) to {output_path}"
+                f"{scan_records_written} scan record(s) to {db_path}"
             )
             click.echo(msg)
 

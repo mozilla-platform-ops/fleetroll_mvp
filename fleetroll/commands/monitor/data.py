@@ -648,6 +648,25 @@ def load_latest_records(
     return get_latest_host_observations(conn, hosts)
 
 
+def load_tc_worker_data_from_db(
+    conn: sqlite3.Connection, *, hosts: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Load latest TC worker data from SQLite, keyed by short hostname.
+
+    Args:
+        conn: Database connection
+        hosts: List of hostnames to query
+
+    Returns:
+        Dict mapping short hostname to most recent worker record
+    """
+    from ...db import get_latest_tc_workers
+
+    raw = get_latest_tc_workers(conn, hosts)
+    # Re-key by short hostname to match existing consumer expectations
+    return {strip_fqdn(host): data for host, data in raw.items()}
+
+
 def tail_audit_log(
     conn: sqlite3.Connection,
     *,
