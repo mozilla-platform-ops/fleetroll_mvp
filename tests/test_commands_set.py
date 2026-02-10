@@ -288,7 +288,7 @@ class TestCmdHostSet:
     def test_validation_failure_during_dry_run(
         self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
     ):
-        """Invalid syntax raises error during dry-run mode."""
+        """Invalid syntax exits during dry-run mode (non-JSON)."""
         import shutil
 
         if not shutil.which("bash"):
@@ -300,11 +300,13 @@ class TestCmdHostSet:
         mock_args_set.from_file = str(bad_file)
         mock_args_set.confirm = False
         mock_args_set.validate = True
+        mock_args_set.json = False
 
         mocker.patch("fleetroll.commands.set.run_ssh", side_effect=AssertionError())
 
-        with pytest.raises(UserError, match="validation failed"):
+        with pytest.raises(SystemExit) as exc_info:
             cmd_host_set(mock_args_set)
+        assert exc_info.value.code == 1
 
     @pytest.mark.allow_validation
     def test_validation_skipped_when_disabled(

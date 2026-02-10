@@ -222,7 +222,7 @@ class TestCmdHostSetVault:
     def test_invalid_yaml_raises_error(
         self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
     ):
-        """Invalid YAML content raises UserError during validation."""
+        """Invalid YAML content exits during dry-run validation (non-JSON)."""
         bad_file = tmp_dir / "bad_vault.yaml"
         # Invalid YAML: multiple values for same key without proper structure
         bad_file.write_text("key: value1: value2: value3\n")
@@ -230,11 +230,13 @@ class TestCmdHostSetVault:
         mock_args_vault.from_file = str(bad_file)
         mock_args_vault.confirm = False
         mock_args_vault.validate = True
+        mock_args_vault.json = False
 
         mocker.patch("fleetroll.commands.vault.run_ssh", side_effect=AssertionError())
 
-        with pytest.raises(UserError, match="YAML validation failed"):
+        with pytest.raises(SystemExit) as exc_info:
             cmd_host_set_vault(mock_args_vault)
+        assert exc_info.value.code == 1
 
     @pytest.mark.allow_validation
     def test_valid_yaml_passes_validation(

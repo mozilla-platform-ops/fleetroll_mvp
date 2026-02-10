@@ -196,10 +196,6 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
         is_batch = False
 
     if not args.confirm:
-        # Validate during dry-run to catch errors early
-        if args.validate:
-            validate_vault_yaml(data)
-
         if args.json:
             summary = {
                 "dry_run": True,
@@ -255,7 +251,24 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
                 f"{click.style('Local store:', fg='cyan')} {audit_log.parent / VAULT_YAMLS_DIR_NAME}"
             )
             print(f"{click.style('Audit log:', fg='cyan')} {audit_log}")
-            print(click.style("Run again with --confirm to apply changes.", fg="yellow"))
+
+        # Validate after showing dry-run output
+        if args.validate:
+            try:
+                validate_vault_yaml(data)
+            except UserError as e:
+                if not args.json:
+                    print()
+                    print(click.style("=" * 70, fg="red", bold=True))
+                    print(click.style("VALIDATION FAILED", fg="red", bold=True))
+                    print(click.style("=" * 70, fg="red", bold=True))
+                    print(click.style(f"\n{e}\n", fg="red"))
+                    sys.exit(1)
+                raise
+
+        # Only show confirmation message if validation passed (or was skipped)
+        if not args.json:
+            print(click.style("\nRun again with --confirm to apply changes.", fg="yellow"))
         return
 
     # Validate before actual execution (already validated in dry-run if --validate was set)
