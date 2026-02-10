@@ -118,8 +118,8 @@ class TcFetchArgs:
 
 
 @dataclass
-class RotateLogsArgs:
-    """Arguments for rotate-logs command."""
+class MaintainArgs:
+    """Arguments for maintain command."""
 
     audit_log: str | None
     confirm: bool

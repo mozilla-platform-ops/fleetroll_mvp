@@ -15,8 +15,8 @@ from .cli_types import (
     HostSetOverrideArgs,
     HostSetVaultArgs,
     HostUnsetOverrideArgs,
+    MaintainArgs,
     OverrideShowArgs,
-    RotateLogsArgs,
     TcFetchArgs,
     VaultShowArgs,
 )
@@ -27,8 +27,8 @@ from .commands import (
     cmd_host_set,
     cmd_host_set_vault,
     cmd_host_unset,
+    cmd_maintain,
     cmd_override_show,
-    cmd_rotate_logs,
     cmd_tc_fetch,
     cmd_vault_show,
 )
@@ -549,7 +549,7 @@ def gh_fetch(override_delay: bool, quiet: bool):
     cmd_gh_fetch(override_delay=override_delay, quiet=quiet)
 
 
-@cli.command("rotate-logs")
+@cli.command("maintain")
 @click.option(
     "--audit-log",
     type=click.Path(),
@@ -558,23 +558,24 @@ def gh_fetch(override_delay: bool, quiet: bool):
 @click.option(
     "--confirm",
     is_flag=True,
-    help="Actually rotate logs (without this, shows dry-run).",
+    help="Actually apply changes (without this, shows dry-run).",
 )
 @click.option(
     "--force",
     is_flag=True,
     help="Rotate logs regardless of size threshold.",
 )
-def rotate_logs(audit_log: str | None, confirm: bool, force: bool):
-    """Rotate FleetRoll log files to prevent unbounded growth.
+def maintain(audit_log: str | None, confirm: bool, force: bool):
+    """Maintain FleetRoll data files to prevent unbounded growth.
 
+    Rotates audit log file and compacts SQLite database.
     Archives current logs with timestamp suffix and starts fresh.
     Does NOT backfill - new logs start empty on next write.
     Only rotates files >= 100 MB threshold (unless --force is used).
     """
-    args = RotateLogsArgs(audit_log=audit_log, confirm=confirm, force=force)
+    args = MaintainArgs(audit_log=audit_log, confirm=confirm, force=force)
     try:
-        cmd_rotate_logs(args)
+        cmd_maintain(args)
     except (FleetRollError, UserError) as e:
         click.echo(f"ERROR: {e}", err=True)
         sys.exit(1)

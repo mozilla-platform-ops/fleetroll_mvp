@@ -902,7 +902,7 @@ class MonitorDisplay:
         right = f"{fqdn_part}source={self.host_source}, hosts={len(self.hosts)}, updated={updated}"
         if self.log_size_warnings:
             warnings_text = ", ".join(self.log_size_warnings)
-            right = f"⚠ Large logs: {warnings_text} (run 'fleetroll rotate-logs') | {right}"
+            right = f"⚠ Large logs: {warnings_text} (run 'fleetroll maintain') | {right}"
         # Determine if we need two-line mode
         use_two_lines = usable_width > 0 and len(left) + 1 + len(right) > usable_width
 

@@ -457,3 +457,31 @@ def get_latest_github_refs(
         result[key] = data
 
     return result
+
+
+def compact_database(db_path: Path) -> tuple[int, int]:
+    """Run WAL checkpoint and VACUUM on the database.
+
+    Flushes Write-Ahead Log to main database file, truncates WAL,
+    and rebuilds database to reclaim free pages from deleted rows.
+
+    Args:
+        db_path: Path to database file
+
+    Returns:
+        Tuple of (size_before, size_after) in bytes
+    """
+    size_before = db_path.stat().st_size if db_path.exists() else 0
+
+    conn = sqlite3.connect(db_path)
+    try:
+        # Flush WAL to main db and truncate WAL file
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        # Rebuild database to reclaim free pages
+        conn.execute("VACUUM")
+        conn.commit()
+    finally:
+        conn.close()
+
+    size_after = db_path.stat().st_size if db_path.exists() else 0
+    return size_before, size_after

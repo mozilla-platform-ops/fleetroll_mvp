@@ -1,4 +1,4 @@
-"""FleetRoll log rotation command."""
+"""FleetRoll maintenance command."""
 
 from __future__ import annotations
 
@@ -9,15 +9,12 @@ from typing import TYPE_CHECKING
 
 import click
 
-from ..constants import (
-    AUDIT_FILE_NAME,
-    HOST_OBSERVATIONS_FILE_NAME,
-    TC_WORKERS_FILE_NAME,
-)
+from ..constants import AUDIT_FILE_NAME, DB_FILE_NAME
+from ..db import compact_database
 from ..utils import default_audit_log_path
 
 if TYPE_CHECKING:
-    from ..cli_types import RotateLogsArgs
+    from ..cli_types import MaintainArgs
 
 
 def rotate_log_file(
@@ -62,9 +59,10 @@ def rotate_log_file(
         return (False, f"FAIL {log_path.name}: {e}")
 
 
-def cmd_rotate_logs(args: RotateLogsArgs) -> None:
-    """Rotate FleetRoll log files to prevent unbounded growth.
+def cmd_maintain(args: MaintainArgs) -> None:
+    """Maintain FleetRoll data files.
 
+    Rotates audit log and compacts SQLite database to prevent unbounded growth.
     Creates timestamped archives and starts fresh log files.
     Does NOT backfill - new files start empty.
     """
@@ -74,31 +72,50 @@ def cmd_rotate_logs(args: RotateLogsArgs) -> None:
     # Files to consider for rotation
     log_files = [
         fleetroll_dir / AUDIT_FILE_NAME,
-        fleetroll_dir / HOST_OBSERVATIONS_FILE_NAME,
-        fleetroll_dir / TC_WORKERS_FILE_NAME,
     ]
 
     if not args.confirm:
-        click.echo("DRY RUN: --confirm not provided; no files will be rotated.")
+        click.echo("DRY RUN: --confirm not provided; no changes will be made.")
         click.echo(f"FleetRoll directory: {fleetroll_dir}")
         click.echo()
 
+    # Rotate log files
     results = []
     for log_path in log_files:
         rotated, message = rotate_log_file(log_path, dry_run=not args.confirm, force=args.force)
         results.append((rotated, message))
         click.echo(message)
 
+    # Compact database
+    db_path = fleetroll_dir / DB_FILE_NAME
+    if db_path.exists():
+        if args.confirm:
+            size_before, size_after = compact_database(db_path)
+            size_before_mb = size_before / (1024 * 1024)
+            size_after_mb = size_after / (1024 * 1024)
+            reduction = size_before - size_after
+            reduction_mb = reduction / (1024 * 1024)
+            pct = (reduction / size_before * 100) if size_before > 0 else 0
+            click.echo(
+                f"OK {DB_FILE_NAME}: compacted from {size_before_mb:.1f} MB to {size_after_mb:.1f} MB "
+                f"(freed {reduction_mb:.1f} MB, {pct:.1f}%)"
+            )
+        else:
+            size_mb = db_path.stat().st_size / (1024 * 1024)
+            click.echo(f"DRY RUN: Would compact {DB_FILE_NAME} (currently {size_mb:.1f} MB)")
+    else:
+        click.echo(f"SKIP {DB_FILE_NAME}: file does not exist")
+
     if not args.confirm:
         click.echo()
-        click.echo("Run again with --confirm to rotate logs.")
+        click.echo("Run again with --confirm to apply changes.")
         return
 
     # Summary
     rotated_count = sum(1 for rotated, _ in results if rotated)
     click.echo()
     if rotated_count > 0:
-        click.echo(f"Summary: {rotated_count} file(s) rotated.")
+        click.echo(f"Summary: {rotated_count} file(s) rotated, database compacted.")
         click.echo("New log files will be created on next write.")
     else:
-        click.echo("Summary: No files rotated.")
+        click.echo("Summary: No files rotated, database compacted.")
