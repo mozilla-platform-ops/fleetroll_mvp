@@ -667,6 +667,22 @@ def load_tc_worker_data_from_db(
     return {strip_fqdn(host): data for host, data in raw.items()}
 
 
+def load_github_refs_from_db(
+    conn: sqlite3.Connection,
+) -> dict[str, dict[str, Any]]:
+    """Load latest GitHub ref data from SQLite.
+
+    Args:
+        conn: Database connection
+
+    Returns:
+        Dict mapping 'owner/repo:branch' to most recent ref record
+    """
+    from ...db import get_latest_github_refs
+
+    return get_latest_github_refs(conn)
+
+
 def tail_audit_log(
     conn: sqlite3.Connection,
     *,

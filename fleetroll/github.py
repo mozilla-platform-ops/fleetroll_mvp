@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import re
+import sqlite3
 from pathlib import Path
 
 import requests
@@ -13,7 +13,6 @@ from .commands.monitor.cache import parse_override_file
 from .constants import (
     AUDIT_DIR_NAME,
     DEFAULT_GITHUB_REPO,
-    GITHUB_REFS_FILE_NAME,
     OVERRIDES_DIR_NAME,
 )
 from .utils import utc_now_iso
@@ -145,30 +144,39 @@ def fetch_branch_shas(owner: str, repo: str) -> list[dict[str, str]]:
         return []
 
 
-def should_fetch(refs_path: Path) -> bool:
+def should_fetch(db_conn: sqlite3.Connection) -> bool:
     """Check if we should fetch GitHub refs based on throttle interval.
 
     Args:
-        refs_path: Path to github_refs.jsonl file
+        db_conn: Database connection
 
     Returns:
-        True if file doesn't exist or was last modified > GITHUB_FETCH_INTERVAL_S ago
+        True if no data exists or was last fetched > GITHUB_FETCH_INTERVAL_S ago
     """
-    if not refs_path.exists():
-        return True
 
     try:
-        mtime = refs_path.stat().st_mtime
-        import time
+        result = db_conn.execute("SELECT MAX(ts) as max_ts FROM github_refs").fetchone()
+        max_ts = result["max_ts"] if result else None
 
-        age_seconds = time.time() - mtime
+        if not max_ts:
+            return True
+
+        # Parse ISO timestamp and compute age
+        import datetime as dt
+
+        parsed = dt.datetime.fromisoformat(max_ts)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt.UTC)
+        now = dt.datetime.now(dt.UTC)
+        age_seconds = (now - parsed).total_seconds()
+
         return age_seconds >= GITHUB_FETCH_INTERVAL_S
-    except OSError:
+    except Exception:
         return True
 
 
 def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> None:
-    """Fetch GitHub branch refs and write to JSONL file.
+    """Fetch GitHub branch refs and write to SQLite database.
 
     Args:
         override_delay: If True, skip throttle check and fetch immediately
@@ -176,44 +184,54 @@ def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> Non
     """
     import click
 
+    from .db import get_connection, get_db_path, init_db, insert_github_ref
+
     # Determine paths
     home = Path.home()
     fleetroll_dir = home / AUDIT_DIR_NAME
     overrides_dir = fleetroll_dir / OVERRIDES_DIR_NAME
-    refs_path = fleetroll_dir / GITHUB_REFS_FILE_NAME
 
-    # Check throttle
-    if not override_delay and not should_fetch(refs_path):
+    # Initialize SQLite database
+    db_path = get_db_path()
+    init_db(db_path)
+    db_conn = get_connection(db_path)
+
+    try:
+        # Check throttle
+        if not override_delay and not should_fetch(db_conn):
+            if not quiet:
+                import datetime as dt
+
+                result = db_conn.execute("SELECT MAX(ts) as max_ts FROM github_refs").fetchone()
+                max_ts = result["max_ts"] if result else None
+                if max_ts:
+                    parsed = dt.datetime.fromisoformat(max_ts)
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=dt.UTC)
+                    now = dt.datetime.now(dt.UTC)
+                    age_seconds = (now - parsed).total_seconds()
+                    remaining_seconds = GITHUB_FETCH_INTERVAL_S - age_seconds
+                    remaining_mins = int(remaining_seconds / 60)
+                    click.echo(
+                        f"GitHub refs recently fetched ({remaining_mins}m ago), "
+                        f"skipping (use --override-delay to force)"
+                    )
+            return
+
+        # Collect repos and branches from overrides
         if not quiet:
-            import time
+            click.echo("Scanning overrides for GitHub repos/branches...")
+        repo_branches = collect_repo_branches(overrides_dir)
 
-            mtime = refs_path.stat().st_mtime
-            age_seconds = time.time() - mtime
-            remaining_seconds = GITHUB_FETCH_INTERVAL_S - age_seconds
-            remaining_mins = int(remaining_seconds / 60)
-            click.echo(
-                f"GitHub refs recently fetched ({remaining_mins}m ago), "
-                f"skipping (use --override-delay to force)"
-            )
-        return
+        if not quiet:
+            click.echo(f"Found {len(repo_branches)} unique repo(s)")
 
-    # Collect repos and branches from overrides
-    if not quiet:
-        click.echo("Scanning overrides for GitHub repos/branches...")
-    repo_branches = collect_repo_branches(overrides_dir)
+        # Fetch data from GitHub
+        ts = utc_now_iso()
+        total_branches_requested = sum(len(branches) for branches in repo_branches.values())
+        branches_found = 0
+        errors: list[str] = []
 
-    if not quiet:
-        click.echo(f"Found {len(repo_branches)} unique repo(s)")
-
-    # Fetch data from GitHub
-    ts = utc_now_iso()
-    total_branches_requested = sum(len(branches) for branches in repo_branches.values())
-    branches_found = 0
-    errors: list[str] = []
-
-    refs_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with refs_path.open("a", encoding="utf-8") as f:
         for (owner, repo), branches in repo_branches.items():
             if not quiet:
                 click.echo(f"Fetching {owner}/{repo}...", nl=False)
@@ -241,7 +259,7 @@ def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> Non
                         "branch": branch,
                         "sha": refs_map[branch],
                     }
-                    f.write(json.dumps(record) + "\n")
+                    insert_github_ref(db_conn, record)
                     branches_found += 1
                     matched += 1
                 else:
@@ -251,31 +269,25 @@ def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> Non
             if not quiet:
                 click.echo(f" {matched}/{len(branches)} branch(es) found")
 
-        # Write scan record
-        scan_record = {
-            "type": "scan",
-            "ts": ts,
-            "repos_queried": [f"{owner}/{repo}" for owner, repo in repo_branches],
-            "branches_found": branches_found,
-            "branches_requested": total_branches_requested,
-            "errors": errors,
-        }
-        f.write(json.dumps(scan_record) + "\n")
+        # Commit all inserts
+        db_conn.commit()
 
-    # Output summary
-    if quiet:
-        if errors:
-            status = click.style("⚠ WARNING", fg="yellow")
-            msg = f"{status} Wrote {branches_found}/{total_branches_requested} branch refs ({len(errors)} errors)"
+        # Output summary
+        if quiet:
+            if errors:
+                status = click.style("⚠ WARNING", fg="yellow")
+                msg = f"{status} Wrote {branches_found}/{total_branches_requested} branch refs ({len(errors)} errors)"
+            else:
+                status = click.style("✓ SUCCESS", fg="green")
+                msg = f"{status} Wrote {branches_found} branch refs"
+            click.echo(msg)
         else:
-            status = click.style("✓ SUCCESS", fg="green")
-            msg = f"{status} Wrote {branches_found} branch refs"
-        click.echo(msg)
-    else:
-        click.echo(f"Wrote {branches_found} branch ref(s) to {refs_path}")
-        if errors:
-            click.echo(f"Encountered {len(errors)} error(s):")
-            for error in errors[:5]:  # Show first 5 errors
-                click.echo(f"  - {error}")
-            if len(errors) > 5:
-                click.echo(f"  ... and {len(errors) - 5} more")
+            click.echo(f"Wrote {branches_found} branch ref(s) to database")
+            if errors:
+                click.echo(f"Encountered {len(errors)} error(s):")
+                for error in errors[:5]:  # Show first 5 errors
+                    click.echo(f"  - {error}")
+                if len(errors) > 5:
+                    click.echo(f"  ... and {len(errors) - 5} more")
+    finally:
+        db_conn.close()

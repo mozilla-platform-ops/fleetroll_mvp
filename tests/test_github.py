@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from unittest.mock import Mock, patch
 
 from fleetroll.github import (
@@ -55,49 +54,87 @@ class TestParseGithubRepoUrl:
 class TestShouldFetch:
     """Tests for should_fetch function."""
 
-    def test_file_does_not_exist(self, tmp_path):
-        """Should return True if file doesn't exist."""
-        refs_path = tmp_path / "github_refs.jsonl"
-        assert should_fetch(refs_path) is True
+    def test_no_data_exists(self, temp_db):
+        """Should return True if no data exists."""
+        from fleetroll.db import get_connection
 
-    def test_file_is_old(self, tmp_path):
-        """Should return True if file is older than interval."""
-        refs_path = tmp_path / "github_refs.jsonl"
-        refs_path.write_text("test\n")
+        db_conn = get_connection(temp_db)
+        try:
+            assert should_fetch(db_conn) is True
+        finally:
+            db_conn.close()
 
-        # Set mtime to 2 hours ago (7200 seconds)
-        old_time = time.time() - 7200
-        import os
+    def test_data_is_old(self, temp_db):
+        """Should return True if data is older than interval."""
+        import datetime as dt
 
-        os.utime(refs_path, (old_time, old_time))
+        from fleetroll.db import get_connection, insert_github_ref
 
-        assert should_fetch(refs_path) is True
+        db_conn = get_connection(temp_db)
+        try:
+            # Insert record with timestamp 2 hours ago
+            old_ts = dt.datetime.now(dt.UTC) - dt.timedelta(hours=2)
+            record = {
+                "owner": "test",
+                "repo": "test",
+                "branch": "main",
+                "ts": old_ts.isoformat(),
+                "sha": "abc123",
+            }
+            insert_github_ref(db_conn, record)
+            db_conn.commit()
 
-    def test_file_is_recent(self, tmp_path):
-        """Should return False if file is newer than interval."""
-        refs_path = tmp_path / "github_refs.jsonl"
-        refs_path.write_text("test\n")
+            assert should_fetch(db_conn) is True
+        finally:
+            db_conn.close()
 
-        # Set mtime to 30 minutes ago (1800 seconds < 3600)
-        recent_time = time.time() - 1800
-        import os
+    def test_data_is_recent(self, temp_db):
+        """Should return False if data is newer than interval."""
+        import datetime as dt
 
-        os.utime(refs_path, (recent_time, recent_time))
+        from fleetroll.db import get_connection, insert_github_ref
 
-        assert should_fetch(refs_path) is False
+        db_conn = get_connection(temp_db)
+        try:
+            # Insert record with timestamp 30 minutes ago (1800 seconds < 3600)
+            recent_ts = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=30)
+            record = {
+                "owner": "test",
+                "repo": "test",
+                "branch": "main",
+                "ts": recent_ts.isoformat(),
+                "sha": "abc123",
+            }
+            insert_github_ref(db_conn, record)
+            db_conn.commit()
 
-    def test_file_exactly_at_interval(self, tmp_path):
-        """Should return True if file is exactly at the interval threshold."""
-        refs_path = tmp_path / "github_refs.jsonl"
-        refs_path.write_text("test\n")
+            assert should_fetch(db_conn) is False
+        finally:
+            db_conn.close()
 
-        # Set mtime to exactly 3600 seconds ago
-        exact_time = time.time() - 3600
-        import os
+    def test_data_exactly_at_interval(self, temp_db):
+        """Should return True if data is exactly at the interval threshold."""
+        import datetime as dt
 
-        os.utime(refs_path, (exact_time, exact_time))
+        from fleetroll.db import get_connection, insert_github_ref
 
-        assert should_fetch(refs_path) is True
+        db_conn = get_connection(temp_db)
+        try:
+            # Insert record with timestamp exactly 3600 seconds ago
+            exact_ts = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=3600)
+            record = {
+                "owner": "test",
+                "repo": "test",
+                "branch": "main",
+                "ts": exact_ts.isoformat(),
+                "sha": "abc123",
+            }
+            insert_github_ref(db_conn, record)
+            db_conn.commit()
+
+            assert should_fetch(db_conn) is True
+        finally:
+            db_conn.close()
 
 
 class TestCollectRepoBranches:

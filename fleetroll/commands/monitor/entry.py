@@ -9,7 +9,6 @@ from curses import wrapper as curses_wrapper
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ...constants import GITHUB_REFS_FILE_NAME
 from ...exceptions import FleetRollError
 from ...utils import (
     ensure_host_or_file,
@@ -20,7 +19,7 @@ from .cache import ShaInfoCache
 from .data import (
     AuditLogTailer,
     get_host_sort_key,
-    load_github_refs,
+    load_github_refs_from_db,
     load_latest_records,
     load_tc_worker_data_from_db,
     strip_fqdn,
@@ -69,8 +68,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         tc_data = load_tc_worker_data_from_db(db_conn, hosts=hosts)
 
         # Load GitHub refs data
-        github_refs_path = Path.home() / ".fleetroll" / GITHUB_REFS_FILE_NAME
-        github_refs = load_github_refs(github_refs_path)
+        github_refs = load_github_refs_from_db(db_conn)
 
         # Load SHA info cache
         fleetroll_dir = Path.home() / ".fleetroll"
@@ -186,7 +184,6 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 tc_data=tc_data,
                 db_conn=db_conn,
                 github_refs=github_refs,
-                github_refs_path=github_refs_path,
                 sha_cache=sha_cache,
             )
             display.draw_screen()
