@@ -218,6 +218,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     display.draw_screen()
                 if display.poll_github_data():
                     display.draw_screen()
+                if display.poll_sha_cache():
+                    display.draw_screen()
 
         curses_wrapper(curses_main)
     finally:

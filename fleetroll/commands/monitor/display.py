@@ -79,6 +79,7 @@ class MonitorDisplay:
         self.sha_cache = sha_cache
         self._tc_poll_time = 0.0
         self._github_poll_time = 0.0
+        self._sha_cache_poll_time = 0.0
         self.offset = 0
         self.col_offset = 0
         self.page_step = 1
@@ -443,6 +444,24 @@ class MonitorDisplay:
             self.github_refs = new_data
             return True
         return False
+
+    def poll_sha_cache(self) -> bool:
+        """Re-scan override/vault dirs if SHA cache is stale. Returns True if changed."""
+        if self.sha_cache is None:
+            return False
+        now = time.monotonic()
+        if now - self._sha_cache_poll_time < 30.0:
+            return False
+        self._sha_cache_poll_time = now
+        old_overrides = dict(self.sha_cache.override_cache)
+        old_vault = dict(self.sha_cache.vault_cache)
+        self.sha_cache.override_cache.clear()
+        self.sha_cache.vault_cache.clear()
+        self.sha_cache.load_all()
+        return (
+            self.sha_cache.override_cache != old_overrides
+            or self.sha_cache.vault_cache != old_vault
+        )
 
     def update_record(self, record: dict[str, Any]) -> None:
         self.latest[record["host"]] = record
