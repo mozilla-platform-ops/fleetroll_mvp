@@ -83,6 +83,7 @@ class HostSetVaultArgs:
     json: bool
     workers: int
     from_file: str | None
+    validate: bool
     mode: str
     owner: str
     group: str

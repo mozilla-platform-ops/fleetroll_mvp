@@ -382,6 +382,12 @@ def host_set_override(
     help="Read vault contents from a local file.",
 )
 @click.option(
+    "--no-validate",
+    is_flag=True,
+    hidden=True,
+    help="Skip local YAML syntax validation.",
+)
+@click.option(
     "--mode",
     default="0640",
     show_default=True,
@@ -422,6 +428,7 @@ def host_set_vault(
     json_output: bool,
     workers: int,
     from_file: str | None,
+    no_validate: bool,
     mode: str,
     owner: str,
     group: str,
@@ -439,6 +446,7 @@ def host_set_vault(
         json=json_output,
         workers=workers,
         from_file=from_file,
+        validate=(not no_validate),
         mode=mode,
         owner=owner,
         group=group,

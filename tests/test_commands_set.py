@@ -256,3 +256,75 @@ class TestCmdHostSet:
         assert "  - host5.example.com" in output
         assert "  - host6.example.com" not in output
         assert "... and 5 more hosts" in output
+
+    @pytest.mark.allow_validation
+    def test_validation_during_dry_run(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Validation runs during dry-run mode when --validate is set."""
+        import shutil
+
+        if not shutil.which("bash"):
+            pytest.skip("bash not available for syntax validation test")
+
+        content_file = tmp_dir / "override.sh"
+        content_file.write_text("#!/bin/bash\necho 'valid script'\n")
+        mock_args_set.from_file = str(content_file)
+        mock_args_set.confirm = False
+        mock_args_set.validate = True
+
+        mock_run_ssh = mocker.patch("fleetroll.commands.set.run_ssh")
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
+
+        cmd_host_set(mock_args_set)
+
+        # Validation should have been called during dry-run
+        mock_run_ssh.assert_not_called()
+        # Should complete without error (valid bash)
+        assert any("DRY RUN" in str(line) for line in captured)
+
+    @pytest.mark.allow_validation
+    def test_validation_failure_during_dry_run(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Invalid syntax raises error during dry-run mode."""
+        import shutil
+
+        if not shutil.which("bash"):
+            pytest.skip("bash not available for syntax validation test")
+
+        bad_file = tmp_dir / "bad_override.sh"
+        bad_file.write_text("PUPPET_REPO='https://example.com\n")
+
+        mock_args_set.from_file = str(bad_file)
+        mock_args_set.confirm = False
+        mock_args_set.validate = True
+
+        mocker.patch("fleetroll.commands.set.run_ssh", side_effect=AssertionError())
+
+        with pytest.raises(UserError, match="validation failed"):
+            cmd_host_set(mock_args_set)
+
+    @pytest.mark.allow_validation
+    def test_validation_skipped_when_disabled(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Validation is skipped when --no-validate is set."""
+        bad_file = tmp_dir / "bad_override.sh"
+        # Invalid bash but validation is disabled
+        bad_file.write_text("PUPPET_REPO='https://example.com\n")
+
+        mock_args_set.from_file = str(bad_file)
+        mock_args_set.confirm = False
+        mock_args_set.validate = False
+
+        mock_run_ssh = mocker.patch("fleetroll.commands.set.run_ssh")
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
+
+        # Should not raise error even with invalid bash when validation is disabled
+        cmd_host_set(mock_args_set)
+
+        mock_run_ssh.assert_not_called()
+        assert any("DRY RUN" in str(line) for line in captured)

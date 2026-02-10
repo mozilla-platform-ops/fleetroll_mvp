@@ -147,6 +147,10 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
         is_batch = False
 
     if not args.confirm:
+        # Validate during dry-run to catch errors early
+        if args.validate:
+            validate_override_syntax(data)
+
         if args.json:
             summary = {
                 "dry_run": True,
@@ -204,6 +208,7 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
             print(click.style("Run again with --confirm to apply changes.", fg="yellow"))
         return
 
+    # Validate before actual execution (already validated in dry-run if --validate was set)
     if args.validate:
         validate_override_syntax(data)
 

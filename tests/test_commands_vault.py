@@ -15,6 +15,12 @@ from fleetroll.exceptions import UserError
 class TestCmdHostSetVault:
     """Tests for cmd_host_set_vault function."""
 
+    @pytest.fixture(autouse=True)
+    def _disable_validation(self, mocker, request):
+        if request.node.get_closest_marker("allow_validation"):
+            return
+        mocker.patch("fleetroll.commands.vault.validate_vault_yaml")
+
     def test_dry_run_without_confirm(
         self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
     ):
@@ -167,3 +173,98 @@ class TestCmdHostSetVault:
         assert "  - host5.example.com" in output
         assert "  - host6.example.com" not in output
         assert "... and 5 more hosts" in output
+
+    @pytest.mark.allow_validation
+    def test_validation_during_dry_run(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
+        """Validation runs during dry-run mode when --validate is set."""
+        content_file = tmp_dir / "vault.yaml"
+        content_file.write_text("key: value\n")
+        mock_args_vault.from_file = str(content_file)
+        mock_args_vault.confirm = False
+        mock_args_vault.validate = True
+
+        mock_run_ssh = mocker.patch("fleetroll.commands.vault.run_ssh")
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
+
+        cmd_host_set_vault(mock_args_vault)
+
+        # Validation should have been called during dry-run
+        mock_run_ssh.assert_not_called()
+        # Should complete without error (valid YAML)
+        assert any("DRY RUN" in str(line) for line in captured)
+
+    @pytest.mark.allow_validation
+    def test_validation_skipped_when_disabled(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
+        """Validation is skipped when --no-validate is set."""
+        content_file = tmp_dir / "vault.yaml"
+        # Invalid YAML but validation is disabled
+        content_file.write_text("invalid: yaml: content:\n")
+        mock_args_vault.from_file = str(content_file)
+        mock_args_vault.confirm = False
+        mock_args_vault.validate = False
+
+        mock_run_ssh = mocker.patch("fleetroll.commands.vault.run_ssh")
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
+
+        # Should not raise error even with invalid YAML when validation is disabled
+        cmd_host_set_vault(mock_args_vault)
+
+        mock_run_ssh.assert_not_called()
+        assert any("DRY RUN" in str(line) for line in captured)
+
+    @pytest.mark.allow_validation
+    def test_invalid_yaml_raises_error(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
+        """Invalid YAML content raises UserError during validation."""
+        bad_file = tmp_dir / "bad_vault.yaml"
+        # Invalid YAML: multiple values for same key without proper structure
+        bad_file.write_text("key: value1: value2: value3\n")
+
+        mock_args_vault.from_file = str(bad_file)
+        mock_args_vault.confirm = False
+        mock_args_vault.validate = True
+
+        mocker.patch("fleetroll.commands.vault.run_ssh", side_effect=AssertionError())
+
+        with pytest.raises(UserError, match="YAML validation failed"):
+            cmd_host_set_vault(mock_args_vault)
+
+    @pytest.mark.allow_validation
+    def test_valid_yaml_passes_validation(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
+        """Valid YAML content passes validation during dry-run."""
+        good_file = tmp_dir / "good_vault.yaml"
+        good_file.write_text(
+            """
+api_token: test_token_abc123
+environment: production
+features:
+  - feature_one
+  - feature_two
+config:
+  timeout: 30
+  retries: 3
+"""
+        )
+
+        mock_args_vault.from_file = str(good_file)
+        mock_args_vault.confirm = False
+        mock_args_vault.validate = True
+
+        mock_run_ssh = mocker.patch("fleetroll.commands.vault.run_ssh")
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
+
+        # Should complete without error
+        cmd_host_set_vault(mock_args_vault)
+
+        mock_run_ssh.assert_not_called()
+        assert any("DRY RUN" in str(line) for line in captured)

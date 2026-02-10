@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import click
+import yaml
 
 from ..audit import append_jsonl, store_content_file
 from ..constants import BACKUP_TIME_FORMAT, DRY_RUN_PREVIEW_LIMIT, VAULT_YAMLS_DIR_NAME
@@ -158,6 +159,18 @@ def format_set_line(result: dict[str, Any]) -> str:
     return f"FAIL {host}{rc_str} {error}"
 
 
+def validate_vault_yaml(data: bytes) -> None:
+    """Validate vault YAML content using yaml.safe_load."""
+    try:
+        content_text = data.decode("utf-8")
+        yaml.safe_load(content_text)
+    except UnicodeDecodeError as e:
+        raise UserError(f"Vault YAML validation failed: invalid UTF-8 encoding: {e}") from e
+    except yaml.YAMLError as e:
+        detail = str(e).strip() or "YAML syntax error"
+        raise UserError(f"Vault YAML validation failed: {detail}") from e
+
+
 def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
     """Set the vault file on a host."""
     ensure_host_or_file(args.host)
@@ -183,6 +196,10 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
         is_batch = False
 
     if not args.confirm:
+        # Validate during dry-run to catch errors early
+        if args.validate:
+            validate_vault_yaml(data)
+
         if args.json:
             summary = {
                 "dry_run": True,
@@ -197,6 +214,7 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
                 "group": args.group,
                 "backup": (not args.no_backup),
                 "backup_suffix_format": BACKUP_TIME_FORMAT,
+                "validate": args.validate,
                 "reason": args.reason,
                 "audit_log": str(audit_log),
                 "vault_store_dir": str(audit_log.parent / VAULT_YAMLS_DIR_NAME),
@@ -226,6 +244,9 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
                 f"{click.style('Group:', fg='cyan')} {args.group}"
             )
             print(mode_owner_group)
+            print(
+                f"{click.style('Validation:', fg='cyan')} {'enabled' if args.validate else 'disabled'}"
+            )
             print(f"{click.style('Backup:', fg='cyan')} {'yes' if not args.no_backup else 'no'}")
             if args.reason:
                 print(f"{click.style('Reason:', fg='cyan')} {args.reason}")
@@ -236,6 +257,10 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
             print(f"{click.style('Audit log:', fg='cyan')} {audit_log}")
             print(click.style("Run again with --confirm to apply changes.", fg="yellow"))
         return
+
+    # Validate before actual execution (already validated in dry-run if --validate was set)
+    if args.validate:
+        validate_vault_yaml(data)
 
     backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)
     vault_dir = audit_log.parent / VAULT_YAMLS_DIR_NAME

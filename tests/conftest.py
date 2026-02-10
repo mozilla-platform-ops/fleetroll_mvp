@@ -108,6 +108,7 @@ def mock_args_vault(tmp_audit_log: Path) -> HostSetVaultArgs:
         json=False,
         workers=10,
         from_file=None,
+        validate=True,
         mode="0640",
         owner="root",
         group="root",
