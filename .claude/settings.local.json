@@ -34,7 +34,8 @@
       "Bash(cass index:*)",
       "Bash(cass search:*)",
       "Bash(cass expand:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git show:*)"
     ]
   }
 }
