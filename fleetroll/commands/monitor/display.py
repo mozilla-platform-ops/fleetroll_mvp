@@ -422,6 +422,8 @@ class MonitorDisplay:
         if now - self._tc_poll_time < 5.0:
             return False
         self._tc_poll_time = now
+        # Commit to end any stale read transaction and see latest writes
+        self.db_conn.commit()
         new_data = load_tc_worker_data_from_db(self.db_conn, hosts=self.hosts)
         if new_data != self.tc_data:
             self.tc_data = new_data
@@ -434,6 +436,8 @@ class MonitorDisplay:
         if now - self._github_poll_time < 5.0:
             return False
         self._github_poll_time = now
+        # Commit to end any stale read transaction and see latest writes
+        self.db_conn.commit()
         new_data = load_github_refs_from_db(self.db_conn)
         if new_data != self.github_refs:
             self.github_refs = new_data

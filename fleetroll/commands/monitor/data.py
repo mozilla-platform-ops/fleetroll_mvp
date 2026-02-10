@@ -738,6 +738,8 @@ class AuditLogTailer:
         if not self._buffer:
             from ...db import get_observations_since
 
+            # Commit to end any stale read transaction and see latest writes
+            self.conn.commit()
             self._buffer = get_observations_since(
                 self.conn, hosts=self.hosts, after_ts=self._last_ts
             )
