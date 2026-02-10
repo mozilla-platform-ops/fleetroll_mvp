@@ -5,6 +5,7 @@ from __future__ import annotations
 import curses
 import json
 import sys
+import time
 from curses import wrapper as curses_wrapper
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -192,11 +193,15 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 hosts=hosts,
                 latest=latest,
             )
+            last_redraw_time = time.monotonic()
             while True:
                 key = stdscr.getch()
 
                 if display.handle_key(key, draw=False):
                     return
+
+                # Track if we redrew the screen in this iteration
+                redrew = False
 
                 # After processing a key, check if there's more input pending
                 # If so, flush it to avoid lag from processing hundreds of scroll events
@@ -209,17 +214,31 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                         # Flush the entire input buffer to avoid lag
                         curses.flushinp()
                     display.draw_screen()
+                    redrew = True
 
                 record = tailer.poll()
                 if record:
                     display.update_record(record)
                     display.draw_screen()
+                    redrew = True
                 if display.poll_tc_data():
                     display.draw_screen()
+                    redrew = True
                 if display.poll_github_data():
                     display.draw_screen()
+                    redrew = True
                 if display.poll_sha_cache():
                     display.draw_screen()
+                    redrew = True
+
+                # Periodic redraw to update DATA column ages (every 2 seconds)
+                now = time.monotonic()
+                if not redrew and now - last_redraw_time >= 2.0:
+                    display.draw_screen()
+                    redrew = True
+
+                if redrew:
+                    last_redraw_time = now
 
         curses_wrapper(curses_main)
     finally:
