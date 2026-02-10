@@ -114,7 +114,7 @@ Running these with `watch -n 300 <command>` is how I'm currently using them. In 
 
 #### Host data
 
-The `host-audit` command places all observed overrides and vault.yamls in `~/.fleetroll/overrides` and `~/.fleetroll/vault_yamls`.
+The `host-audit` command stores host observations in SQLite (`~/.fleetroll/fleetroll.db`) and places all observed overrides and vault.yamls in `~/.fleetroll/overrides` and `~/.fleetroll/vault_yamls`.
 
 ```bash
 # audit a single host
@@ -127,12 +127,31 @@ uv run fleetroll host-audit configs/host-lists/1804.list
 #### TaskCluster data
 
 ```bash
-# fetch TaskCluster worker data for hosts (stores in ~/.fleetroll/taskcluster_workers.jsonl)
+# fetch TaskCluster worker data for hosts (stores in ~/.fleetroll/fleetroll.db)
 uv run fleetroll tc-fetch configs/host-lists/1804.list
 
 # verbose output (shows API calls)
 uv run fleetroll tc-fetch -v configs/host-lists/1804.list
 ```
+
+#### Data Storage
+
+Fleetroll uses a hybrid storage architecture optimized for different data access patterns:
+
+| Data | Storage | Location |
+|------|---------|----------|
+| Audit log (set/unset/vault ops) | JSONL (append-only) | `~/.fleetroll/audit.jsonl` |
+| Host observations | SQLite | `~/.fleetroll/fleetroll.db` |
+| TaskCluster workers | SQLite | `~/.fleetroll/fleetroll.db` |
+| GitHub refs | SQLite | `~/.fleetroll/fleetroll.db` |
+| Override content | Content-addressed files | `~/.fleetroll/overrides/` |
+| Vault YAML content | Content-addressed files | `~/.fleetroll/vault_yamls/` |
+
+**SQLite features:**
+- **WAL mode** for concurrent reader/writer access
+- **Hybrid schema**: indexed lookup columns + JSON blob for full record
+- **Retention**: keeps latest N records per key (default 10)
+- **Maintenance**: `fleetroll maintain` performs WAL checkpoint + VACUUM
 
 ### Viewing Data
 

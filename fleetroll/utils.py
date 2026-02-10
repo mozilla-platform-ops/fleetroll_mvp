@@ -9,7 +9,7 @@ import os
 import re
 from pathlib import Path
 
-from .constants import AUDIT_DIR_NAME, AUDIT_FILE_NAME, HOST_OBSERVATIONS_FILE_NAME
+from .constants import AUDIT_DIR_NAME, AUDIT_FILE_NAME
 from .exceptions import FleetRollError, UserError
 
 
@@ -100,12 +100,6 @@ def default_audit_log_path() -> Path:
     """Return default path for audit log file."""
     home = Path(os.path.expanduser("~"))
     return home / AUDIT_DIR_NAME / AUDIT_FILE_NAME
-
-
-def default_host_observations_log_path() -> Path:
-    """Return default path for host observations log file."""
-    home = Path(os.path.expanduser("~"))
-    return home / AUDIT_DIR_NAME / HOST_OBSERVATIONS_FILE_NAME
 
 
 def get_log_file_size(path: Path) -> int:

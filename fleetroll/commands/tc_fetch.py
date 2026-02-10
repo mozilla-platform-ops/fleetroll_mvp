@@ -182,7 +182,7 @@ def match_workers_to_hosts(
         ts: Timestamp for the records
 
     Returns:
-        List of worker record dictionaries ready to write to JSONL
+        List of worker record dictionaries ready to insert into SQLite
     """
     records = []
 
