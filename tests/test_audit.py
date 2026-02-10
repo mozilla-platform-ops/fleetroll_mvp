@@ -14,6 +14,7 @@ from fleetroll.audit import (
 )
 from fleetroll.cli_types import HostAuditArgs
 from fleetroll.constants import CONTENT_SENTINEL
+from fleetroll.db import get_connection, get_latest_host_observations
 
 
 def _make_pp_state_json_line(**overrides) -> str:
@@ -142,8 +143,11 @@ class TestStoreOverrideFile:
 class TestProcessAuditResult:
     """Tests for process_audit_result function."""
 
-    def test_successful_result(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_successful_result(self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path):
         """Processes successful SSH output correctly."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -163,7 +167,7 @@ key=value
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["ok"] is True
@@ -171,8 +175,11 @@ key=value
         assert result["action"] == "host.audit"
         assert result["actor"] == "test-actor"
 
-    def test_parses_role(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_parses_role(self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path):
         """Extracts role information from output."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -185,14 +192,19 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["role_present"] is True
         assert result["observed"]["role"] == "production-webserver"
 
-    def test_parses_override_metadata(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_parses_override_metadata(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Extracts override metadata from output."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -211,7 +223,7 @@ content
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         meta = result["observed"]["override_meta"]
@@ -222,9 +234,12 @@ content
         assert meta["mtime_epoch"] == "1700000000"
 
     def test_audit_log_excludes_override_contents(
-        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
     ):
         """Audit log stores sha only, not raw override contents."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -244,20 +259,25 @@ secret=abc123
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
 
         assert result["observed"]["override_sha256"]
-        # Now writes to host_observations.jsonl instead of audit.jsonl
-        observations_log = tmp_dir / "host_observations.jsonl"
-        log_record = json.loads(observations_log.read_text().strip())
+        # Verify record was written to SQLite without sensitive fields
+        latest, _ = get_latest_host_observations(conn, ["test.example.com"])
+        log_record = latest["test.example.com"]
         observed = log_record["observed"]
         assert "override_contents_for_display" not in observed
         assert "override_contents" not in observed
 
-    def test_extracts_content_with_sentinel(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_extracts_content_with_sentinel(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Extracts content after sentinel marker."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -271,13 +291,16 @@ ROLE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["override_contents_for_display"] == content
 
-    def test_computes_sha256(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_computes_sha256(self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path):
         """Computes SHA256 of override content."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -291,15 +314,18 @@ test content
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         sha = result["observed"]["override_sha256"]
         assert sha is not None
         assert len(sha) == 64
 
-    def test_failed_result(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_failed_result(self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path):
         """Handles failed SSH command."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -308,15 +334,18 @@ test content
             rc=255,
             out="",
             err="Connection refused",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["ok"] is False
         assert result["ssh_rc"] == 255
         assert result["stderr"] == "Connection refused"
 
-    def test_no_override(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_no_override(self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path):
         """Handles output when no override file exists."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -329,15 +358,20 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["override_present"] is False
         assert result["observed"]["override_meta"] is None
         assert result["observed"]["override_sha256"] is None
 
-    def test_writes_to_audit_log(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_writes_to_audit_log(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Appends result to observations log file."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -346,23 +380,23 @@ OVERRIDE_PRESENT=0
             rc=0,
             out="ROLE_PRESENT=0\nOVERRIDE_PRESENT=0\n",
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
-        # Now writes to host_observations.jsonl instead of audit.jsonl
-        observations_log = tmp_dir / "host_observations.jsonl"
-        assert observations_log.exists()
-        record = json.loads(observations_log.read_text().strip())
+        # Verify record was written to SQLite
+        latest, _ = get_latest_host_observations(conn, ["test.example.com"])
+        assert "test.example.com" in latest
+        record = latest["test.example.com"]
         assert record["host"] == "test.example.com"
 
     def test_writes_to_audit_log_with_lock(
-        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, mocker
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path, mocker
     ):
-        """Appends result to observations log file while holding lock."""
-        audit_log = tmp_dir / "audit.jsonl"
-        mock_args_audit.audit_log = str(audit_log)
+        """Writes to SQLite while holding lock."""
 
-        mock_append = mocker.patch("fleetroll.audit.append_jsonl")
+        conn = get_connection(temp_db)
+
+        mock_insert = mocker.patch("fleetroll.db.insert_host_observation")
         log_lock = mocker.MagicMock()
         log_lock.__enter__.return_value = None
         log_lock.__exit__.return_value = None
@@ -372,24 +406,25 @@ OVERRIDE_PRESENT=0
             rc=0,
             out="ROLE_PRESENT=0\nOVERRIDE_PRESENT=0\n",
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
             log_lock=log_lock,
         )
 
         log_lock.__enter__.assert_called_once()
         log_lock.__exit__.assert_called_once()
-        mock_append.assert_called_once()
-        args, _ = mock_append.call_args
-        # Now writes to host_observations.jsonl instead of audit.jsonl
-        observations_log = tmp_dir / "host_observations.jsonl"
-        assert args[0] == observations_log
+        mock_insert.assert_called_once()
+        args, _ = mock_insert.call_args
+        assert args[0] == conn
         assert args[1]["host"] == "test.example.com"
 
     def test_stores_override_file_when_dir_provided(
-        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
     ):
         """Stores override content to file when overrides_dir provided."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         overrides_dir = tmp_dir / "overrides"
         mock_args_audit.audit_log = str(audit_log)
@@ -404,7 +439,7 @@ stored content
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
             overrides_dir=overrides_dir,
         )
@@ -413,8 +448,13 @@ stored content
         assert stored_path.exists()
         assert stored_path.read_text() == "stored content\n"
 
-    def test_parses_puppet_state(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_parses_puppet_state(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Extracts puppet last run and success status from output."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -429,14 +469,19 @@ PP_SUCCESS=1
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_last_run_epoch"] == 1706140800
         assert result["observed"]["puppet_success"] is True
 
-    def test_parses_puppet_failure(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_parses_puppet_failure(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Extracts puppet failure status from output."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -450,14 +495,19 @@ PP_SUCCESS=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_last_run_epoch"] == 1706140800
         assert result["observed"]["puppet_success"] is False
 
-    def test_puppet_fields_none_when_missing(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_puppet_fields_none_when_missing(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Puppet fields are None when not in output."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -469,14 +519,19 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_last_run_epoch"] is None
         assert result["observed"]["puppet_success"] is None
 
-    def test_parses_all_new_puppet_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_parses_all_new_puppet_fields(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Extracts all new puppet state fields from JSON metadata."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -501,7 +556,7 @@ PP_DURATION_S=145
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         # String fields
@@ -526,8 +581,13 @@ PP_DURATION_S=145
         assert result["observed"]["puppet_success"] is True
         assert result["observed"]["puppet_git_dirty"] is False
 
-    def test_parses_git_dirty_true(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_parses_git_dirty_true(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Correctly parses git_dirty when true."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -540,15 +600,18 @@ PP_GIT_DIRTY=1
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_git_dirty"] is True
 
     def test_new_puppet_fields_none_when_missing(
-        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
     ):
         """All new puppet fields are None when not in output."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -560,7 +623,7 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         # String fields
@@ -578,9 +641,12 @@ OVERRIDE_PRESENT=0
         assert result["observed"]["puppet_git_dirty"] is None
 
     def test_puppet_integer_parsing_error_handling(
-        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
     ):
         """Handles invalid integer values gracefully."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -594,14 +660,19 @@ PP_DURATION_S=not_a_number
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_exit_code"] is None
         assert result["observed"]["puppet_duration_s"] is None
 
-    def test_backward_compatibility_old_format(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_backward_compatibility_old_format(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Old format without PP_STATE_TS still works."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -616,7 +687,7 @@ PP_SUCCESS=1
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         # Old fields still work
@@ -630,8 +701,13 @@ PP_SUCCESS=1
 class TestProcessAuditResultJsonPath:
     """Tests for JSON state parsing (base64-encoded PP_STATE_JSON)."""
 
-    def test_parses_json_state_all_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_parses_json_state_all_fields(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Complete JSON state parses all 12 puppet fields correctly."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -646,7 +722,7 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         # Verify all fields
@@ -663,8 +739,13 @@ OVERRIDE_PRESENT=0
         assert result["observed"]["puppet_success"] is True
         assert result["observed"]["puppet_last_run_epoch"] == 1706186096
 
-    def test_json_state_ts_converts_to_epoch(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_json_state_ts_converts_to_epoch(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """JSON state timestamp converts to epoch correctly."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -678,13 +759,18 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_last_run_epoch"] == 1706186096
 
-    def test_json_state_success_false(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_json_state_success_false(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """JSON state with success=false parses correctly."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -698,13 +784,18 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_success"] is False
 
-    def test_json_state_git_dirty_true(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_json_state_git_dirty_true(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """JSON state with git_dirty=true parses correctly."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -718,13 +809,18 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_git_dirty"] is True
 
-    def test_json_state_null_optional_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_json_state_null_optional_fields(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """JSON state with null optional fields returns None for those fields."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -744,7 +840,7 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_git_sha"] is None
@@ -754,9 +850,12 @@ OVERRIDE_PRESENT=0
         assert result["observed"]["puppet_vault_sha_applied"] is None
 
     def test_json_state_invalid_base64_graceful(
-        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
     ):
         """Corrupt base64 results in all puppet fields being None."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -769,15 +868,20 @@ PP_STATE_JSON=not_valid_base64!!!
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_state_ts"] is None
         assert result["observed"]["puppet_git_sha"] is None
         assert result["observed"]["puppet_success"] is None
 
-    def test_json_state_invalid_json_graceful(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_json_state_invalid_json_graceful(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Valid base64 but invalid JSON results in all puppet fields being None."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -792,15 +896,20 @@ PP_STATE_JSON={bad_b64}
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_state_ts"] is None
         assert result["observed"]["puppet_git_sha"] is None
         assert result["observed"]["puppet_success"] is None
 
-    def test_json_state_invalid_ts_no_epoch(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_json_state_invalid_ts_no_epoch(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Invalid timestamp preserves puppet_state_ts but puppet_last_run_epoch is None."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -814,14 +923,19 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_state_ts"] == "invalid-timestamp"
         assert result["observed"]["puppet_last_run_epoch"] is None
 
-    def test_json_state_takes_priority_over_kv(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_json_state_takes_priority_over_kv(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """When both PP_STATE_JSON and KV lines present, JSON values win."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -842,7 +956,7 @@ PP_EXIT_CODE=99
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         # JSON values win
@@ -854,8 +968,13 @@ PP_EXIT_CODE=99
 class TestBackwardCompatibilityKvFields:
     """Tests for KV fallback parsing when PP_STATE_JSON not present."""
 
-    def test_kv_fallback_all_string_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_kv_fallback_all_string_fields(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """All string KV fields parse correctly."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -874,7 +993,7 @@ PP_ROLE=kv-role
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_state_ts"] == "2024-01-25T12:34:56Z"
@@ -885,8 +1004,13 @@ PP_ROLE=kv-role
         assert result["observed"]["puppet_vault_sha_applied"] == "kv_vault_sha"
         assert result["observed"]["puppet_role"] == "kv-role"
 
-    def test_kv_fallback_integer_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_kv_fallback_integer_fields(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Integer KV fields parse correctly."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -900,14 +1024,19 @@ PP_DURATION_S=300
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_exit_code"] == 42
         assert result["observed"]["puppet_duration_s"] == 300
 
-    def test_kv_fallback_boolean_fields(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_kv_fallback_boolean_fields(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Boolean KV fields (0/1) parse correctly."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -921,16 +1050,19 @@ PP_GIT_DIRTY=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_success"] is True
         assert result["observed"]["puppet_git_dirty"] is False
 
     def test_kv_fallback_invalid_integers_are_none(
-        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
     ):
         """Invalid integer values result in None."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -944,14 +1076,19 @@ PP_DURATION_S=also_not_int
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         assert result["observed"]["puppet_exit_code"] is None
         assert result["observed"]["puppet_duration_s"] is None
 
-    def test_json_overrides_kv_for_every_field(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_json_overrides_kv_for_every_field(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """JSON values take priority over KV values for all fields."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -988,7 +1125,7 @@ PP_SUCCESS=1
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
         # All JSON values win
@@ -1094,9 +1231,12 @@ class TestEndToEndJsonState:
     """End-to-end tests for JSON state processing."""
 
     def test_full_flow_json_state_to_observations(
-        self, tmp_dir: Path, mock_args_audit: HostAuditArgs
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
     ):
         """Full flow: SSH output with PP_STATE_JSON → observations file."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -1111,16 +1251,15 @@ OVERRIDE_PRESENT=0
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
         )
 
-        # Read back from host_observations.jsonl
-        observations_log = tmp_dir / "host_observations.jsonl"
-        records = list(iter_audit_records(observations_log))
+        # Read back from SQLite
+        latest, _ = get_latest_host_observations(conn, ["test.example.com"])
 
-        assert len(records) == 1
-        record = records[0]
+        assert len(latest) == 1
+        record = latest["test.example.com"]
         assert record["host"] == "test.example.com"
         obs = record["observed"]
         assert obs["puppet_state_ts"] == "2024-01-25T12:34:56+00:00"
@@ -1129,8 +1268,13 @@ OVERRIDE_PRESENT=0
         # override_contents_for_display should not be in observations file
         assert "override_contents_for_display" not in obs
 
-    def test_full_flow_multiple_hosts(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_full_flow_multiple_hosts(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Process multiple hosts and verify all records in observations file."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         mock_args_audit.audit_log = str(audit_log)
 
@@ -1146,21 +1290,28 @@ OVERRIDE_PRESENT=0
                 rc=0,
                 out=out,
                 err="",
-                audit_log=audit_log,
+                db_conn=conn,
                 actor="test-actor",
             )
 
-        # Read back from host_observations.jsonl
-        observations_log = tmp_dir / "host_observations.jsonl"
-        records = list(iter_audit_records(observations_log))
+        # Read back from SQLite
+        hosts = [f"host{i}.example.com" for i in range(3)]
+        latest, _ = get_latest_host_observations(conn, hosts)
 
-        assert len(records) == 3
-        for i, record in enumerate(records):
-            assert record["host"] == f"host{i}.example.com"
+        assert len(latest) == 3
+        for i in range(3):
+            host = f"host{i}.example.com"
+            record = latest[host]
+            assert record["host"] == host
             assert record["observed"]["puppet_role"] == f"role-{i}"
 
-    def test_full_flow_with_override_storage(self, tmp_dir: Path, mock_args_audit: HostAuditArgs):
+    def test_full_flow_with_override_storage(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, temp_db: Path
+    ):
         """Process with overrides_dir and verify both JSONL record and stored file."""
+
+        conn = get_connection(temp_db)
+
         audit_log = tmp_dir / "audit.jsonl"
         overrides_dir = tmp_dir / "overrides"
         mock_args_audit.audit_log = str(audit_log)
@@ -1183,16 +1334,15 @@ test content
             rc=0,
             out=out,
             err="",
-            audit_log=audit_log,
+            db_conn=conn,
             actor="test-actor",
             overrides_dir=overrides_dir,
         )
 
-        # Verify JSONL record
-        observations_log = tmp_dir / "host_observations.jsonl"
-        records = list(iter_audit_records(observations_log))
-        assert len(records) == 1
-        record = records[0]
+        # Verify SQLite record
+        latest, _ = get_latest_host_observations(conn, ["test.example.com"])
+        assert len(latest) == 1
+        record = latest["test.example.com"]
         assert "override_file_path" in record["observed"]
 
         # Verify stored override file

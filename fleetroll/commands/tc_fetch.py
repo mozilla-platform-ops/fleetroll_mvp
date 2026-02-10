@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -11,12 +12,10 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from ..audit import iter_audit_records
-from ..constants import HOST_OBSERVATIONS_FILE_NAME, ROLE_TO_TASKCLUSTER, TC_WORKERS_FILE_NAME
+from ..constants import ROLE_TO_TASKCLUSTER, TC_WORKERS_FILE_NAME
 from ..exceptions import FleetRollError
 from ..taskcluster import fetch_workers, load_tc_credentials
 from ..utils import (
-    default_audit_log_path,
     format_elapsed_time,
     is_host_file,
     parse_host_list,
@@ -75,36 +74,26 @@ def format_tc_fetch_quiet(
     )
 
 
-def get_host_roles_bulk(hosts: set[str], audit_log_path: Path) -> dict[str, str | None]:
-    """Get the most recent role for multiple hosts from the observations log in a single pass.
+def get_host_roles_bulk(hosts: set[str], db_conn: sqlite3.Connection) -> dict[str, str | None]:
+    """Get the most recent role for multiple hosts from SQLite.
 
     Args:
         hosts: Set of hostnames to look up
-        audit_log_path: Path to the observations log (host_observations.jsonl)
+        db_conn: SQLite database connection
 
     Returns:
         Dict mapping hostname to role string (or None if not found)
     """
-    # Track most recent role and timestamp for each host
-    host_data: dict[str, tuple[str, str]] = {}  # host -> (role, timestamp)
+    from ..db import get_latest_host_observations
 
-    for record in iter_audit_records(audit_log_path):
-        host = record.get("host")
-        if not host or host not in hosts:
-            continue
+    latest, _ = get_latest_host_observations(db_conn, list(hosts))
 
+    result = dict.fromkeys(hosts)
+    for host, record in latest.items():
         observed = record.get("observed", {})
         role = observed.get("role")
-        ts = record.get("ts")
-
-        if role and ts:
-            if host not in host_data or ts > host_data[host][1]:
-                host_data[host] = (role, ts)
-
-    # Convert to simple host -> role mapping
-    result = dict.fromkeys(hosts)
-    for host, (role, _) in host_data.items():
-        result[host] = role
+        if role:
+            result[host] = role
 
     return result
 
@@ -336,190 +325,198 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     if not quiet:
         click.echo(f"Fetching TaskCluster data for {len(hosts)} host(s)...")
 
-    # Get observations log path
-    audit_log_path = default_audit_log_path()
-    observations_log_path = audit_log_path.parent / HOST_OBSERVATIONS_FILE_NAME
-    if verbose >= 1 and not quiet:
-        click.echo(f"Reading observations log from: {observations_log_path}")
+    # Initialize SQLite database
+    from ..db import get_connection, get_db_path, init_db
 
-    # Map hosts to roles (single pass through observations log)
-    host_to_role = get_host_roles_bulk(set(hosts), observations_log_path)
+    db_path = get_db_path()
+    init_db(db_path)
+    db_conn = get_connection(db_path)
 
-    # Track hosts without roles for logging
-    for host, role in host_to_role.items():
-        if role:
-            if verbose >= 1 and not quiet:
-                click.echo(f"  {host} -> role: {role}")
-        else:
-            hosts_without_roles += 1
-            if verbose >= 1 and not quiet:
-                click.echo(f"  {host} -> role: NOT FOUND")
+    try:
+        # Map hosts to roles from SQLite
+        host_to_role = get_host_roles_bulk(set(hosts), db_conn)
 
-    # Build role to hosts mapping
-    role_to_hosts = build_role_to_hosts_mapping(host_to_role)
+        # Track hosts without roles for logging
+        for host, role in host_to_role.items():
+            if role:
+                if verbose >= 1 and not quiet:
+                    click.echo(f"  {host} -> role: {role}")
+            else:
+                hosts_without_roles += 1
+                if verbose >= 1 and not quiet:
+                    click.echo(f"  {host} -> role: NOT FOUND")
 
-    # Map roles to workerTypes
-    role_to_worker_type, worker_type_to_hosts, unmapped_roles = map_roles_to_worker_types(
-        role_to_hosts, ROLE_TO_TASKCLUSTER
-    )
+        # Build role to hosts mapping
+        role_to_hosts = build_role_to_hosts_mapping(host_to_role)
 
-    # Display warnings for unmapped roles
-    for role, host_count in unmapped_roles:
-        if not quiet:
-            click.echo(
-                f"WARNING: Role '{role}' not found in lookup table, skipping {host_count} host(s)",
-                err=True,
-            )
-
-    if not worker_type_to_hosts:
-        if not quiet:
-            click.echo("No hosts with mappable roles found. Nothing to fetch.")
-        return
-
-    # Show summary of what we're fetching
-    if not quiet:
-        role_summary = ", ".join(
-            f"{role} ({len(hosts)} host(s))"
-            for role, hosts in role_to_hosts.items()
-            if role in role_to_worker_type
+        # Map roles to workerTypes
+        role_to_worker_type, worker_type_to_hosts, unmapped_roles = map_roles_to_worker_types(
+            role_to_hosts, ROLE_TO_TASKCLUSTER
         )
-        click.echo(f"Found roles: {role_summary}")
 
-    # Fetch data for each workerType
-    ts = utc_now_iso()
-    worker_type_to_workers: dict[tuple[str, str], dict[str, Any]] = {}
+        # Display warnings for unmapped roles
+        for role, host_count in unmapped_roles:
+            if not quiet:
+                click.echo(
+                    f"WARNING: Role '{role}' not found in lookup table, skipping {host_count} host(s)",
+                    err=True,
+                )
 
-    for (provisioner, worker_type), wt_hosts in worker_type_to_hosts.items():
+        if not worker_type_to_hosts:
+            if not quiet:
+                click.echo("No hosts with mappable roles found. Nothing to fetch.")
+            return
+
+        # Show summary of what we're fetching
         if not quiet:
-            click.echo(f"Querying workerType {provisioner}/{worker_type}...", nl=False)
-        try:
-            workers_list = fetch_workers(
-                provisioner, worker_type, credentials, verbose=(verbose >= 2 and not quiet)
+            role_summary = ", ".join(
+                f"{role} ({len(hosts)} host(s))"
+                for role, hosts in role_to_hosts.items()
+                if role in role_to_worker_type
             )
+            click.echo(f"Found roles: {role_summary}")
 
-            if verbose >= 2 and not quiet:
-                click.echo(f"\n  Raw API response: {len(workers_list)} worker(s)")
-                if workers_list and len(workers_list) <= 3:
-                    # Show first few workers in full
-                    for i, worker in enumerate(workers_list[:3]):
-                        click.echo(f"  Worker {i}: {json.dumps(worker, indent=2)}")
-                elif workers_list:
-                    # Show just first worker and available keys
-                    click.echo(f"  First worker keys: {list(workers_list[0].keys())}")
-                    click.echo(f"  First worker sample: {json.dumps(workers_list[0], indent=2)}")
+        # Fetch data for each workerType
+        ts = utc_now_iso()
+        worker_type_to_workers: dict[tuple[str, str], dict[str, Any]] = {}
 
-            # Build worker_id -> worker data map
-            workers_map = {}
-            for worker in workers_list:
-                worker_id = worker.get("workerId")
-                if worker_id:
-                    workers_map[worker_id] = worker
-
-            worker_type_to_workers[(provisioner, worker_type)] = workers_map
-            if not quiet:
-                click.echo(f" {len(workers_map)} worker(s) found")
-
-        except FleetRollError as e:
-            api_errors += 1
-            if not quiet:
-                click.echo(f" FAILED: {e}", err=True)
-            # Store empty result so we still write scan record
-            worker_type_to_workers[(provisioner, worker_type)] = {}
-
-    # Write results to JSONL
-    output_path = tc_workers_file_path()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    worker_records_written = 0
-    scan_records_written = 0
-
-    # Match workers to hosts
-    worker_records = match_workers_to_hosts(
-        hosts,
-        host_to_role=host_to_role,
-        role_to_worker_type=role_to_worker_type,
-        worker_type_to_workers=worker_type_to_workers,
-        ts=ts,
-    )
-
-    # Write results to file
-    with output_path.open("a", encoding="utf-8") as f:
-        # Write worker records with verbose logging
-        for record in worker_records:
-            host = record["host"]
-            short_host = record["worker_id"]
-            role = host_to_role.get(host)
-
-            if verbose >= 1 and not quiet:
-                provisioner = record["provisioner"]
-                worker_type = record["worker_type"]
-                worker_type_key = (provisioner, worker_type)
-                workers_map = worker_type_to_workers.get(worker_type_key, {})
-
-                click.echo(f"  Matching {host} (short: {short_host})...")
-                click.echo(f"    Found worker data for {short_host}")
-                if verbose >= 2:
-                    worker_data = workers_map.get(short_host)
-                    click.echo(f"    Worker data: {json.dumps(worker_data, indent=4)}")
-
-            # Exclude 'type' field as write_worker_record sets it internally
-            record_params = {k: v for k, v in record.items() if k != "type"}
-            write_worker_record(f, **record_params)
-            worker_records_written += 1
-
-            if verbose >= 1 and not quiet:
-                state = record["state"]
-                quarantine = record["quarantine_until"]
-                click.echo(f"    Wrote record: state={state}, quarantine={quarantine}")
-
-        # Write skipped hosts logging
-        if verbose >= 1 and not quiet:
-            written_hosts = {r["host"] for r in worker_records}
-            for host in hosts:
-                if host not in written_hosts:
-                    role = host_to_role.get(host)
-                    if not role or role not in role_to_worker_type:
-                        click.echo(f"  Skipping {host}: no role or role not in worker type mapping")
-                    else:
-                        click.echo(f"  Skipping {host}: no worker data found")
-
-        # Write scan records
         for (provisioner, worker_type), wt_hosts in worker_type_to_hosts.items():
-            workers_map = worker_type_to_workers.get((provisioner, worker_type), {})
-            write_scan_record(
-                f,
-                ts=ts,
-                provisioner=provisioner,
-                worker_type=worker_type,
-                worker_count=len(workers_map),
-                requested_by_hosts=wt_hosts,
+            if not quiet:
+                click.echo(f"Querying workerType {provisioner}/{worker_type}...", nl=False)
+            try:
+                workers_list = fetch_workers(
+                    provisioner, worker_type, credentials, verbose=(verbose >= 2 and not quiet)
+                )
+
+                if verbose >= 2 and not quiet:
+                    click.echo(f"\n  Raw API response: {len(workers_list)} worker(s)")
+                    if workers_list and len(workers_list) <= 3:
+                        # Show first few workers in full
+                        for i, worker in enumerate(workers_list[:3]):
+                            click.echo(f"  Worker {i}: {json.dumps(worker, indent=2)}")
+                    elif workers_list:
+                        # Show just first worker and available keys
+                        click.echo(f"  First worker keys: {list(workers_list[0].keys())}")
+                        click.echo(
+                            f"  First worker sample: {json.dumps(workers_list[0], indent=2)}"
+                        )
+
+                # Build worker_id -> worker data map
+                workers_map = {}
+                for worker in workers_list:
+                    worker_id = worker.get("workerId")
+                    if worker_id:
+                        workers_map[worker_id] = worker
+
+                worker_type_to_workers[(provisioner, worker_type)] = workers_map
+                if not quiet:
+                    click.echo(f" {len(workers_map)} worker(s) found")
+
+            except FleetRollError as e:
+                api_errors += 1
+                if not quiet:
+                    click.echo(f" FAILED: {e}", err=True)
+                # Store empty result so we still write scan record
+                worker_type_to_workers[(provisioner, worker_type)] = {}
+
+        # Write results to JSONL
+        output_path = tc_workers_file_path()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        worker_records_written = 0
+        scan_records_written = 0
+
+        # Match workers to hosts
+        worker_records = match_workers_to_hosts(
+            hosts,
+            host_to_role=host_to_role,
+            role_to_worker_type=role_to_worker_type,
+            worker_type_to_workers=worker_type_to_workers,
+            ts=ts,
+        )
+
+        # Write results to file
+        with output_path.open("a", encoding="utf-8") as f:
+            # Write worker records with verbose logging
+            for record in worker_records:
+                host = record["host"]
+                short_host = record["worker_id"]
+                role = host_to_role.get(host)
+
+                if verbose >= 1 and not quiet:
+                    provisioner = record["provisioner"]
+                    worker_type = record["worker_type"]
+                    worker_type_key = (provisioner, worker_type)
+                    workers_map = worker_type_to_workers.get(worker_type_key, {})
+
+                    click.echo(f"  Matching {host} (short: {short_host})...")
+                    click.echo(f"    Found worker data for {short_host}")
+                    if verbose >= 2:
+                        worker_data = workers_map.get(short_host)
+                        click.echo(f"    Worker data: {json.dumps(worker_data, indent=4)}")
+
+                # Exclude 'type' field as write_worker_record sets it internally
+                record_params = {k: v for k, v in record.items() if k != "type"}
+                write_worker_record(f, **record_params)
+                worker_records_written += 1
+
+                if verbose >= 1 and not quiet:
+                    state = record["state"]
+                    quarantine = record["quarantine_until"]
+                    click.echo(f"    Wrote record: state={state}, quarantine={quarantine}")
+
+            # Write skipped hosts logging
+            if verbose >= 1 and not quiet:
+                written_hosts = {r["host"] for r in worker_records}
+                for host in hosts:
+                    if host not in written_hosts:
+                        role = host_to_role.get(host)
+                        if not role or role not in role_to_worker_type:
+                            click.echo(
+                                f"  Skipping {host}: no role or role not in worker type mapping"
+                            )
+                        else:
+                            click.echo(f"  Skipping {host}: no worker data found")
+
+            # Write scan records
+            for (provisioner, worker_type), wt_hosts in worker_type_to_hosts.items():
+                workers_map = worker_type_to_workers.get((provisioner, worker_type), {})
+                write_scan_record(
+                    f,
+                    ts=ts,
+                    provisioner=provisioner,
+                    worker_type=worker_type,
+                    worker_count=len(workers_map),
+                    requested_by_hosts=wt_hosts,
+                )
+                scan_records_written += 1
+
+        # Build warnings list for quiet mode
+        elapsed_seconds = time.time() - start_time
+        if quiet:
+            warning_list = []
+            if hosts_without_roles > 0:
+                warning_list.append(f"{hosts_without_roles} hosts without role data")
+            if api_errors > 0:
+                warning_list.append(f"{api_errors} API errors" if api_errors > 1 else "1 API error")
+
+            output = format_tc_fetch_quiet(
+                worker_count=worker_records_written,
+                scan_count=scan_records_written,
+                warnings=warning_list,
+                elapsed_seconds=elapsed_seconds,
             )
-            scan_records_written += 1
+            click.echo(output)
+        else:
+            msg = (
+                f"Wrote {worker_records_written} worker record(s) and "
+                f"{scan_records_written} scan record(s) to {output_path}"
+            )
+            click.echo(msg)
 
-    # Build warnings list for quiet mode
-    elapsed_seconds = time.time() - start_time
-    if quiet:
-        warning_list = []
-        if hosts_without_roles > 0:
-            warning_list.append(f"{hosts_without_roles} hosts without role data")
-        if api_errors > 0:
-            warning_list.append(f"{api_errors} API errors" if api_errors > 1 else "1 API error")
+            # Also refresh GitHub branch refs (throttled)
+            from ..github import do_github_fetch
 
-        output = format_tc_fetch_quiet(
-            worker_count=worker_records_written,
-            scan_count=scan_records_written,
-            warnings=warning_list,
-            elapsed_seconds=elapsed_seconds,
-        )
-        click.echo(output)
-    else:
-        msg = (
-            f"Wrote {worker_records_written} worker record(s) and "
-            f"{scan_records_written} scan record(s) to {output_path}"
-        )
-        click.echo(msg)
-
-    # Also refresh GitHub branch refs (throttled)
-    from ..github import do_github_fetch
-
-    do_github_fetch(quiet=quiet)
+            do_github_fetch(quiet=quiet)
+    finally:
+        db_conn.close()

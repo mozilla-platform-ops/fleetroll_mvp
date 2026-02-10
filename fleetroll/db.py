@@ -98,6 +98,7 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -350,6 +351,40 @@ def get_latest_host_observations(
             latest_ok[host] = data
 
     return latest, latest_ok
+
+
+def get_observations_since(
+    conn: sqlite3.Connection,
+    *,
+    hosts: list[str],
+    after_ts: str,
+) -> list[dict[str, Any]]:
+    """Get host observation records newer than a given timestamp.
+
+    Returns records ordered by ts ascending, suitable for tailing.
+
+    Args:
+        conn: Database connection
+        hosts: List of hostnames to query
+        after_ts: ISO timestamp; only records with ts > this are returned
+
+    Returns:
+        List of record dicts ordered by ts ascending
+    """
+    if not hosts:
+        return []
+
+    placeholders = ",".join("?" * len(hosts))
+    rows = conn.execute(
+        f"""
+        SELECT data FROM host_observations
+        WHERE host IN ({placeholders}) AND ts > ?
+        ORDER BY ts ASC
+        """,
+        [*hosts, after_ts],
+    ).fetchall()
+
+    return [json.loads(row["data"]) for row in rows]
 
 
 def get_latest_tc_workers(

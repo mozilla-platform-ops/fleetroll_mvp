@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import sys
 import threading
 import time
@@ -164,7 +165,7 @@ def execute_audits_parallel(
     args: HostAuditArgs,
     ssh_opts: list[str],
     remote_cmd: str,
-    audit_log: Path,
+    db_conn: sqlite3.Connection,
     actor: str,
     retry_budget: dict[str, float],
     lock: threading.Lock,
@@ -181,7 +182,7 @@ def execute_audits_parallel(
         args: Audit command arguments
         ssh_opts: SSH options list
         remote_cmd: Remote audit script command
-        audit_log: Path to audit log file
+        db_conn: SQLite database connection
         actor: Username performing the audit
         retry_budget: Dictionary with deadline for retries
         lock: Lock for results list
@@ -207,7 +208,7 @@ def execute_audits_parallel(
                 args=args,
                 ssh_opts=ssh_opts,
                 remote_cmd=remote_cmd,
-                audit_log=audit_log,
+                db_conn=db_conn,
                 actor=actor,
                 retry_budget=retry_budget,
                 lock=lock,
@@ -265,7 +266,7 @@ def audit_single_host_with_retry(
     args: HostAuditArgs,
     ssh_opts: list[str],
     remote_cmd: str,
-    audit_log: Path,
+    db_conn: sqlite3.Connection,
     actor: str,
     retry_budget: dict[str, Any],
     lock: threading.Lock,
@@ -320,7 +321,7 @@ def audit_single_host_with_retry(
                 rc=rc,
                 out=out,
                 err=err,
-                audit_log=audit_log,
+                db_conn=db_conn,
                 actor=actor,
                 overrides_dir=overrides_dir,
                 vault_sha256=(vault_checksums.get(host) if vault_checksums else None),
@@ -460,6 +461,8 @@ def format_summary_table(summary: dict[str, Any], verbose: bool = False) -> str:
 
 def cmd_host_audit_batch(hosts: list[str], args: HostAuditArgs) -> dict[str, Any]:
     """Audit multiple hosts in parallel."""
+    from ..db import get_connection, get_db_path, init_db
+
     actor = infer_actor()
     ssh_opts = build_ssh_options(args)
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
@@ -467,29 +470,37 @@ def cmd_host_audit_batch(hosts: list[str], args: HostAuditArgs) -> dict[str, Any
     vault_checksums = load_latest_vault_checksums(audit_log)
     vault_dir = audit_log.parent / VAULT_YAMLS_DIR_NAME
 
+    # Initialize SQLite database for host observations
+    db_path = get_db_path()
+    init_db(db_path)
+    db_conn = get_connection(db_path)
+
     remote_cmd = remote_audit_script(include_content=not args.no_content)
     lock = threading.Lock()
     log_lock = threading.Lock()
     retry_budget = {"deadline": time.time() + args.batch_timeout}
     show_progress = not args.json and not getattr(args, "quiet", False)
 
-    results = execute_audits_parallel(
-        hosts,
-        args=args,
-        ssh_opts=ssh_opts,
-        remote_cmd=remote_cmd,
-        audit_log=audit_log,
-        actor=actor,
-        retry_budget=retry_budget,
-        lock=lock,
-        log_lock=log_lock,
-        overrides_dir=overrides_dir,
-        vault_checksums=vault_checksums,
-        vault_dir=vault_dir,
-        show_progress=show_progress,
-    )
+    try:
+        results = execute_audits_parallel(
+            hosts,
+            args=args,
+            ssh_opts=ssh_opts,
+            remote_cmd=remote_cmd,
+            db_conn=db_conn,
+            actor=actor,
+            retry_budget=retry_budget,
+            lock=lock,
+            log_lock=log_lock,
+            overrides_dir=overrides_dir,
+            vault_checksums=vault_checksums,
+            vault_dir=vault_dir,
+            show_progress=show_progress,
+        )
 
-    return aggregate_audit_summary(results, hosts)
+        return aggregate_audit_summary(results, hosts)
+    finally:
+        db_conn.close()
 
 
 def format_single_host_output(result: dict[str, Any], args: HostAuditArgs) -> None:

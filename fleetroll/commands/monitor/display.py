@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .cache import ShaInfoCache
 
-from ...constants import HOST_OBSERVATIONS_FILE_NAME, TC_WORKERS_FILE_NAME
+from ...constants import TC_WORKERS_FILE_NAME
 from ...utils import get_log_file_size
 from .colors import (
     EXTENDED_COLORS,
@@ -425,11 +425,13 @@ class MonitorDisplay:
         if audit_size_mb >= warn_threshold_mb:
             warnings.append(f"audit: {audit_size_mb:.0f}M")
 
-        # Check host_observations.jsonl
-        obs_path = fleetroll_dir / HOST_OBSERVATIONS_FILE_NAME
-        obs_size_mb = get_log_file_size(obs_path) / bytes_per_mb
-        if obs_size_mb >= warn_threshold_mb:
-            warnings.append(f"obs: {obs_size_mb:.0f}M")
+        # Check SQLite database
+        from ...db import get_db_path
+
+        db_file = get_db_path()
+        db_size_mb = get_log_file_size(db_file) / bytes_per_mb
+        if db_size_mb >= warn_threshold_mb:
+            warnings.append(f"db: {db_size_mb:.0f}M")
 
         # Check taskcluster_workers.jsonl
         tc_path = fleetroll_dir / TC_WORKERS_FILE_NAME

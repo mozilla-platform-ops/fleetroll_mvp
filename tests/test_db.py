@@ -554,3 +554,98 @@ def test_json_round_trip(temp_db):
         assert retrieved["observed"]["list"] == [1, 2, 3]
     finally:
         conn.close()
+
+
+def test_get_observations_since_empty(temp_db):
+    """Returns empty list when no records exist."""
+    from fleetroll.db import get_connection, get_observations_since
+
+    conn = get_connection(temp_db)
+    try:
+        result = get_observations_since(conn, hosts=["host1"], after_ts="2024-01-01T00:00:00Z")
+        assert result == []
+    finally:
+        conn.close()
+
+
+def test_get_observations_since_returns_records_after_timestamp(temp_db):
+    """Returns records newer than given timestamp."""
+    from fleetroll.db import get_connection, get_observations_since, insert_host_observation
+
+    conn = get_connection(temp_db)
+    try:
+        host = "host1.example.com"
+        insert_host_observation(conn, {"host": host, "ts": "2024-01-01T10:00:00Z", "ok": 1})
+        insert_host_observation(conn, {"host": host, "ts": "2024-01-01T11:00:00Z", "ok": 0})
+        insert_host_observation(conn, {"host": host, "ts": "2024-01-01T12:00:00Z", "ok": 1})
+        conn.commit()
+
+        result = get_observations_since(conn, hosts=[host], after_ts="2024-01-01T10:30:00Z")
+
+        assert len(result) == 2
+        assert result[0]["ts"] == "2024-01-01T11:00:00Z"
+        assert result[1]["ts"] == "2024-01-01T12:00:00Z"
+    finally:
+        conn.close()
+
+
+def test_get_observations_since_filters_by_host_list(temp_db):
+    """Only returns records for requested hosts."""
+    from fleetroll.db import get_connection, get_observations_since, insert_host_observation
+
+    conn = get_connection(temp_db)
+    try:
+        insert_host_observation(
+            conn, {"host": "host1.example.com", "ts": "2024-01-01T10:00:00Z", "ok": 1}
+        )
+        insert_host_observation(
+            conn, {"host": "host2.example.com", "ts": "2024-01-01T10:00:00Z", "ok": 1}
+        )
+        insert_host_observation(
+            conn, {"host": "host3.example.com", "ts": "2024-01-01T10:00:00Z", "ok": 1}
+        )
+        conn.commit()
+
+        result = get_observations_since(
+            conn, hosts=["host1.example.com", "host3.example.com"], after_ts="2024-01-01T09:00:00Z"
+        )
+
+        assert len(result) == 2
+        hosts_in_result = {r["host"] for r in result}
+        assert hosts_in_result == {"host1.example.com", "host3.example.com"}
+    finally:
+        conn.close()
+
+
+def test_get_observations_since_ordered_by_ts_ascending(temp_db):
+    """Returns records in ascending timestamp order."""
+    from fleetroll.db import get_connection, get_observations_since, insert_host_observation
+
+    conn = get_connection(temp_db)
+    try:
+        host = "host1.example.com"
+        insert_host_observation(conn, {"host": host, "ts": "2024-01-01T12:00:00Z", "ok": 1})
+        insert_host_observation(conn, {"host": host, "ts": "2024-01-01T10:00:00Z", "ok": 1})
+        insert_host_observation(conn, {"host": host, "ts": "2024-01-01T11:00:00Z", "ok": 0})
+        conn.commit()
+
+        result = get_observations_since(conn, hosts=[host], after_ts="2024-01-01T09:00:00Z")
+
+        assert len(result) == 3
+        assert result[0]["ts"] == "2024-01-01T10:00:00Z"
+        assert result[1]["ts"] == "2024-01-01T11:00:00Z"
+        assert result[2]["ts"] == "2024-01-01T12:00:00Z"
+    finally:
+        conn.close()
+
+
+def test_get_observations_since_empty_hosts_list(temp_db):
+    """Returns empty list when hosts list is empty."""
+    from fleetroll.db import get_connection, get_observations_since
+
+    conn = get_connection(temp_db)
+    try:
+        result = get_observations_since(conn, hosts=[], after_ts="2024-01-01T00:00:00Z")
+        assert result == []
+    finally:
+        conn.close()

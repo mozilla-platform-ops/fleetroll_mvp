@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import sqlite3
 import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ...audit import iter_audit_records
-from ...constants import DEFAULT_GITHUB_REPO, HOST_OBSERVATIONS_FILE_NAME
+from ...constants import DEFAULT_GITHUB_REPO
 from ...humanhash import humanize
 from ...utils import natural_sort_key
 
@@ -637,139 +637,80 @@ def resolve_last_ok_ts(
 
 
 def load_latest_records(
-    path: Path, *, hosts: list[str]
+    conn: sqlite3.Connection, *, hosts: list[str]
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     """Load the latest matching audit record per host.
 
-    Reads from host_observations.jsonl.
+    Reads from SQLite host_observations table.
     """
-    host_set = set(hosts)
-    latest: dict[str, dict[str, Any]] = {}
-    latest_ok: dict[str, dict[str, Any]] = {}
+    from ...db import get_latest_host_observations
 
-    # Read from observations log
-    observations_log = path.parent / HOST_OBSERVATIONS_FILE_NAME
-
-    for record in iter_audit_records(observations_log):
-        if record_matches(record, hosts=host_set):
-            latest[record["host"]] = record
-            if record.get("ok"):
-                latest_ok[record["host"]] = record
-    return latest, latest_ok
+    return get_latest_host_observations(conn, hosts)
 
 
 def tail_audit_log(
-    path: Path,
+    conn: sqlite3.Connection,
     *,
     hosts: list[str],
-    start_at_end: bool = False,
+    latest: dict[str, dict[str, Any]] | None = None,
     poll_interval_s: float = 0.5,
 ) -> Iterable[dict[str, Any]]:
-    """Yield matching audit records appended to the log.
+    """Yield matching host observation records as they appear in SQLite.
 
-    Reads from host_observations.jsonl.
+    Polls the database for new records since the last seen timestamp.
     """
-    host_set = set(hosts)
-    file_obj = None
-    inode = None
-    position = 0
+    from ...db import get_observations_since
 
-    # Read from observations log
-    observations_log = path.parent / HOST_OBSERVATIONS_FILE_NAME
+    last_ts = ""
+    if latest:
+        for record in latest.values():
+            ts = record.get("ts", "")
+            last_ts = max(last_ts, ts)
 
     while True:
-        try:
-            stat = observations_log.stat()
-        except FileNotFoundError:
-            time.sleep(poll_interval_s)
-            continue
-
-        if inode != stat.st_ino:
-            if file_obj:
-                file_obj.close()
-            file_obj = observations_log.open("r", encoding="utf-8")
-            inode = stat.st_ino
-            position = stat.st_size if start_at_end else 0
-            file_obj.seek(position)
-        elif stat.st_size < position:
-            if file_obj:
-                position = stat.st_size if start_at_end else 0
-                file_obj.seek(position)
-
-        if not file_obj:
-            time.sleep(poll_interval_s)
-            continue
-
-        line = file_obj.readline()
-        if not line:
-            position = file_obj.tell()
-            time.sleep(poll_interval_s)
-            continue
-
-        position = file_obj.tell()
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if record_matches(record, hosts=host_set):
+        new_records = get_observations_since(conn, hosts=hosts, after_ts=last_ts)
+        for record in new_records:
+            ts = record.get("ts", "")
+            last_ts = max(last_ts, ts)
             yield record
+        if not new_records:
+            time.sleep(poll_interval_s)
 
 
 class AuditLogTailer:
-    """Non-blocking tailer for the audit log.
-
-    Reads from host_observations.jsonl.
-    """
+    """Non-blocking tailer for host observations via SQLite polling."""
 
     def __init__(
         self,
-        path: Path,
+        conn: sqlite3.Connection,
         *,
         hosts: list[str],
-        start_at_end: bool = False,
+        latest: dict[str, dict[str, Any]] | None = None,
     ) -> None:
-        # Read from observations log
-        observations_log = path.parent / HOST_OBSERVATIONS_FILE_NAME
-        self.path = observations_log
-        self.host_set = set(hosts)
-        self.start_at_end = start_at_end
-        self.file_obj = None
-        self.inode = None
-        self.position = 0
+        self.conn = conn
+        self.hosts = hosts
+        self._buffer: list[dict[str, Any]] = []
+
+        # Initialize high-water mark from latest records
+        self._last_ts = ""
+        if latest:
+            for record in latest.values():
+                ts = record.get("ts", "")
+                self._last_ts = max(self._last_ts, ts)
 
     def poll(self) -> dict[str, Any] | None:
-        """Return one matching record if available; otherwise None."""
-        try:
-            stat = self.path.stat()
-        except FileNotFoundError:
+        """Return one new record if available; otherwise None."""
+        if not self._buffer:
+            from ...db import get_observations_since
+
+            self._buffer = get_observations_since(
+                self.conn, hosts=self.hosts, after_ts=self._last_ts
+            )
+
+        if not self._buffer:
             return None
 
-        if self.inode != stat.st_ino:
-            if self.file_obj:
-                self.file_obj.close()
-            self.file_obj = self.path.open("r", encoding="utf-8")
-            self.inode = stat.st_ino
-            self.position = stat.st_size if self.start_at_end else 0
-            self.file_obj.seek(self.position)
-        elif stat.st_size < self.position:
-            self.position = stat.st_size if self.start_at_end else 0
-            self.file_obj.seek(self.position)
-
-        while True:
-            line = self.file_obj.readline()
-            if not line:
-                self.position = self.file_obj.tell()
-                return None
-            self.position = self.file_obj.tell()
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if record_matches(record, hosts=self.host_set):
-                return record
+        record = self._buffer.pop(0)
+        ts = record.get("ts", "")
+        self._last_ts = max(self._last_ts, ts)
+        return record

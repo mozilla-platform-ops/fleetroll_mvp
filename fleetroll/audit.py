@@ -7,6 +7,7 @@ import contextlib
 import datetime
 import json
 import os
+import sqlite3
 import tempfile
 import threading
 from collections.abc import Iterable
@@ -141,7 +142,7 @@ def process_audit_result(
     rc: int,
     out: str,
     err: str,
-    audit_log: Path,
+    db_conn: sqlite3.Connection,
     actor: str,
     overrides_dir: Path | None = None,
     vault_sha256: str | None = None,
@@ -334,14 +335,14 @@ def process_audit_result(
     log_record["observed"].pop("override_contents_for_display", None)
     log_record["observed"].pop("override_contents", None)
 
-    # Write observation to host_observations.jsonl instead of audit.jsonl
-    from .constants import HOST_OBSERVATIONS_FILE_NAME
-
-    observations_log = audit_log.parent / HOST_OBSERVATIONS_FILE_NAME
+    # Write observation to SQLite
+    from .db import insert_host_observation
 
     if log_lock:
         with log_lock:
-            append_jsonl(observations_log, log_record)
+            insert_host_observation(db_conn, log_record)
+            db_conn.commit()
     else:
-        append_jsonl(observations_log, log_record)
+        insert_host_observation(db_conn, log_record)
+        db_conn.commit()
     return result

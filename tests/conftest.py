@@ -142,3 +142,21 @@ def sample_audit_output_no_override() -> str:
 ROLE=test-role
 OVERRIDE_PRESENT=0
 """
+
+
+@pytest.fixture
+def temp_db() -> Generator[Path, None, None]:
+    """Create a temporary SQLite database for testing."""
+    from fleetroll.db import init_db
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = Path(f.name)
+
+    try:
+        init_db(db_path)
+        yield db_path
+    finally:
+        # Clean up database and WAL files
+        db_path.unlink(missing_ok=True)
+        Path(f"{db_path}-wal").unlink(missing_ok=True)
+        Path(f"{db_path}-shm").unlink(missing_ok=True)
