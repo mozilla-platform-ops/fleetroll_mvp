@@ -428,6 +428,7 @@ class MonitorDisplay:
         new_data = load_tc_worker_data_from_db(self.db_conn, hosts=self.hosts)
         if new_data != self.tc_data:
             self.tc_data = new_data
+            self._touch_updated()
             return True
         return False
 
@@ -442,8 +443,13 @@ class MonitorDisplay:
         new_data = load_github_refs_from_db(self.db_conn)
         if new_data != self.github_refs:
             self.github_refs = new_data
+            self._touch_updated()
             return True
         return False
+
+    def _touch_updated(self) -> None:
+        """Update last_updated timestamp to current UTC time."""
+        self.last_updated = dt.datetime.now(dt.UTC).isoformat()
 
     def poll_sha_cache(self) -> bool:
         """Re-scan override/vault dirs if SHA cache is stale. Returns True if changed."""
@@ -458,16 +464,19 @@ class MonitorDisplay:
         self.sha_cache.override_cache.clear()
         self.sha_cache.vault_cache.clear()
         self.sha_cache.load_all()
-        return (
+        changed = (
             self.sha_cache.override_cache != old_overrides
             or self.sha_cache.vault_cache != old_vault
         )
+        if changed:
+            self._touch_updated()
+        return changed
 
     def update_record(self, record: dict[str, Any]) -> None:
         self.latest[record["host"]] = record
         if record.get("ok"):
             self.latest_ok[record["host"]] = record
-        self.last_updated = record.get("ts", "unknown")
+        self._touch_updated()
 
     def _compute_screen_metrics(self, *, host_count: int | None = None) -> dict[str, Any]:
         """Compute screen dimensions and pagination metrics.
