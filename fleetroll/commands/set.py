@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -120,6 +121,70 @@ def validate_override_syntax(data: bytes) -> None:
         tmp_path.unlink(missing_ok=True)
 
 
+def validate_override_semantics(data: bytes) -> None:
+    """Validate semantic requirements of override content.
+
+    Checks:
+    - PUPPET_REPO: must be a valid URL ending with .git
+    - PUPPET_BRANCH: valid git branch name (alphanumeric, dashes, underscores, slashes)
+    - PUPPET_MAIL: valid email format
+    - WORKER_TYPE_OVERRIDE: if uncommented, alphanumeric with dashes only
+    """
+    try:
+        content_text = data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise UserError(f"Override validation failed: invalid UTF-8 encoding: {e}") from e
+
+    # Parse bash variable assignments: VAR="value" or VAR='value'
+    var_pattern = re.compile(r'^\s*([A-Z_]+)=["\']([^\n"\']*)["\']', re.MULTILINE)
+    variables = {}
+    for match in var_pattern.finditer(content_text):
+        var_name, var_value = match.groups()
+        variables[var_name] = var_value
+
+    # Validate PUPPET_REPO
+    if "PUPPET_REPO" in variables:
+        repo = variables["PUPPET_REPO"]
+        if not repo.endswith(".git"):
+            raise UserError(
+                f"PUPPET_REPO must end with '.git' for proper git cloning. Got: '{repo}'"
+            )
+        # Basic URL validation
+        if not repo.startswith(("http://", "https://", "git@")):
+            raise UserError(
+                f"PUPPET_REPO must be a valid git URL (http://, https://, or git@). Got: '{repo}'"
+            )
+
+    # Validate PUPPET_BRANCH
+    if "PUPPET_BRANCH" in variables:
+        branch = variables["PUPPET_BRANCH"]
+        # Valid branch names: alphanumeric, dashes, underscores, slashes
+        if not re.match(r"^[a-zA-Z0-9/_-]+$", branch):
+            raise UserError(
+                f"PUPPET_BRANCH contains invalid characters. "
+                f"Only alphanumeric, dashes, underscores, and slashes allowed. Got: '{branch}'"
+            )
+
+    # Validate PUPPET_MAIL
+    if "PUPPET_MAIL" in variables:
+        email = variables["PUPPET_MAIL"]
+        # Simple email validation
+        if not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
+            raise UserError(f"PUPPET_MAIL must be a valid email address. Got: '{email}'")
+
+    # Validate WORKER_TYPE_OVERRIDE (only if uncommented)
+    worker_pattern = re.compile(r'^\s*WORKER_TYPE_OVERRIDE=["\']([^\n"\']*)["\']', re.MULTILINE)
+    worker_match = worker_pattern.search(content_text)
+    if worker_match:
+        worker_type = worker_match.group(1)
+        # Only alphanumeric and dashes allowed
+        if not re.match(r"^[a-zA-Z0-9-]+$", worker_type):
+            raise UserError(
+                f"WORKER_TYPE_OVERRIDE contains invalid characters. "
+                f"Only alphanumeric and dashes allowed. Got: '{worker_type}'"
+            )
+
+
 def cmd_host_set(args: HostSetOverrideArgs) -> None:
     """Set the override file on a host."""
     ensure_host_or_file(args.host)
@@ -206,6 +271,7 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
         if args.validate:
             try:
                 validate_override_syntax(data)
+                validate_override_semantics(data)
             except UserError as e:
                 if not args.json:
                     print()
@@ -224,6 +290,7 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
     # Validate before actual execution (already validated in dry-run if --validate was set)
     if args.validate:
         validate_override_syntax(data)
+        validate_override_semantics(data)
 
     backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)
 

@@ -330,3 +330,218 @@ class TestCmdHostSet:
 
         mock_run_ssh.assert_not_called()
         assert any("DRY RUN" in str(line) for line in captured)
+
+
+class TestValidateOverrideSemantics:
+    """Tests for semantic validation of override content."""
+
+    @pytest.mark.allow_validation
+    def test_valid_override_all_fields(self, tmp_dir: Path):
+        """Valid override with all fields passes semantic validation."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        valid_override = tmp_dir / "valid.override"
+        valid_override.write_text(
+            """# puppet overrides
+PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="main"
+PUPPET_MAIL="test@mozilla.com"
+
+# taskcluster overrides
+WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-1804-staging'
+"""
+        )
+
+        # Should not raise
+        validate_override_semantics(valid_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_puppet_repo_missing_git_extension(self, tmp_dir: Path):
+        """PUPPET_REPO without .git extension fails validation."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        bad_override = tmp_dir / "bad.override"
+        bad_override.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet"
+PUPPET_BRANCH="main"
+PUPPET_MAIL="test@mozilla.com"
+"""
+        )
+
+        with pytest.raises(UserError, match=r"PUPPET_REPO must end with '.git'"):
+            validate_override_semantics(bad_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_puppet_repo_invalid_url_scheme(self, tmp_dir: Path):
+        """PUPPET_REPO with invalid URL scheme fails validation."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        bad_override = tmp_dir / "bad.override"
+        bad_override.write_text(
+            """PUPPET_REPO="ftp://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="main"
+PUPPET_MAIL="test@mozilla.com"
+"""
+        )
+
+        with pytest.raises(UserError, match=r"PUPPET_REPO must be a valid git URL"):
+            validate_override_semantics(bad_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_puppet_branch_invalid_characters(self, tmp_dir: Path):
+        """PUPPET_BRANCH with spaces fails validation."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        bad_override = tmp_dir / "bad.override"
+        bad_override.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="feature branch with spaces"
+PUPPET_MAIL="test@mozilla.com"
+"""
+        )
+
+        with pytest.raises(UserError, match=r"PUPPET_BRANCH contains invalid characters"):
+            validate_override_semantics(bad_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_puppet_branch_valid_with_slashes_dashes(self, tmp_dir: Path):
+        """PUPPET_BRANCH with slashes and dashes is valid."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        valid_override = tmp_dir / "valid.override"
+        valid_override.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="feature/RELOPS-123_test-branch"
+PUPPET_MAIL="test@mozilla.com"
+"""
+        )
+
+        # Should not raise
+        validate_override_semantics(valid_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_puppet_mail_invalid_format(self, tmp_dir: Path):
+        """PUPPET_MAIL with invalid email format fails validation."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        bad_override = tmp_dir / "bad.override"
+        bad_override.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="main"
+PUPPET_MAIL="not-an-email"
+"""
+        )
+
+        with pytest.raises(UserError, match=r"PUPPET_MAIL must be a valid email"):
+            validate_override_semantics(bad_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_worker_type_override_commented_ignored(self, tmp_dir: Path):
+        """Commented WORKER_TYPE_OVERRIDE is not validated."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        valid_override = tmp_dir / "valid.override"
+        valid_override.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="main"
+PUPPET_MAIL="test@mozilla.com"
+
+# WORKER_TYPE_OVERRIDE='invalid value with spaces!'
+"""
+        )
+
+        # Should not raise even though commented value has invalid characters
+        validate_override_semantics(valid_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_worker_type_override_invalid_characters(self, tmp_dir: Path):
+        """Uncommented WORKER_TYPE_OVERRIDE with invalid chars fails validation."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        bad_override = tmp_dir / "bad.override"
+        bad_override.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="main"
+PUPPET_MAIL="test@mozilla.com"
+
+WORKER_TYPE_OVERRIDE='invalid value with spaces!'
+"""
+        )
+
+        with pytest.raises(UserError, match=r"WORKER_TYPE_OVERRIDE contains invalid characters"):
+            validate_override_semantics(bad_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_worker_type_override_valid_format(self, tmp_dir: Path):
+        """Uncommented WORKER_TYPE_OVERRIDE with valid format passes."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        valid_override = tmp_dir / "valid.override"
+        valid_override.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="main"
+PUPPET_MAIL="test@mozilla.com"
+
+WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-1804-staging'
+"""
+        )
+
+        # Should not raise
+        validate_override_semantics(valid_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_git_ssh_url_format_valid(self, tmp_dir: Path):
+        """git@ SSH URL format is valid for PUPPET_REPO."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        valid_override = tmp_dir / "valid.override"
+        valid_override.write_text(
+            """PUPPET_REPO="git@github.com:mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="main"
+PUPPET_MAIL="test@mozilla.com"
+"""
+        )
+
+        # Should not raise
+        validate_override_semantics(valid_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_optional_fields_not_required(self, tmp_dir: Path):
+        """Override with only some fields is valid."""
+        from fleetroll.commands.set import validate_override_semantics
+
+        minimal_override = tmp_dir / "minimal.override"
+        minimal_override.write_text(
+            """# Just PUPPET_REPO
+PUPPET_REPO="https://github.com/aerickson/ronin_puppet.git"
+"""
+        )
+
+        # Should not raise - other fields are optional
+        validate_override_semantics(minimal_override.read_bytes())
+
+    @pytest.mark.allow_validation
+    def test_integration_with_cmd_host_set_dry_run(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Semantic validation runs during dry-run and catches errors."""
+        bad_override = tmp_dir / "bad.override"
+        bad_override.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet"
+PUPPET_BRANCH="main"
+PUPPET_MAIL="test@mozilla.com"
+"""
+        )
+
+        mock_args_set.from_file = str(bad_override)
+        mock_args_set.confirm = False
+        mock_args_set.validate = True
+        mock_args_set.json = False
+
+        mock_run_ssh = mocker.patch("fleetroll.commands.set.run_ssh")
+
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_host_set(mock_args_set)
+
+        assert exc_info.value.code == 1
+        mock_run_ssh.assert_not_called()
