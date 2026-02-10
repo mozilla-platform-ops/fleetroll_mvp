@@ -191,7 +191,6 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
             tailer = AuditLogTailer(
                 db_conn,
                 hosts=hosts,
-                latest=latest,
             )
             last_redraw_time = time.monotonic()
             while True:

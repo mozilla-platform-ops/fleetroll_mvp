@@ -387,6 +387,73 @@ def get_observations_since(
     return [json.loads(row["data"]) for row in rows]
 
 
+def get_observations_since_rowid(
+    conn: sqlite3.Connection,
+    *,
+    hosts: list[str],
+    after_rowid: int,
+) -> list[tuple[int, dict[str, Any]]]:
+    """Get host observation records with rowid > after_rowid.
+
+    Returns records ordered by rowid ascending, suitable for tailing.
+    Using rowid avoids missing records when multiple hosts are scanned
+    within the same second (timestamps have 1-second resolution).
+
+    Args:
+        conn: Database connection
+        hosts: List of hostnames to query
+        after_rowid: Only records with rowid > this are returned
+
+    Returns:
+        List of (rowid, record_dict) tuples ordered by rowid ascending
+    """
+    if not hosts:
+        return []
+
+    placeholders = ",".join("?" * len(hosts))
+    rows = conn.execute(
+        f"""
+        SELECT rowid, data FROM host_observations
+        WHERE host IN ({placeholders}) AND rowid > ?
+        ORDER BY rowid ASC
+        """,
+        [*hosts, after_rowid],
+    ).fetchall()
+
+    return [(row["rowid"], json.loads(row["data"])) for row in rows]
+
+
+def get_max_observation_rowid(
+    conn: sqlite3.Connection,
+    *,
+    hosts: list[str],
+) -> int:
+    """Get the maximum rowid for the given hosts.
+
+    Used to initialize the tailer's high-water mark.
+
+    Args:
+        conn: Database connection
+        hosts: List of hostnames to query
+
+    Returns:
+        Maximum rowid for these hosts, or 0 if none exist
+    """
+    if not hosts:
+        return 0
+
+    placeholders = ",".join("?" * len(hosts))
+    row = conn.execute(
+        f"""
+        SELECT MAX(rowid) as max_rowid FROM host_observations
+        WHERE host IN ({placeholders})
+        """,
+        hosts,
+    ).fetchone()
+
+    return row["max_rowid"] if row and row["max_rowid"] is not None else 0
+
+
 def get_latest_tc_workers(
     conn: sqlite3.Connection,
     hosts: list[str],

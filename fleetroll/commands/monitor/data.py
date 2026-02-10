@@ -632,34 +632,30 @@ class AuditLogTailer:
         conn: sqlite3.Connection,
         *,
         hosts: list[str],
-        latest: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.conn = conn
         self.hosts = hosts
-        self._buffer: list[dict[str, Any]] = []
+        self._buffer: list[tuple[int, dict[str, Any]]] = []
 
-        # Initialize high-water mark from latest records
-        self._last_ts = ""
-        if latest:
-            for record in latest.values():
-                ts = record.get("ts", "")
-                self._last_ts = max(self._last_ts, ts)
+        # Initialize high-water mark using max rowid for these hosts
+        from ...db import get_max_observation_rowid
+
+        self._last_rowid = get_max_observation_rowid(conn, hosts=hosts)
 
     def poll(self) -> dict[str, Any] | None:
         """Return one new record if available; otherwise None."""
         if not self._buffer:
-            from ...db import get_observations_since
+            from ...db import get_observations_since_rowid
 
             # Commit to end any stale read transaction and see latest writes
             self.conn.commit()
-            self._buffer = get_observations_since(
-                self.conn, hosts=self.hosts, after_ts=self._last_ts
+            self._buffer = get_observations_since_rowid(
+                self.conn, hosts=self.hosts, after_rowid=self._last_rowid
             )
 
         if not self._buffer:
             return None
 
-        record = self._buffer.pop(0)
-        ts = record.get("ts", "")
-        self._last_ts = max(self._last_ts, ts)
+        rowid, record = self._buffer.pop(0)
+        self._last_rowid = rowid
         return record
