@@ -15,12 +15,13 @@ from typing import TYPE_CHECKING, Any
 import click
 
 from ..audit import append_jsonl
-from ..constants import BACKUP_TIME_FORMAT
+from ..constants import BACKUP_TIME_FORMAT, DRY_RUN_PREVIEW_LIMIT
 from ..exceptions import CommandFailureError
 from ..ssh import build_ssh_options, remote_unset_script, run_ssh
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
+    format_host_preview,
     infer_actor,
     is_host_file,
     parse_host_list,
@@ -125,6 +126,9 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
             if is_batch:
                 print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
                 print(f"{click.style('Host count:', fg='cyan')} {len(hosts)}")
+                print(f"{click.style('Hosts:', fg='cyan')}")
+                for line in format_host_preview(hosts, limit=DRY_RUN_PREVIEW_LIMIT):
+                    print(line)
             else:
                 print(f"{click.style('Host:', fg='cyan')} {hosts[0]}")
             action_target = f"{len(hosts)} host(s)"
