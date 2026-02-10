@@ -32,6 +32,25 @@ def natural_sort_key(text: str) -> list[int | str]:
     return [convert(c) for c in re.split(r"(\d+)", text)]
 
 
+def format_host_preview(hosts: list[str], *, limit: int) -> list[str]:
+    """Format host list for preview, showing first N hosts and overflow count.
+
+    Args:
+        hosts: List of hostnames
+        limit: Maximum number of hosts to show
+
+    Returns:
+        List of formatted lines showing hosts and overflow message if applicable
+    """
+    if len(hosts) <= limit:
+        return [f"  - {host}" for host in hosts]
+
+    lines = [f"  - {host}" for host in hosts[:limit]]
+    remaining = len(hosts) - limit
+    lines.append(f"  ... and {remaining} more host{'s' if remaining > 1 else ''}")
+    return lines
+
+
 def utc_now_iso() -> str:
     """Return current UTC time in ISO format without microseconds."""
     return dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()

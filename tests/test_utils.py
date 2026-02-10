@@ -10,6 +10,7 @@ from fleetroll.utils import (
     default_audit_log_path,
     ensure_host_or_file,
     ensure_parent_dir,
+    format_host_preview,
     infer_actor,
     is_host_file,
     looks_like_host,
@@ -363,3 +364,65 @@ class TestEnsureParentDir:
         target = tmp_dir / "file.txt"
         ensure_parent_dir(target)
         assert target.parent.exists()
+
+
+class TestFormatHostPreview:
+    """Tests for format_host_preview function."""
+
+    def test_shows_all_hosts_when_at_limit(self):
+        """Shows all hosts when count equals limit."""
+        hosts = ["host1", "host2", "host3", "host4", "host5"]
+        result = format_host_preview(hosts, limit=5)
+        assert result == [
+            "  - host1",
+            "  - host2",
+            "  - host3",
+            "  - host4",
+            "  - host5",
+        ]
+
+    def test_shows_all_hosts_when_below_limit(self):
+        """Shows all hosts when count is below limit."""
+        hosts = ["host1", "host2", "host3"]
+        result = format_host_preview(hosts, limit=5)
+        assert result == [
+            "  - host1",
+            "  - host2",
+            "  - host3",
+        ]
+
+    def test_shows_first_n_plus_overflow_when_above_limit(self):
+        """Shows first N hosts plus overflow message when count exceeds limit."""
+        hosts = [f"host{i}" for i in range(1, 11)]
+        result = format_host_preview(hosts, limit=5)
+        assert result == [
+            "  - host1",
+            "  - host2",
+            "  - host3",
+            "  - host4",
+            "  - host5",
+            "  ... and 5 more hosts",
+        ]
+
+    def test_singular_overflow_message(self):
+        """Uses singular 'host' when only one host is hidden."""
+        hosts = ["host1", "host2", "host3", "host4", "host5", "host6"]
+        result = format_host_preview(hosts, limit=5)
+        assert result == [
+            "  - host1",
+            "  - host2",
+            "  - host3",
+            "  - host4",
+            "  - host5",
+            "  ... and 1 more host",
+        ]
+
+    def test_empty_list(self):
+        """Returns empty list for empty input."""
+        result = format_host_preview([], limit=5)
+        assert result == []
+
+    def test_single_host(self):
+        """Works with single host."""
+        result = format_host_preview(["host1"], limit=5)
+        assert result == ["  - host1"]

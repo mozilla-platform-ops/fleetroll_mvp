@@ -15,13 +15,14 @@ from typing import TYPE_CHECKING, Any
 import click
 
 from ..audit import append_jsonl, store_content_file
-from ..constants import BACKUP_TIME_FORMAT, VAULT_YAMLS_DIR_NAME
+from ..constants import BACKUP_TIME_FORMAT, DRY_RUN_PREVIEW_LIMIT, VAULT_YAMLS_DIR_NAME
 from ..exceptions import CommandFailureError, UserError
 from ..humanhash import humanize
 from ..ssh import build_ssh_options, run_ssh
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
+    format_host_preview,
     infer_actor,
     is_host_file,
     parse_host_list,
@@ -210,6 +211,9 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
             if is_batch:
                 print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
                 print(f"{click.style('Host count:', fg='cyan')} {len(hosts)}")
+                print(f"{click.style('Hosts:', fg='cyan')}")
+                for line in format_host_preview(hosts, limit=DRY_RUN_PREVIEW_LIMIT):
+                    print(line)
             else:
                 print(f"{click.style('Host:', fg='cyan')} {hosts[0]}")
             action_target = f"{len(hosts)} host(s)"
