@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from ..constants import ROLE_TO_TASKCLUSTER, TC_WORKERS_FILE_NAME
+from ..constants import ROLE_TO_TASKCLUSTER
 from ..exceptions import FleetRollError
 from ..taskcluster import fetch_workers, load_tc_credentials
 from ..utils import (
@@ -108,65 +108,6 @@ def strip_fqdn(hostname: str) -> str:
         Short hostname (e.g., "t-linux64-ms-016")
     """
     return hostname.split(".")[0]
-
-
-def tc_workers_file_path() -> Path:
-    """Get the path to the TaskCluster workers JSONL file."""
-    return Path.home() / ".fleetroll" / TC_WORKERS_FILE_NAME
-
-
-def write_worker_record(
-    f,
-    *,
-    ts: str,
-    host: str,
-    worker_id: str,
-    provisioner: str,
-    worker_type: str,
-    state: str | None,
-    last_date_active: str | None,
-    task_started: str | None,
-    task_resolved: str | None,
-    task_state: str | None,
-    quarantine_until: str | None,
-) -> None:
-    """Write a worker record to the JSONL file."""
-    record = {
-        "type": "worker",
-        "ts": ts,
-        "host": host,
-        "worker_id": worker_id,
-        "provisioner": provisioner,
-        "worker_type": worker_type,
-        "state": state,
-        "last_date_active": last_date_active,
-        "task_started": task_started,
-        "task_resolved": task_resolved,
-        "task_state": task_state,
-        "quarantine_until": quarantine_until,
-    }
-    f.write(json.dumps(record) + "\n")
-
-
-def write_scan_record(
-    f,
-    *,
-    ts: str,
-    provisioner: str,
-    worker_type: str,
-    worker_count: int,
-    requested_by_hosts: list[str],
-) -> None:
-    """Write a scan record to the JSONL file."""
-    record = {
-        "type": "scan",
-        "ts": ts,
-        "provisioner": provisioner,
-        "worker_type": worker_type,
-        "worker_count": worker_count,
-        "requested_by_hosts": requested_by_hosts,
-    }
-    f.write(json.dumps(record) + "\n")
 
 
 def build_role_to_hosts_mapping(host_to_role: dict[str, str | None]) -> dict[str, list[str]]:

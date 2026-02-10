@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import datetime as dt
-import json
 import sqlite3
 import time
 from collections.abc import Iterable
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ...constants import DEFAULT_GITHUB_REPO
@@ -110,92 +108,6 @@ def detect_common_fqdn_suffix(hosts: list[str]) -> str | None:
     if len(suffixes) == 1:
         return suffixes.pop()
     return None  # Multiple suffixes
-
-
-def load_tc_worker_data(path: Path) -> dict[str, dict[str, Any]]:
-    """Load TaskCluster worker data from JSONL file.
-
-    Returns a dict mapping short hostname to worker data.
-    If multiple records exist for the same host, uses most recent by ts.
-    """
-    if not path.exists():
-        return {}
-
-    host_data: dict[str, dict[str, Any]] = {}
-
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    record = json.loads(line)
-                    if record.get("type") != "worker":
-                        continue
-
-                    host = record.get("host")
-                    ts = record.get("ts")
-                    if not host or not ts:
-                        continue
-
-                    # Use short hostname as key
-                    short_host = strip_fqdn(host)
-
-                    # Keep most recent record
-                    if short_host not in host_data or ts > host_data[short_host].get("ts", ""):
-                        host_data[short_host] = record
-
-                except json.JSONDecodeError:
-                    continue
-    except Exception:
-        return {}
-
-    return host_data
-
-
-def load_github_refs(path: Path) -> dict[str, dict[str, Any]]:
-    """Load GitHub ref data from JSONL file.
-
-    Returns a dict mapping 'owner/repo:branch' to the latest branch_ref record.
-    If multiple records exist for the same branch, uses most recent by ts.
-    """
-    if not path.exists():
-        return {}
-
-    ref_data: dict[str, dict[str, Any]] = {}
-
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    record = json.loads(line)
-                    if record.get("type") != "branch_ref":
-                        continue
-
-                    owner = record.get("owner")
-                    repo = record.get("repo")
-                    branch = record.get("branch")
-                    ts = record.get("ts")
-                    if not owner or not repo or not branch or not ts:
-                        continue
-
-                    # Use 'owner/repo:branch' as key
-                    key = f"{owner}/{repo}:{branch}"
-
-                    # Keep most recent record
-                    if key not in ref_data or ts > ref_data[key].get("ts", ""):
-                        ref_data[key] = record
-
-                except json.JSONDecodeError:
-                    continue
-    except Exception:
-        return {}
-
-    return ref_data
 
 
 def humanize_age(ts_value: str) -> str:

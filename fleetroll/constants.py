@@ -31,8 +31,6 @@ HOST_OBSERVATIONS_FILE_NAME = "host_observations.jsonl"
 OVERRIDES_DIR_NAME = "overrides"
 VAULT_YAMLS_DIR_NAME = "vault_yamls"
 DRY_RUN_PREVIEW_LIMIT = 5
-TC_WORKERS_FILE_NAME = "taskcluster_workers.jsonl"
-GITHUB_REFS_FILE_NAME = "github_refs.jsonl"
 DEFAULT_GITHUB_REPO = "mozilla-platform-ops/ronin_puppet"
 
 # SQLite database settings

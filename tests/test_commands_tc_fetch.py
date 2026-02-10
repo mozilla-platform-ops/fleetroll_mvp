@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from io import StringIO
-from pathlib import Path
-
 from fleetroll.commands.tc_fetch import (
     build_role_to_hosts_mapping,
     format_tc_fetch_quiet,
@@ -13,9 +9,6 @@ from fleetroll.commands.tc_fetch import (
     map_roles_to_worker_types,
     match_workers_to_hosts,
     strip_fqdn,
-    tc_workers_file_path,
-    write_scan_record,
-    write_worker_record,
 )
 from fleetroll.utils import format_elapsed_time
 
@@ -67,26 +60,6 @@ class TestStripFqdn:
     def test_hostname_with_single_dot(self):
         """Hostname with single dot strips domain."""
         assert strip_fqdn("host.com") == "host"
-
-
-class TestTcWorkersFilePath:
-    """Tests for tc_workers_file_path function."""
-
-    def test_returns_path_object(self):
-        """Should return a Path object."""
-        result = tc_workers_file_path()
-        assert isinstance(result, Path)
-
-    def test_contains_expected_components(self):
-        """Path should contain .fleetroll and filename."""
-        result = tc_workers_file_path()
-        assert ".fleetroll" in result.parts
-        assert result.name == "taskcluster_workers.jsonl"
-
-    def test_in_home_directory(self):
-        """Path should be in user's home directory."""
-        result = tc_workers_file_path()
-        assert str(result).startswith(str(Path.home()))
 
 
 class TestFormatTcFetchQuiet:
@@ -159,135 +132,6 @@ class TestFormatTcFetchQuiet:
         assert "SUCCESS" in result
         assert "1 worker(s)" in result
         assert "1 scan(s)" in result
-
-
-class TestWriteWorkerRecord:
-    """Tests for write_worker_record function."""
-
-    def test_writes_json_record(self):
-        """Should write a valid JSON record with all fields."""
-        output = StringIO()
-        write_worker_record(
-            output,
-            ts="2024-01-15T10:30:00Z",
-            host="worker1.example.com",
-            worker_id="i-12345",
-            provisioner="aws-provisioner",
-            worker_type="linux-compute",
-            state="running",
-            last_date_active="2024-01-15T10:25:00Z",
-            task_started="2024-01-15T10:20:00Z",
-            task_resolved="2024-01-15T10:28:00Z",
-            task_state="completed",
-            quarantine_until=None,
-        )
-
-        output.seek(0)
-        line = output.read()
-        record = json.loads(line.strip())
-
-        assert record["type"] == "worker"
-        assert record["ts"] == "2024-01-15T10:30:00Z"
-        assert record["host"] == "worker1.example.com"
-        assert record["worker_id"] == "i-12345"
-        assert record["provisioner"] == "aws-provisioner"
-        assert record["worker_type"] == "linux-compute"
-        assert record["state"] == "running"
-        assert record["last_date_active"] == "2024-01-15T10:25:00Z"
-        assert record["task_started"] == "2024-01-15T10:20:00Z"
-        assert record["task_resolved"] == "2024-01-15T10:28:00Z"
-        assert record["task_state"] == "completed"
-        assert record["quarantine_until"] is None
-
-    def test_handles_null_optional_fields(self):
-        """Should handle None values for optional fields."""
-        output = StringIO()
-        write_worker_record(
-            output,
-            ts="2024-01-15T10:30:00Z",
-            host="worker2.example.com",
-            worker_id="i-67890",
-            provisioner="gcp-provisioner",
-            worker_type="windows-compute",
-            state=None,
-            last_date_active=None,
-            task_started=None,
-            task_resolved=None,
-            task_state=None,
-            quarantine_until=None,
-        )
-
-        output.seek(0)
-        line = output.read()
-        record = json.loads(line.strip())
-
-        assert record["state"] is None
-        assert record["last_date_active"] is None
-        assert record["task_started"] is None
-        assert record["task_resolved"] is None
-        assert record["quarantine_until"] is None
-
-
-class TestWriteScanRecord:
-    """Tests for write_scan_record function."""
-
-    def test_writes_valid_json_record(self):
-        """Should write a scan record with all fields."""
-        output = StringIO()
-        write_scan_record(
-            output,
-            ts="2024-01-15T10:30:00Z",
-            provisioner="aws-provisioner",
-            worker_type="linux-compute",
-            worker_count=5,
-            requested_by_hosts=["host1", "host2"],
-        )
-
-        output.seek(0)
-        line = output.read()
-        record = json.loads(line.strip())
-
-        assert record["type"] == "scan"
-        assert record["ts"] == "2024-01-15T10:30:00Z"
-        assert record["provisioner"] == "aws-provisioner"
-        assert record["worker_type"] == "linux-compute"
-        assert record["worker_count"] == 5
-        assert record["requested_by_hosts"] == ["host1", "host2"]
-
-    def test_empty_hosts_list(self):
-        """Should handle empty requested_by_hosts."""
-        output = StringIO()
-        write_scan_record(
-            output,
-            ts="2024-01-15T10:30:00Z",
-            provisioner="aws",
-            worker_type="test",
-            worker_count=0,
-            requested_by_hosts=[],
-        )
-
-        output.seek(0)
-        record = json.loads(output.read().strip())
-        assert record["requested_by_hosts"] == []
-        assert record["worker_count"] == 0
-
-    def test_multiple_hosts(self):
-        """Should handle multiple hosts in requested_by_hosts."""
-        output = StringIO()
-        write_scan_record(
-            output,
-            ts="2024-01-15T10:30:00Z",
-            provisioner="gcp-provisioner",
-            worker_type="windows-compute",
-            worker_count=10,
-            requested_by_hosts=["host1", "host2", "host3", "host4"],
-        )
-
-        output.seek(0)
-        record = json.loads(output.read().strip())
-        assert len(record["requested_by_hosts"]) == 4
-        assert "host1" in record["requested_by_hosts"]
-        assert "host4" in record["requested_by_hosts"]
 
 
 class TestGetHostRolesBulk:
