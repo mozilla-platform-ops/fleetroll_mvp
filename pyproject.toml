@@ -124,6 +124,9 @@ max-complexity = 55
     "ARG002",   # unused method args - pytest fixtures
     "RUF059",   # unused unpacked vars - common in tests
 ]
+"fleetroll/db.py" = [
+    "S608",     # SQL injection false positives - placeholders are safely constructed
+]
 
 [tool.ty.terminal]
 error-on-warning = false

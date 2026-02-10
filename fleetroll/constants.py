@@ -35,6 +35,10 @@ TC_WORKERS_FILE_NAME = "taskcluster_workers.jsonl"
 GITHUB_REFS_FILE_NAME = "github_refs.jsonl"
 DEFAULT_GITHUB_REPO = "mozilla-platform-ops/ronin_puppet"
 
+# SQLite database settings
+DB_FILE_NAME = "fleetroll.db"
+DB_RETENTION_LIMIT = 10  # Keep latest N records per key in SQLite tables
+
 # TaskCluster role to (provisioner, workerType) mapping
 ROLE_TO_TASKCLUSTER = {
     "gecko_t_linux_talos": ("releng-hardware", "gecko-t-linux-talos-1804"),
