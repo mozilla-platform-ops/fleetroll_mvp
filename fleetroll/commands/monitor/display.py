@@ -535,6 +535,7 @@ class MonitorDisplay:
         all_columns = [
             "host",
             "role",
+            "os",
             "vlt_sha",
             "sha",
             "uptime",
@@ -553,6 +554,7 @@ class MonitorDisplay:
             "host": "HOST",
             "uptime": "UPTIME",
             "role": "ROLE",
+            "os": "OS",
             "sha": "OVR_SHA",
             "vlt_sha": "VLT_SHA",
             "tc_quar": "TC_QUAR",

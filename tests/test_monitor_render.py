@@ -22,6 +22,7 @@ def test_render_row_cells_alignment() -> None:
         "observed": {
             "role_present": True,
             "role": "gecko_t_linux_talos",
+            "os_type": "Linux",
             "override_present": True,
             "override_sha256": "0328af8c9d6f",
             "vault_sha256": "abcdef1234567890",
@@ -47,6 +48,7 @@ def test_render_row_cells_alignment() -> None:
         "host": "HOST",
         "uptime": "UPTIME",
         "role": "ROLE",
+        "os": "OS",
         "sha": "OVR_SHA",
         "vlt_sha": "VLT_SHA",
         "tc_quar": "TC_QUAR",
@@ -824,3 +826,112 @@ def test_header_layout_narrow_terminal():
     usable_width = 20  # Too narrow for both
     result = compute_header_layout(left, right, usable_width)
     assert result == 2
+
+
+def test_os_column_ok_record():
+    """Test OS column shows os_type for OK records."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "os_type": "Linux",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": "1768983854"},
+            "uptime_s": 3600,
+        },
+    }
+    values = build_row_values("host1", record, last_ok=record)
+    assert values["os"] == "Linux"
+
+
+def test_os_column_darwin():
+    """Test OS column shows Darwin for macOS hosts."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_osx_1400_r8",
+            "os_type": "Darwin",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": "1768983854"},
+            "uptime_s": 3600,
+        },
+    }
+    values = build_row_values("host1", record, last_ok=record)
+    assert values["os"] == "Darwin"
+
+
+def test_os_column_unknown_host():
+    """Test OS column shows ? for unknown hosts."""
+    values = build_row_values("host1", None)
+    assert values["os"] == "?"
+
+
+def test_os_column_failed_host():
+    """Test OS column shows - for failed hosts."""
+    failed_record = {
+        "ok": False,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "error": "SSH connection failed",
+    }
+    values = build_row_values("host1", failed_record)
+    assert values["os"] == "-"
+
+
+def test_os_column_missing_in_observed():
+    """Test OS column shows - when os_type is missing from observed."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": "1768983854"},
+            "uptime_s": 3600,
+        },
+    }
+    values = build_row_values("host1", record, last_ok=record)
+    assert values["os"] == "-"
+
+
+def test_os_column_in_columns_list():
+    """Test that os column appears in compute_columns_and_widths output."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "os_type": "Linux",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": "1768983854"},
+            "uptime_s": 3600,
+        },
+    }
+    hosts = ["host1"]
+    latest = {hosts[0]: record}
+    latest_ok = {hosts[0]: record}
+    columns, widths = compute_columns_and_widths(
+        hosts=hosts,
+        latest=latest,
+        latest_ok=latest_ok,
+        max_width=0,
+        cap_widths=False,
+        sep_len=3,
+    )
+    assert "os" in columns
+    assert "os" in widths
+    assert widths["os"] >= len("OS")  # At least header width
+    assert widths["os"] >= len("Linux")  # At least data width

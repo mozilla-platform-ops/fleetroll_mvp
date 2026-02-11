@@ -93,6 +93,7 @@ set -eu
 
 # Detect operating system
 os_type=$(uname -s)
+printf 'OS_TYPE=%s\\n' "$os_type"
 
 # Set paths based on OS
 if [ "$os_type" = "Darwin" ]; then

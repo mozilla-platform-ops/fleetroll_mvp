@@ -162,6 +162,7 @@ def process_audit_result(
     override_present = info.get("OVERRIDE_PRESENT") == "1"
     vault_present = info.get("VLT_PRESENT") == "1" if "VLT_PRESENT" in info else vault_present
     role_present = info.get("ROLE_PRESENT") == "1"
+    os_type = info.get("OS_TYPE")
     uptime_s = None
     uptime_raw = info.get("UPTIME_S")
     if uptime_raw:
@@ -290,6 +291,7 @@ def process_audit_result(
         "observed": {
             "role_present": role_present,
             "role": info.get("ROLE") if role_present else None,
+            "os_type": os_type,
             "override_present": override_present,
             "override_meta": (
                 {

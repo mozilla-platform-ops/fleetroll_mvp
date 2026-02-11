@@ -212,6 +212,7 @@ def build_ok_row_values(
     observed = record.get("observed") or {}
     role_present = observed.get("role_present")
     role = observed.get("role") if role_present else "missing"
+    os_type = observed.get("os_type") or "-"
     override_present = observed.get("override_present")
     override_state = "present" if override_present else "absent"
     sha_full = observed.get("override_sha256") or ""
@@ -424,6 +425,7 @@ def build_ok_row_values(
         "uptime": uptime,
         "override": override_state,
         "role": role,
+        "os": os_type,
         "sha": sha,
         "vlt_sha": vault_sha,
         "mtime": str(mtime),
@@ -468,6 +470,7 @@ def build_row_values(
             "uptime": "?",
             "override": "?",
             "role": "?",
+            "os": "?",
             "sha": "?",
             "vlt_sha": "?",
             "mtime": "?",
@@ -510,6 +513,7 @@ def build_row_values(
             "uptime": "-",
             "override": "-",
             "role": "-",
+            "os": "-",
             "sha": "-",
             "vlt_sha": "-",
             "mtime": "-",
