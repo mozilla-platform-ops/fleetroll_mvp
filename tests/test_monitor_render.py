@@ -829,7 +829,7 @@ def test_header_layout_narrow_terminal():
 
 
 def test_os_column_ok_record():
-    """Test OS column shows os_type for OK records."""
+    """Test OS column shows abbreviated os_type for OK records."""
     record = {
         "ok": True,
         "ts": "2026-01-21T21:52:57+00:00",
@@ -845,11 +845,11 @@ def test_os_column_ok_record():
         },
     }
     values = build_row_values("host1", record, last_ok=record)
-    assert values["os"] == "Linux"
+    assert values["os"] == "L"
 
 
 def test_os_column_darwin():
-    """Test OS column shows Darwin for macOS hosts."""
+    """Test OS column shows M for macOS/Darwin hosts."""
     record = {
         "ok": True,
         "ts": "2026-01-21T21:52:57+00:00",
@@ -865,7 +865,7 @@ def test_os_column_darwin():
         },
     }
     values = build_row_values("host1", record, last_ok=record)
-    assert values["os"] == "Darwin"
+    assert values["os"] == "M"
 
 
 def test_os_column_unknown_host():
@@ -904,6 +904,46 @@ def test_os_column_missing_in_observed():
     assert values["os"] == "-"
 
 
+def test_os_column_windows():
+    """Test OS column shows W for Windows hosts."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "test_role",
+            "os_type": "Windows",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": "1768983854"},
+            "uptime_s": 3600,
+        },
+    }
+    values = build_row_values("host1", record, last_ok=record)
+    assert values["os"] == "W"
+
+
+def test_os_column_unknown_os_type():
+    """Test OS column shows first letter for unknown OS types."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "test_role",
+            "os_type": "FreeBSD",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": "1768983854"},
+            "uptime_s": 3600,
+        },
+    }
+    values = build_row_values("host1", record, last_ok=record)
+    assert values["os"] == "F"
+
+
 def test_os_column_in_columns_list():
     """Test that os column appears in compute_columns_and_widths output."""
     record = {
@@ -934,4 +974,4 @@ def test_os_column_in_columns_list():
     assert "os" in columns
     assert "os" in widths
     assert widths["os"] >= len("OS")  # At least header width
-    assert widths["os"] >= len("Linux")  # At least data width
+    assert widths["os"] >= len("L")  # At least data width (single char)

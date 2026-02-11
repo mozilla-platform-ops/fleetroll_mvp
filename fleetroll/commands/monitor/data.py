@@ -212,7 +212,18 @@ def build_ok_row_values(
     observed = record.get("observed") or {}
     role_present = observed.get("role_present")
     role = observed.get("role") if role_present else "missing"
-    os_type = observed.get("os_type") or "-"
+    os_type_raw = observed.get("os_type")
+    # Map OS type to single-character abbreviation
+    if os_type_raw == "Darwin":
+        os_type = "M"
+    elif os_type_raw == "Linux":
+        os_type = "L"
+    elif os_type_raw == "Windows":
+        os_type = "W"
+    elif os_type_raw:
+        os_type = os_type_raw[0].upper()  # First letter for unknown OS
+    else:
+        os_type = "-"
     override_present = observed.get("override_present")
     override_state = "present" if override_present else "absent"
     sha_full = observed.get("override_sha256") or ""

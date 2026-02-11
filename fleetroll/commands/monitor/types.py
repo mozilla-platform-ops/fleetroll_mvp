@@ -22,7 +22,7 @@ Keybindings:
 Columns:
 HOST      Hostname (FQDN suffix stripped if common)
 ROLE      Puppet role assigned to host
-OS        Host operating system (Linux, Darwin)
+OS        Host operating system (M=macOS/Darwin, L=Linux, W=Windows)
 VLT_SHA   Vault file SHA256 hash (symlink name in parentheses)
 OVR_SHA   Override file SHA256 hash (branch name in parentheses)
 UPTIME    Host uptime since last boot
