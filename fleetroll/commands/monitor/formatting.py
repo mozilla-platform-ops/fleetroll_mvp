@@ -58,8 +58,8 @@ def compute_columns_and_widths(
     """Compute columns and widths that fit within max_width."""
     columns = [
         "host",
-        "role",
         "os",
+        "role",
         "vlt_sha",
         "sha",
         "uptime",

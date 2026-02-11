@@ -572,8 +572,8 @@ class MonitorDisplay:
         """
         all_columns = [
             "host",
-            "role",
             "os",
+            "role",
             "vlt_sha",
             "sha",
             "uptime",
