@@ -17,6 +17,7 @@ Keybindings:
   ←/→ or h/l  Scroll columns (when they don't fit)
   s           Cycle sort order (host → role → ovr_sha → host)
   o           Toggle override filter (all hosts ↔ overrides only)
+  O           Cycle OS filter (all → Linux → macOS → all)
   q           Quit monitor
 
 Columns:

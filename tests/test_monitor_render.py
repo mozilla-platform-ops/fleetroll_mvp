@@ -975,3 +975,21 @@ def test_os_column_in_columns_list():
     assert "os" in widths
     assert widths["os"] >= len("OS")  # At least header width
     assert widths["os"] >= len("L")  # At least data width (single char)
+
+
+def test_cycle_os_filter():
+    """Test OS filter cycling: None -> L -> M -> None."""
+    from fleetroll.commands.monitor.display import cycle_os_filter
+
+    assert cycle_os_filter(None) == "L"
+    assert cycle_os_filter("L") == "M"
+    assert cycle_os_filter("M") is None
+
+
+def test_os_filter_label():
+    """Test OS filter label conversion."""
+    from fleetroll.commands.monitor.display import os_filter_label
+
+    assert os_filter_label("L") == "Linux"
+    assert os_filter_label("M") == "macOS"
+    assert os_filter_label(None) is None

@@ -51,6 +51,38 @@ def compute_header_layout(left: str, right: str, usable_width: int) -> int:
     return 1
 
 
+def cycle_os_filter(current: str | None) -> str | None:
+    """Cycle OS filter: None -> 'L' -> 'M' -> None.
+
+    Args:
+        current: Current OS filter value
+
+    Returns:
+        Next OS filter value in cycle
+    """
+    if current is None:
+        return "L"
+    if current == "L":
+        return "M"
+    return None
+
+
+def os_filter_label(os_filter: str | None) -> str | None:
+    """Return human-readable label for OS filter, or None if no filter.
+
+    Args:
+        os_filter: OS filter value ("L", "M", or None)
+
+    Returns:
+        Human-readable label or None
+    """
+    if os_filter == "L":
+        return "Linux"
+    if os_filter == "M":
+        return "macOS"
+    return None
+
+
 class MonitorDisplay:
     """Curses-based monitor display with encapsulated state."""
 
@@ -91,6 +123,7 @@ class MonitorDisplay:
         self.show_help = False
         self.sort_field = "host"  # Current sort field: "host" or "role"
         self.show_only_overrides = False  # Filter to show only hosts with overrides
+        self.os_filter: str | None = None  # OS filter: None=all, "L"=Linux, "M"=macOS
         self.curses_mod = None
         self.color_enabled = False
         self.extended_colors = False
@@ -382,9 +415,14 @@ class MonitorDisplay:
             self.offset = 0  # Reset to first page on sort change
             self.needs_redraw = True
             self.draw_screen()
-        elif key in (ord("o"), ord("O")):
+        elif key == ord("o"):
             # Toggle override filter
             self.show_only_overrides = not self.show_only_overrides
+            self.offset = 0  # Reset to first page on filter change
+            self.draw_screen()
+        elif key == ord("O"):
+            # Cycle OS filter
+            self.os_filter = cycle_os_filter(self.os_filter)
             self.offset = 0  # Reset to first page on filter change
             self.draw_screen()
         return False
@@ -899,6 +937,7 @@ class MonitorDisplay:
         scroll_indicator: str,
         updated: str,
         usable_width: int,
+        filtered_host_count: int | None = None,
     ) -> int:
         """Render the top information banner with metadata.
 
@@ -919,6 +958,9 @@ class MonitorDisplay:
         left = f"fleetroll {ver} [? for help] sort={self.sort_field}"
         if self.show_only_overrides:
             left = f"{left}, filter=overrides"
+        os_label = os_filter_label(self.os_filter)
+        if os_label is not None:
+            left = f"{left}, os={os_label}"
         if total_pages > 1:
             # Add page indicator with up/down arrows
             arrows = ""
@@ -933,7 +975,11 @@ class MonitorDisplay:
 
         # Build right section with optional log size warning
         fqdn_part = f"fqdn={self.fqdn_suffix}, " if self.fqdn_suffix else ""
-        right = f"{fqdn_part}source={self.host_source}, hosts={len(self.hosts)}, updated={updated}"
+        if filtered_host_count is not None:
+            hosts_display = f"{filtered_host_count}/{len(self.hosts)}"
+        else:
+            hosts_display = str(len(self.hosts))
+        right = f"{fqdn_part}source={self.host_source}, hosts={hosts_display}, updated={updated}"
         if self.log_size_warnings:
             warnings_text = ", ".join(self.log_size_warnings)
             right = f"⚠ Large logs: {warnings_text} (run 'fleetroll maintain') | {right}"
@@ -1144,6 +1190,28 @@ class MonitorDisplay:
         sha_value = values.get("sha", "")
         return sha_value not in ("-", "?", "")
 
+    def _get_host_os(self, hostname: str) -> str:
+        """Get the OS abbreviation for a host.
+
+        Args:
+            hostname: Hostname to check
+
+        Returns:
+            OS abbreviation ("L", "M", "W", etc.)
+        """
+        short_host = strip_fqdn(hostname)
+        tc_worker_data = self.tc_data.get(short_host)
+        values = build_row_values(
+            hostname,
+            self.latest.get(hostname),
+            last_ok=self.latest_ok.get(hostname),
+            tc_data=tc_worker_data,
+            fqdn_suffix=self.fqdn_suffix,
+            sha_cache=self.sha_cache,
+            github_refs=self.github_refs,
+        )
+        return values["os"]
+
     def _draw_host_row(
         self,
         row: int,
@@ -1301,6 +1369,8 @@ class MonitorDisplay:
         sorted_hosts = sorted(self.hosts, key=self._get_sort_key)
         if self.show_only_overrides:
             sorted_hosts = [h for h in sorted_hosts if self._has_overrides(h)]
+        if self.os_filter is not None:
+            sorted_hosts = [h for h in sorted_hosts if self._get_host_os(h) == self.os_filter]
 
         # Compute screen metrics with filtered host count
         metrics = self._compute_screen_metrics(host_count=len(sorted_hosts))
@@ -1314,12 +1384,17 @@ class MonitorDisplay:
         )
 
         # Draw headers
+        # Pass filtered count if any filter is active
+        filtered_count = (
+            len(sorted_hosts) if (self.show_only_overrides or self.os_filter is not None) else None
+        )
         header_rows = self._draw_top_header(
             total_pages=metrics["total_pages"],
             current_page=metrics["current_page"],
             scroll_indicator=scroll_indicator,
             updated=metrics["updated"],
             usable_width=metrics["usable_width"],
+            filtered_host_count=filtered_count,
         )
         self._draw_column_header(
             labels=labels, columns=columns, widths=widths, header_row=header_rows
