@@ -1366,7 +1366,8 @@ class MonitorDisplay:
         self.stdscr.erase()
 
         # Sort and filter hosts
-        sorted_hosts = sorted(self.hosts, key=self._get_sort_key)
+        all_hosts_sorted = sorted(self.hosts, key=self._get_sort_key)
+        sorted_hosts = all_hosts_sorted
         if self.show_only_overrides:
             sorted_hosts = [h for h in sorted_hosts if self._has_overrides(h)]
         if self.os_filter is not None:
@@ -1406,7 +1407,7 @@ class MonitorDisplay:
             page_size = max(page_size - 1, 0)
 
         # Prepare categorical colors
-        color_maps = self._prepare_categorical_colors(sorted_hosts)
+        color_maps = self._prepare_categorical_colors(all_hosts_sorted)
 
         host_slice = (
             sorted_hosts[self.offset :]

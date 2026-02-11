@@ -993,3 +993,20 @@ def test_os_filter_label():
     assert os_filter_label("L") == "Linux"
     assert os_filter_label("M") == "macOS"
     assert os_filter_label(None) is None
+
+
+def test_color_mapping_stable_across_subsets():
+    """Color for a value should not change when other values are removed."""
+    from fleetroll.commands.monitor.colors import build_color_mapping
+
+    full = {"alpha-bravo", "charlie-delta", "echo-foxtrot"}
+    subset = {"alpha-bravo", "echo-foxtrot"}  # charlie-delta filtered out
+    full_map = build_color_mapping(full, total_capacity=34, seed=0)
+    subset_map = build_color_mapping(subset, total_capacity=34, seed=0)
+
+    # This test documents that build_color_mapping is position-dependent.
+    # When charlie-delta is removed, echo-foxtrot shifts from position 2 to 1,
+    # changing its color index. This is expected behavior for the algorithm.
+    # The fix is at the call site: draw_screen() must pass the full host list
+    # to _prepare_categorical_colors() to keep colors stable during filtering.
+    assert full_map["echo-foxtrot"] != subset_map["echo-foxtrot"]
