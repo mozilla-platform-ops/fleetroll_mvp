@@ -4,6 +4,8 @@ This document describes how Puppet runs (automatically or manually) across diffe
 
 ## Overview
 
+Because puppet changes can affect the system under test, we only run puppet when tests aren't running (either via Taskcluster quarantine or when the generic-worker process isn't running).
+
 Puppet execution varies by operating system and worker role:
 - **Linux test workers**: Automatic execution at boot via systemd, with semaphore coordination
 - **macOS test/build workers**: Automatic execution before each worker run via worker-runner wrapper
@@ -14,6 +16,11 @@ Puppet execution varies by operating system and worker role:
 ## Linux Roles
 
 ### Linux Test Workers (Automatic - puppet::atboot)
+
+The Taskcluster worker (generic-worker) is only started if puppet succeeds.
+
+- **Pro:** Guarantees hosts are converged if the Taskcluster client is working.
+- **Con:** Puppet failures can break every worker. Recovery involves updating the puppet repo to a better commit and running `run-puppet.sh` manually (or rebooting).
 
 **Roles:**
 - gecko_t_linux_2204_talos
@@ -71,6 +78,11 @@ WantedBy=default.target
 ## macOS Roles
 
 ### macOS Test/Build Workers (Automatic - worker_runner)
+
+Generic-worker starts on macOS even if the puppet run is unsuccessful.
+
+- **Pro:** Bad puppet won't take out the fleet.
+- **Con:** No guarantee that the host is in the desired state.
 
 **Roles:**
 - gecko_t_osx_1015_r8 (and _staging)
