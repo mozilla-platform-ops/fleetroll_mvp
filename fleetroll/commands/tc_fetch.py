@@ -440,9 +440,9 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             )
             click.echo(msg)
 
-            # Also refresh GitHub branch refs (throttled)
-            from ..github import do_github_fetch
+        # Also refresh GitHub branch refs (throttled)
+        from ..github import do_github_fetch
 
-            do_github_fetch(quiet=quiet)
+        do_github_fetch(quiet=quiet)
     finally:
         db_conn.close()
