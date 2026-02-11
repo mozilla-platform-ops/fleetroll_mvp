@@ -47,7 +47,7 @@ Fleetroll MVP lacks the full features of Fleetroll including:
 
 ## Background: Puppet Lifecycle
 
-For background on the puppet lifecycle in our environement, see [README.puppet_lifecycle.md](README.puppet_lifecycle.md).
+For background on the puppet lifecycle in our environement, see [docs/puppet-execution-mechanisms.md](docs/puppet-execution-mechanisms.md).
 
 ## Puppet State File
 
