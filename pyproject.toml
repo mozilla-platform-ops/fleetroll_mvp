@@ -42,7 +42,7 @@ addopts = [
     #"--cov=fleetroll",
     #"--cov-report=term-missing",
     #"--cov-report=html",
-    "--cov-fail-under=45",
+    "--cov-fail-under=50",
 ]
 markers = ["allow_validation: allow override syntax validation in tests"]
 
