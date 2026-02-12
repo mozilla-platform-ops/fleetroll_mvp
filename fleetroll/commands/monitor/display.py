@@ -1308,20 +1308,32 @@ class MonitorDisplay:
                 col += 1
                 self.safe_addstr(row, col, cell[1:])
                 col += len(cell) - 1
-            elif col_name in ("sha", "vlt_sha"):
-                full_value = values.get(col_name, "")
-                width = widths.get(col_name, 0)
+            elif col_name == "sha":
+                # OVR_SHA: Color the 8-char SHA prefix
+                full_value = values.get("sha", "")
+                if full_value not in ("-", "?") and len(full_value) >= 8:
+                    marker_attr = sha_colors.get(values.get("sha", ""), 0)
+                    sha_prefix = cell[:8]
+                    rest = cell[8:]
+                    self.safe_addstr(row, col, sha_prefix, marker_attr)
+                    col += len(sha_prefix)
+                    if rest:
+                        self.safe_addstr(row, col, rest)
+                        col += len(rest)
+                else:
+                    self.safe_addstr(row, col, cell, attr)
+                    col += len(cell)
+            elif col_name == "vlt_sha":
+                # VLT_SHA: Color the humanhash (unchanged)
+                full_value = values.get("vlt_sha", "")
+                width = widths.get("vlt_sha", 0)
                 if (
                     full_value
                     and full_value not in ("-", "?")
                     and " " in full_value
                     and len(full_value) <= width
                 ):
-                    marker_attr = (
-                        sha_colors.get(values.get("sha", ""), 0)
-                        if col_name == "sha"
-                        else vlt_sha_colors.get(values.get("vlt_sha", ""), 0)
-                    )
+                    marker_attr = vlt_sha_colors.get(values.get("vlt_sha", ""), 0)
                     # Find the humanhash position (before the parenthesis if present)
                     # Format: "SHA humanhash (info)" or "SHA humanhash"
                     paren_idx = full_value.find(" (")

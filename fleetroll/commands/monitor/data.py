@@ -230,8 +230,6 @@ def build_ok_row_values(
     vault_sha_full = observed.get("vault_sha256") or ""
     sha = sha_full[:8] if sha_full else "-"
     vault_sha = vault_sha_full[:8] if vault_sha_full else "-"
-    if sha_full:
-        sha = f"{sha} {humanize(sha_full, words=2)}"
     if vault_sha_full:
         vault_sha = f"{vault_sha} {humanize(vault_sha_full, words=2)}"
 

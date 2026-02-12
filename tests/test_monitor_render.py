@@ -79,7 +79,7 @@ def test_clip_cell_truncation() -> None:
     assert clip_cell("abcdef", 6) == "abcdef"
 
 
-def test_build_row_values_includes_humanhash() -> None:
+def test_build_row_values_sha_format() -> None:
     sha = "a" * 64
     vlt = "b" * 64
     record = {
@@ -96,8 +96,9 @@ def test_build_row_values_includes_humanhash() -> None:
         },
     }
     values = build_row_values("host1", record, last_ok=record)
-    assert values["sha"].startswith(sha[:8])
-    assert humanize(sha, words=2) in values["sha"]
+    # OVR_SHA should not contain humanhash
+    assert values["sha"] == sha[:8]
+    # VLT_SHA should still contain humanhash
     assert values["vlt_sha"].startswith(vlt[:8])
     assert humanize(vlt, words=2) in values["vlt_sha"]
 
