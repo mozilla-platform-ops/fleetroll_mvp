@@ -110,7 +110,7 @@ Refer to `--help` for complete usage.
 
 Data has to be gathered before running reports.
 
-Running these with `watch -n 300 <command>` is how I'm currently using them. In the future, there may be a command that both scans regularly.
+Running these with `watch -n 300 <command>` is how I'm currently using them. In the future, there may be a command that runs both scans regularly on a set of hosts.
 
 #### Host data
 
