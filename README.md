@@ -6,7 +6,7 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
 <p align="center">
-  <img src="images/screenshot_1.jpg" alt="Fleetroll Monitor Interface" width="800">
+  <img src="images/screenshot_3.png" alt="Fleetroll Monitor Interface" width="800">
 </p>
 
 Fleetroll MVP streamlines host state visibility and configuration management. It's a tool for auditing, monitoring, and managing Linux and macOS hardware (i.e. long-running) hosts in the Mozilla FirefoxCI Taskcluster environment using Puppet. It's designed for the Mozilla Release Operations team.
