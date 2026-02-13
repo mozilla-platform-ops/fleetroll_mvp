@@ -89,7 +89,7 @@ def common_options(func):
     return func
 
 
-@click.group()
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(version=version("fleetroll"), prog_name="fleetroll")
 @click.option(
     "--debug",
