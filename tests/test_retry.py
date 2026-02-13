@@ -134,7 +134,7 @@ class TestRetryLogic:
     def test_no_retry_on_non_connection_error(self, mocker, tmp_dir: Path):
         """Does not retry on non-connection errors (e.g., permission denied)."""
         mock_run_ssh = mocker.patch("fleetroll.commands.audit.run_ssh")
-        mock_run_ssh.return_value = (1, "", "Permission denied")
+        mock_run_ssh.return_value = (255, "", "Permission denied (publickey)")
 
         mock_process = mocker.patch("fleetroll.commands.audit.process_audit_result")
         mock_process.return_value = {"ok": False, "host": "test"}
@@ -155,6 +155,122 @@ class TestRetryLogic:
 
         # Should not retry on permission denied
         assert mock_run_ssh.call_count == 1
+
+    def test_ssh_auth_failure_logged_not_retried(self, mocker, tmp_dir: Path):
+        """SSH auth failures (rc=255, Permission denied) are logged, not retried."""
+        mock_run_ssh = mocker.patch("fleetroll.commands.audit.run_ssh")
+        mock_run_ssh.return_value = (255, "", "Permission denied (publickey)")
+
+        mock_process = mocker.patch("fleetroll.commands.audit.process_audit_result")
+        mock_process.return_value = {"ok": False, "host": "test"}
+
+        args = self._make_args(tmp_dir)
+
+        result = audit_single_host_with_retry(
+            "test.example.com",
+            args=args,
+            ssh_opts=[],
+            remote_cmd="test",
+            db_path=tmp_dir / "test.db",
+            actor="test",
+            retry_budget={"deadline": time.time() + 600},
+            lock=threading.Lock(),
+            log_lock=threading.Lock(),
+        )
+
+        # Should not retry - auth error is not a connection error
+        assert mock_run_ssh.call_count == 1
+        # Should log to database
+        assert mock_process.call_count == 1
+        assert result["ok"] is False
+
+    def test_ssh_protocol_error_logged_not_retried(self, mocker, tmp_dir: Path):
+        """SSH protocol errors (rc=255) are logged, not retried."""
+        mock_run_ssh = mocker.patch("fleetroll.commands.audit.run_ssh")
+        mock_run_ssh.return_value = (255, "", "Protocol error")
+
+        mock_process = mocker.patch("fleetroll.commands.audit.process_audit_result")
+        mock_process.return_value = {"ok": False, "host": "test"}
+
+        args = self._make_args(tmp_dir)
+
+        result = audit_single_host_with_retry(
+            "test.example.com",
+            args=args,
+            ssh_opts=[],
+            remote_cmd="test",
+            db_path=tmp_dir / "test.db",
+            actor="test",
+            retry_budget={"deadline": time.time() + 600},
+            lock=threading.Lock(),
+            log_lock=threading.Lock(),
+        )
+
+        # Should not retry - protocol error is not a connection error
+        assert mock_run_ssh.call_count == 1
+        # Should log to database
+        assert mock_process.call_count == 1
+        assert result["ok"] is False
+
+    def test_network_unreachable_is_retried(self, mocker, tmp_dir: Path):
+        """Network unreachable (rc=255) is treated as connection error, retried."""
+        mock_run_ssh = mocker.patch("fleetroll.commands.audit.run_ssh")
+        mock_run_ssh.return_value = (255, "", "Network is unreachable")
+
+        mock_process = mocker.patch("fleetroll.commands.audit.process_audit_result")
+        mocker.patch("fleetroll.commands.audit.time.sleep")
+
+        args = self._make_args(tmp_dir)
+
+        result = audit_single_host_with_retry(
+            "test.example.com",
+            args=args,
+            ssh_opts=[],
+            remote_cmd="test",
+            db_path=tmp_dir / "test.db",
+            actor="test",
+            retry_budget={"deadline": time.time() + 600},
+            lock=threading.Lock(),
+            log_lock=threading.Lock(),
+        )
+
+        # Should retry on network unreachable (connection error)
+        # AUDIT_MAX_RETRIES defaults to 1, so expect 1 attempt
+        assert mock_run_ssh.call_count == 1
+        # Should not log to database (connection error bypasses logging)
+        assert mock_process.call_count == 0
+        assert result["ok"] is False
+        assert result["error"] == "max_retries_exceeded"
+
+    def test_no_route_to_host_is_retried(self, mocker, tmp_dir: Path):
+        """No route to host (rc=255) is treated as connection error, retried."""
+        mock_run_ssh = mocker.patch("fleetroll.commands.audit.run_ssh")
+        mock_run_ssh.return_value = (255, "", "No route to host")
+
+        mock_process = mocker.patch("fleetroll.commands.audit.process_audit_result")
+        mocker.patch("fleetroll.commands.audit.time.sleep")
+
+        args = self._make_args(tmp_dir)
+
+        result = audit_single_host_with_retry(
+            "test.example.com",
+            args=args,
+            ssh_opts=[],
+            remote_cmd="test",
+            db_path=tmp_dir / "test.db",
+            actor="test",
+            retry_budget={"deadline": time.time() + 600},
+            lock=threading.Lock(),
+            log_lock=threading.Lock(),
+        )
+
+        # Should retry on no route to host (connection error)
+        # AUDIT_MAX_RETRIES defaults to 1, so expect 1 attempt
+        assert mock_run_ssh.call_count == 1
+        # Should not log to database (connection error bypasses logging)
+        assert mock_process.call_count == 0
+        assert result["ok"] is False
+        assert result["error"] == "max_retries_exceeded"
 
     def test_max_retries_exceeded(self, mocker, tmp_dir: Path):
         """Returns error when max retries exceeded."""

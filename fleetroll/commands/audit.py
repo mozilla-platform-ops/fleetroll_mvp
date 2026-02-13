@@ -308,7 +308,8 @@ def audit_single_host_with_retry(
             "Connection refused" in err
             or "Connection timed out" in err
             or "Could not resolve hostname" in err
-            or rc == 255  # SSH general error
+            or "Network is unreachable" in err
+            or "No route to host" in err
         )
 
         if rc == 0 or not is_connection_error:
