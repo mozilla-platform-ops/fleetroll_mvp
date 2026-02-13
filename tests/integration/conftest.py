@@ -65,9 +65,12 @@ def _wait_for_ssh(host: str, port: int, timeout: int = 30) -> bool:
     return False
 
 
+# Check Docker availability at module load time
+_DOCKER_AVAILABLE = _docker_available()
+
 # Skip all integration tests if Docker is unavailable
 pytestmark = pytest.mark.skipif(
-    not _docker_available(),
+    not _DOCKER_AVAILABLE,
     reason="Docker not available or not running",
 )
 
@@ -79,6 +82,9 @@ def ssh_keypair() -> Generator[tuple[Path, Path], None, None]:
     Yields:
         Tuple of (private_key_path, public_key_path)
     """
+    if not _DOCKER_AVAILABLE:
+        pytest.skip("Docker not available")
+
     with tempfile.TemporaryDirectory() as tmpdir:
         key_path = Path(tmpdir) / "test_key"
         pub_path = Path(tmpdir) / "test_key.pub"
@@ -113,6 +119,9 @@ def docker_image(ssh_keypair: tuple[Path, Path]) -> str:
     Returns:
         Docker image name/tag
     """
+    if not _DOCKER_AVAILABLE:
+        pytest.skip("Docker not available")
+
     # Find Dockerfile relative to this file
     dockerfile_dir = Path(__file__).parent.parent.parent / "docker" / "test-sshd"
     image_name = "fleetroll-test-sshd:latest"
@@ -141,6 +150,9 @@ def sshd_container(
     Yields:
         Dict with container connection info: {host, port, user, key_path}
     """
+    if not _DOCKER_AVAILABLE:
+        pytest.skip("Docker not available")
+
     private_key, public_key = ssh_keypair
     host_port = _find_free_port()
 
