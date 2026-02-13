@@ -97,6 +97,28 @@ jobs:
             htmlcov/
             coverage.xml
 
+  integration-test:
+    name: Integration Tests (Docker E2E)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --group test
+
+      - name: Run integration tests
+        run: uv run pytest tests/integration/ -v
+
   security:
     name: Security Scan
     runs-on: ubuntu-latest

@@ -44,7 +44,10 @@ addopts = [
     #"--cov-report=html",
     "--cov-fail-under=50",
 ]
-markers = ["allow_validation: allow override syntax validation in tests"]
+markers = [
+    "allow_validation: allow override syntax validation in tests",
+    "integration: end-to-end tests requiring Docker",
+]
 
 [tool.pytest-watcher]
 now = true
@@ -123,6 +126,9 @@ max-complexity = 25
     "ARG001",   # unused function args - pytest fixtures
     "ARG002",   # unused method args - pytest fixtures
     "RUF059",   # unused unpacked vars - common in tests
+]
+"tests/integration/**/*.py" = [
+    "S607",     # subprocess with partial path - intentional use of docker/ssh-keygen
 ]
 "fleetroll/db.py" = [
     "S608",     # SQL injection false positives - placeholders are safely constructed
