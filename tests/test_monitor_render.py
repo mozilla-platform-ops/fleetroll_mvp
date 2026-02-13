@@ -468,6 +468,7 @@ def test_pp_exp_column():
     }
     values = build_row_values("host1", failed_record)
     assert values["pp_exp"] == "-"
+    assert values["data"] == "-/-"
 
 
 def _sep_positions(line: str) -> list[int]:

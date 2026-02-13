@@ -514,8 +514,7 @@ def build_row_values(
             tc_ts = tc_data.get("ts")
             if tc_ts and isinstance(tc_ts, str):
                 tc_str = humanize_duration(age_seconds(tc_ts), min_unit="m")
-        audit_age = age_seconds(record.get("ts", "?"))
-        audit_str = humanize_duration(audit_age, min_unit="m") if audit_age is not None else "-"
+        audit_str = "-"
         return {
             "status": "FAIL",
             "host": display_host,
