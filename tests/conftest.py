@@ -160,3 +160,15 @@ def temp_db() -> Generator[Path, None, None]:
         db_path.unlink(missing_ok=True)
         Path(f"{db_path}-wal").unlink(missing_ok=True)
         Path(f"{db_path}-shm").unlink(missing_ok=True)
+
+
+@pytest.fixture
+def db_conn(temp_db: Path) -> Generator:
+    """Provide a database connection that is automatically closed after the test."""
+    from fleetroll.db import get_connection
+
+    conn = get_connection(temp_db)
+    try:
+        yield conn
+    finally:
+        conn.close()
