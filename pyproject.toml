@@ -107,11 +107,11 @@ ignore = [
 
 [tool.ruff.lint.pylint]
 max-args = 20
-max-branches = 65
-max-statements = 250
+max-branches = 30
+max-statements = 100
 
 [tool.ruff.lint.mccabe]
-max-complexity = 55
+max-complexity = 25
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
@@ -127,6 +127,16 @@ max-complexity = 55
 "fleetroll/db.py" = [
     "S608",     # SQL injection false positives - placeholders are safely constructed
 ]
+# Complex data processing and command functions that need higher limits
+"fleetroll/audit.py" = ["C901", "PLR0912", "PLR0915"]
+"fleetroll/commands/monitor/data.py" = ["C901", "PLR0912", "PLR0915"]
+"fleetroll/commands/monitor/entry.py" = ["C901", "PLR0915"]
+"fleetroll/commands/monitor/header_renderer.py" = ["C901", "PLR0912", "PLR0915"]
+"fleetroll/commands/monitor/row_renderer.py" = ["C901", "PLR0912", "PLR0915"]
+"fleetroll/commands/set.py" = ["C901", "PLR0912", "PLR0915"]
+"fleetroll/commands/tc_fetch.py" = ["C901", "PLR0912", "PLR0915"]
+"fleetroll/commands/unset.py" = ["PLR0915"]
+"fleetroll/commands/vault.py" = ["C901", "PLR0912", "PLR0915"]
 
 [tool.ty.terminal]
 error-on-warning = false

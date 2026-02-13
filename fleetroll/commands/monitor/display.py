@@ -22,12 +22,11 @@ from .data import (
     humanize_duration,
     load_github_refs_from_db,
     load_tc_worker_data_from_db,
-    resolve_last_ok_ts,
     strip_fqdn,
 )
-from .formatting import render_row_cells
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
+from .row_renderer import RowRenderer
 from .types import cycle_os_filter
 
 
@@ -75,6 +74,7 @@ class MonitorDisplay:
         self.colors = CursesColors(stdscr)
         self.curses_mod = self.colors.curses_mod
         self.header_renderer = HeaderRenderer(safe_addstr=self.safe_addstr, colors=self.colors)
+        self.row_renderer = RowRenderer(safe_addstr=self.safe_addstr, colors=self.colors)
         self.log_size_warnings = self._check_log_sizes()
 
     def safe_addstr(self, row: int, col: int, text: str, attr: int = 0) -> None:
@@ -146,7 +146,6 @@ class MonitorDisplay:
             else:
                 self.sort_field = "host"
             self.offset = 0  # Reset to first page on sort change
-            self.needs_redraw = True
             self.draw_screen()
         elif key == ord("o"):
             # Toggle override filter
@@ -446,95 +445,6 @@ class MonitorDisplay:
 
         return columns, scroll_indicator
 
-    def _compute_row_render_data(
-        self,
-        host: str,
-    ) -> dict[str, Any]:
-        """Compute all data needed to render a single host row.
-
-        Args:
-            host: Hostname to render
-
-        Returns:
-            Dictionary containing:
-            - values: Cell values from build_row_values()
-            - ts_value: Timestamp for coloring DATA column
-            - tc_ts_value: TC timestamp for coloring
-            - tc_worker_data: TC worker data dict
-            - uptime_s: Uptime in seconds for coloring
-            - tc_last_s: TC last active in seconds for coloring
-            - tc_task_state: TaskCluster task state for coloring TC_T_DUR
-            - pp_age_s: Puppet age in seconds for coloring
-            - pp_failed: Whether puppet run failed
-        """
-        short_host = strip_fqdn(host)
-        tc_worker_data = self.tc_data.get(short_host)
-        values = build_row_values(
-            host,
-            self.latest.get(host),
-            last_ok=self.latest_ok.get(host),
-            tc_data=tc_worker_data,
-            fqdn_suffix=self.fqdn_suffix,
-            sha_cache=self.sha_cache,
-            github_refs=self.github_refs,
-        )
-        ts_value = resolve_last_ok_ts(self.latest.get(host), last_ok=self.latest_ok.get(host))
-        tc_ts_value = tc_worker_data.get("ts") if tc_worker_data else None
-        uptime_value = values.get("uptime")
-        uptime_s = None
-        if uptime_value and uptime_value not in ("-", "?"):
-            observed = (self.latest_ok.get(host) or self.latest.get(host) or {}).get("observed", {})
-            uptime_s = observed.get("uptime_s")
-
-        # Calculate TC_ACT in seconds for coloring
-        tc_act_s = None
-        if tc_worker_data:
-            last_date_active = tc_worker_data.get("last_date_active")
-            scan_ts = tc_worker_data.get("ts")
-            if last_date_active and scan_ts:
-                try:
-                    scan_dt = dt.datetime.fromisoformat(scan_ts)
-                    if scan_dt.tzinfo is None:
-                        scan_dt = scan_dt.replace(tzinfo=dt.UTC)
-                    last_active_dt = dt.datetime.fromisoformat(last_date_active)
-                    if last_active_dt.tzinfo is None:
-                        last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
-                    tc_act_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
-                except (ValueError, AttributeError):
-                    pass
-
-        # Extract TC task state for coloring TC_T_DUR
-        tc_task_state = tc_worker_data.get("task_state") if tc_worker_data else None
-
-        # Calculate puppet data for coloring (relative to audit time)
-        host_record = self.latest_ok.get(host) or self.latest.get(host) or {}
-        observed = host_record.get("observed", {})
-        pp_epoch = observed.get("puppet_last_run_epoch")
-        pp_success = observed.get("puppet_success")
-        pp_age_s = None
-        if pp_epoch is not None:
-            audit_ts = host_record.get("ts")
-            if audit_ts:
-                try:
-                    audit_dt = dt.datetime.fromisoformat(audit_ts)
-                    audit_epoch = int(audit_dt.timestamp())
-                    pp_age_s = max(audit_epoch - pp_epoch, 0)
-                except (ValueError, AttributeError):
-                    pass
-
-        return {
-            "host": host,
-            "values": values,
-            "ts_value": ts_value,
-            "tc_ts_value": tc_ts_value,
-            "tc_worker_data": tc_worker_data,
-            "uptime_s": uptime_s,
-            "tc_act_s": tc_act_s,
-            "tc_task_state": tc_task_state,
-            "pp_age_s": pp_age_s,
-            "pp_failed": pp_success is False,
-        }
-
     def _get_sort_key(self, hostname: str) -> tuple:
         """Extract sort key for a host based on current sort field.
 
@@ -589,168 +499,6 @@ class MonitorDisplay:
             github_refs=self.github_refs,
         )
         return values["os"]
-
-    def _draw_host_row(
-        self,
-        row: int,
-        *,
-        render_data: dict[str, Any],
-        columns: list[str],
-        widths: dict[str, int],
-        color_maps: dict[str, dict[str, int]],
-    ) -> None:
-        """Draw a single host row with appropriate coloring.
-
-        Args:
-            row: Screen row number to draw at
-            render_data: Pre-computed render data from _compute_row_render_data()
-            columns: Ordered list of columns to display
-            widths: Column name to width mapping
-            color_maps: Categorical color mappings from _prepare_categorical_colors()
-        """
-        values = render_data["values"]
-        ts_value = render_data["ts_value"]
-        tc_ts_value = render_data["tc_ts_value"]
-        uptime_s = render_data["uptime_s"]
-        tc_act_s = render_data["tc_act_s"]
-        tc_task_state = render_data["tc_task_state"]
-        pp_age_s = render_data["pp_age_s"]
-        pp_failed = render_data["pp_failed"]
-
-        sha_colors = color_maps["sha"]
-        vlt_sha_colors = color_maps["vlt_sha"]
-        role_colors = color_maps["role"]
-
-        row_cells = render_row_cells(values, columns=columns, widths=widths)
-        col = 0
-        for col_name, cell in zip(columns, row_cells):
-            if col_name != columns[0]:
-                self.safe_addstr(row, col, " | ")
-                col += 3
-            if col_name == "data":
-                # Color DATA based on the older of the two ages
-                audit_age_s = age_seconds(ts_value) if ts_value else None
-                tc_age_s = age_seconds(tc_ts_value) if tc_ts_value else None
-                # Use the older (larger) age for coloring
-                if audit_age_s is not None and tc_age_s is not None:
-                    max_age_s = max(audit_age_s, tc_age_s)
-                elif audit_age_s is not None:
-                    max_age_s = audit_age_s
-                elif tc_age_s is not None:
-                    max_age_s = tc_age_s
-                else:
-                    max_age_s = None
-                attr = self.colors.last_ok_attr(max_age_s)
-                self.safe_addstr(row, col, cell, attr)
-                col += len(cell)
-                continue
-            if col_name == "tc_act":
-                # Apply color based on TC last active time
-                attr = self.colors.tc_act_attr(tc_act_s)
-                self.safe_addstr(row, col, cell, attr)
-                col += len(cell)
-                continue
-            if col_name == "pp_last":
-                attr = self.colors.pp_last_attr(pp_age_s, failed=pp_failed)
-                self.safe_addstr(row, col, cell, attr)
-                col += len(cell)
-                continue
-            if col_name == "pp_match":
-                attr = self.colors.pp_match_attr(values.get("pp_match", "-"))
-                self.safe_addstr(row, col, cell, attr)
-                col += len(cell)
-                continue
-            if col_name == "healthy":
-                attr = self.colors.ro_health_attr(values.get("healthy", "-"))
-                self.safe_addstr(row, col, cell, attr)
-                col += len(cell)
-                continue
-            if col_name == "tc_quar":
-                attr = self.colors.tc_quar_attr(values.get("tc_quar", "-"))
-                self.safe_addstr(row, col, cell, attr)
-                col += len(cell)
-                continue
-            if col_name == "tc_j_sf":
-                # Color TC_T_DUR based on task completion state
-                attr = self.colors.tc_j_sf_attr(tc_task_state)
-                self.safe_addstr(row, col, cell, attr)
-                col += len(cell)
-                continue
-            if col_name == "uptime":
-                attr = self.colors.uptime_attr(uptime_s)
-            else:
-                attr = 0
-            if col_name == "role" and cell.startswith("# "):
-                marker_attr = role_colors.get(values.get("role", ""), 0)
-                self.safe_addstr(row, col, "#", marker_attr)
-                col += 1
-                self.safe_addstr(row, col, cell[1:])
-                col += len(cell) - 1
-            elif col_name == "sha":
-                # OVR_SHA: Color the 8-char SHA prefix
-                full_value = values.get("sha", "")
-                if full_value not in ("-", "?") and len(full_value) >= 8:
-                    marker_attr = sha_colors.get(values.get("sha", ""), 0)
-                    sha_prefix = cell[:8]
-                    rest = cell[8:]
-                    self.safe_addstr(row, col, sha_prefix, marker_attr)
-                    col += len(sha_prefix)
-                    if rest:
-                        self.safe_addstr(row, col, rest)
-                        col += len(rest)
-                else:
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
-            elif col_name == "vlt_sha":
-                # VLT_SHA: Color the humanhash (unchanged)
-                full_value = values.get("vlt_sha", "")
-                width = widths.get("vlt_sha", 0)
-                if (
-                    full_value
-                    and full_value not in ("-", "?")
-                    and " " in full_value
-                    and len(full_value) <= width
-                ):
-                    marker_attr = vlt_sha_colors.get(values.get("vlt_sha", ""), 0)
-                    # Find the humanhash position (before the parenthesis if present)
-                    # Format: "SHA humanhash (info)" or "SHA humanhash"
-                    paren_idx = full_value.find(" (")
-                    if paren_idx != -1:
-                        # Has info in parentheses - find space before humanhash
-                        before_paren = full_value[:paren_idx]
-                        split_idx = before_paren.rfind(" ")
-                        prefix = full_value[: split_idx + 1]
-                        humanhash = before_paren[split_idx + 1 :]
-                        info_part = full_value[paren_idx:]
-                        padding = " " * (width - len(full_value))
-                        self.safe_addstr(row, col, prefix)
-                        col += len(prefix)
-                        self.safe_addstr(row, col, humanhash, marker_attr)
-                        col += len(humanhash)
-                        self.safe_addstr(row, col, info_part)
-                        col += len(info_part)
-                        if padding:
-                            self.safe_addstr(row, col, padding)
-                            col += len(padding)
-                    else:
-                        # No info - use original logic
-                        split_idx = full_value.rfind(" ")
-                        prefix = full_value[: split_idx + 1]
-                        suffix = full_value[split_idx + 1 :]
-                        padding = " " * (width - len(full_value))
-                        self.safe_addstr(row, col, prefix)
-                        col += len(prefix)
-                        self.safe_addstr(row, col, suffix, marker_attr)
-                        col += len(suffix)
-                        if padding:
-                            self.safe_addstr(row, col, padding)
-                            col += len(padding)
-                else:
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
-            else:
-                self.safe_addstr(row, col, cell, attr)
-                col += len(cell)
 
     def draw_screen(self) -> None:
         self.stdscr.erase()
@@ -828,8 +576,16 @@ class MonitorDisplay:
             row = idx + header_rows
             if row >= metrics["height"]:
                 break
-            render_data = self._compute_row_render_data(host)
-            self._draw_host_row(
+            render_data = self.row_renderer.compute_row_render_data(
+                host,
+                latest=self.latest,
+                latest_ok=self.latest_ok,
+                tc_data=self.tc_data,
+                fqdn_suffix=self.fqdn_suffix,
+                sha_cache=self.sha_cache,
+                github_refs=self.github_refs,
+            )
+            self.row_renderer.draw_host_row(
                 row, render_data=render_data, columns=columns, widths=widths, color_maps=color_maps
             )
 
