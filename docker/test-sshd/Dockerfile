@@ -34,12 +34,12 @@ RUN mkdir -p /home/testuser/.ssh && \
 RUN echo "gecko-t-linux-talos" > /etc/puppet_role
 
 # Create puppet metadata JSON (use obviously-fake, non-hex values for SHAs)
+# Fields match what the audit script expects: git_branch, git_sha, etc.
 RUN mkdir -p /etc/puppet && \
     echo '{ \
-      "environment": "production", \
       "git_branch": "main", \
       "git_sha": "test_commit_sha_not_a_real_hex_value_placeholder_pad", \
-      "applied_timestamp": "2024-01-15T10:30:00Z" \
+      "ts": "2024-01-15T10:30:00Z" \
     }' > /etc/puppet/last_run_metadata.json
 
 # Create sample ronin_settings override file

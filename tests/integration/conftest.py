@@ -164,7 +164,7 @@ def sshd_container(
 
         # Start container with:
         # - Random host port mapped to container port 22
-        # - Volume mount for authorized_keys
+        # - Volume mount for authorized_keys to /tmp (entrypoint will copy and fix permissions)
         container_name = f"fleetroll-test-{int(time.time())}"
         subprocess.run(
             [
@@ -177,7 +177,7 @@ def sshd_container(
                 "-p",
                 f"{host_port}:22",
                 "-v",
-                f"{auth_keys_path}:/home/testuser/.ssh/authorized_keys:ro",
+                f"{auth_keys_path}:/tmp/authorized_keys_mount:ro",
                 docker_image,
             ],
             check=True,

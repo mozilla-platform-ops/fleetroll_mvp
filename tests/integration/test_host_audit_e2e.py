@@ -150,7 +150,7 @@ def test_audit_detects_override(
     meta = obs["override_meta"]
     assert meta["mode"] == "644"
     assert meta["owner"] == "testuser"
-    assert meta["size"] > 0
+    assert int(meta["size"]) > 0
 
 
 @pytest.mark.integration
@@ -242,12 +242,10 @@ def test_audit_parses_puppet_metadata_json(
     conn.close()
 
     obs = latest[host]["observed"]
-    puppet_meta = obs.get("puppet_metadata")
-
-    assert puppet_meta is not None
-    assert puppet_meta["environment"] == "production"
-    assert puppet_meta["git_branch"] == "main"
-    assert "test_commit_sha_not_a_real_hex_value" in puppet_meta["git_sha"]
+    # Puppet metadata is stored as individual fields, not a nested dict
+    assert obs.get("puppet_git_branch") == "main"
+    assert obs.get("puppet_git_sha") is not None
+    assert "test_commit_sha_not_a_real_hex_value" in obs["puppet_git_sha"]
 
 
 @pytest.mark.integration
