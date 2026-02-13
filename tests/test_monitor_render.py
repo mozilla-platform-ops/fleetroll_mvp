@@ -788,7 +788,7 @@ def test_pp_last_no_puppet_data():
 
 def test_header_layout_fits_one_line():
     """Left + right fit on one line."""
-    from fleetroll.commands.monitor.display import compute_header_layout
+    from fleetroll.commands.monitor.types import compute_header_layout
 
     left = "fleetroll 1.0.0"
     right = "hosts=5"
@@ -799,7 +799,7 @@ def test_header_layout_fits_one_line():
 
 def test_header_layout_requires_two_lines():
     """Left + right overlap requires two lines."""
-    from fleetroll.commands.monitor.display import compute_header_layout
+    from fleetroll.commands.monitor.types import compute_header_layout
 
     left = "fleetroll 1.0.0: very long status line with lots of information"
     right = "fqdn=example.com, hosts=100, updated=5m ago"
@@ -810,7 +810,7 @@ def test_header_layout_requires_two_lines():
 
 def test_header_layout_exactly_fits():
     """Exactly fits (left + 1 + right == usable_width) uses one line."""
-    from fleetroll.commands.monitor.display import compute_header_layout
+    from fleetroll.commands.monitor.types import compute_header_layout
 
     left = "a" * 20
     right = "b" * 29
@@ -821,7 +821,7 @@ def test_header_layout_exactly_fits():
 
 def test_header_layout_narrow_terminal():
     """Extremely narrow terminal uses two lines."""
-    from fleetroll.commands.monitor.display import compute_header_layout
+    from fleetroll.commands.monitor.types import compute_header_layout
 
     left = "fleetroll 1.0.0"
     right = "hosts=5"
@@ -981,7 +981,7 @@ def test_os_column_in_columns_list():
 
 def test_cycle_os_filter():
     """Test OS filter cycling: None -> L -> M -> None."""
-    from fleetroll.commands.monitor.display import cycle_os_filter
+    from fleetroll.commands.monitor.types import cycle_os_filter
 
     assert cycle_os_filter(None) == "L"
     assert cycle_os_filter("L") == "M"
@@ -990,7 +990,7 @@ def test_cycle_os_filter():
 
 def test_os_filter_label():
     """Test OS filter label conversion."""
-    from fleetroll.commands.monitor.display import os_filter_label
+    from fleetroll.commands.monitor.types import os_filter_label
 
     assert os_filter_label("L") == "Linux"
     assert os_filter_label("M") == "macOS"

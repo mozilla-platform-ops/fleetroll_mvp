@@ -5,9 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import sqlite3
 import time
-from collections.abc import Iterable
 from curses import error as curses_error
-from importlib.metadata import version as get_version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -15,11 +13,7 @@ if TYPE_CHECKING:
     from .cache import ShaInfoCache
 
 from ...utils import get_log_file_size
-from .colors import (
-    EXTENDED_COLORS,
-    FG_BG_COMBOS,
-    build_color_mapping,
-)
+from .curses_colors import CursesColors
 from .data import (
     age_seconds,
     build_row_values,
@@ -31,56 +25,10 @@ from .data import (
     resolve_last_ok_ts,
     strip_fqdn,
 )
-from .formatting import clip_cell, render_row_cells
-from .types import COLUMN_GUIDE_TEXT, FLEETROLL_MASCOT
-
-
-def compute_header_layout(left: str, right: str, usable_width: int) -> int:
-    """Compute the number of rows needed for the header.
-
-    Args:
-        left: Left side text
-        right: Right side text
-        usable_width: Available screen width
-
-    Returns:
-        Number of rows needed (1 or 2)
-    """
-    if usable_width > 0 and len(left) + 1 + len(right) > usable_width:
-        return 2
-    return 1
-
-
-def cycle_os_filter(current: str | None) -> str | None:
-    """Cycle OS filter: None -> 'L' -> 'M' -> None.
-
-    Args:
-        current: Current OS filter value
-
-    Returns:
-        Next OS filter value in cycle
-    """
-    if current is None:
-        return "L"
-    if current == "L":
-        return "M"
-    return None
-
-
-def os_filter_label(os_filter: str | None) -> str | None:
-    """Return human-readable label for OS filter, or None if no filter.
-
-    Args:
-        os_filter: OS filter value ("L", "M", or None)
-
-    Returns:
-        Human-readable label or None
-    """
-    if os_filter == "L":
-        return "Linux"
-    if os_filter == "M":
-        return "macOS"
-    return None
+from .formatting import render_row_cells
+from .header_renderer import HeaderInfo, HeaderRenderer
+from .help_popup import draw_help_popup
+from .types import cycle_os_filter
 
 
 class MonitorDisplay:
@@ -124,76 +72,10 @@ class MonitorDisplay:
         self.sort_field = "host"  # Current sort field: "host" or "role"
         self.show_only_overrides = False  # Filter to show only hosts with overrides
         self.os_filter: str | None = None  # OS filter: None=all, "L"=Linux, "M"=macOS
-        self.curses_mod = None
-        self.color_enabled = False
-        self.extended_colors = False
-        self.fleetroll_attr = 0
-        self.header_data_attr = 0
-        self.column_attr = 0
-        self.warning_attr = 0
-        self._init_curses()
+        self.colors = CursesColors(stdscr)
+        self.curses_mod = self.colors.curses_mod
+        self.header_renderer = HeaderRenderer(safe_addstr=self.safe_addstr, colors=self.colors)
         self.log_size_warnings = self._check_log_sizes()
-
-    def _init_curses(self) -> None:
-        try:
-            import curses
-
-            self.curses_mod = curses
-            curses.curs_set(0)
-            if curses.has_colors():
-                curses.start_color()
-                curses.use_default_colors()
-                curses.init_pair(1, curses.COLOR_CYAN, -1)
-                curses.init_pair(2, curses.COLOR_YELLOW, -1)
-                curses.init_pair(3, curses.COLOR_MAGENTA, -1)
-                curses.init_pair(4, curses.COLOR_GREEN, -1)
-                curses.init_pair(5, curses.COLOR_YELLOW, -1)
-                curses.init_pair(6, curses.COLOR_RED, -1)
-                curses.init_pair(7, curses.COLOR_BLUE, -1)
-                curses.init_pair(8, curses.COLOR_CYAN, -1)
-                curses.init_pair(9, curses.COLOR_GREEN, -1)
-                curses.init_pair(10, curses.COLOR_MAGENTA, -1)
-                curses.init_pair(11, curses.COLOR_YELLOW, -1)
-                curses.init_pair(12, curses.COLOR_RED, -1)
-                curses.init_pair(13, curses.COLOR_YELLOW, -1)
-                curses.init_pair(14, curses.COLOR_MAGENTA, -1)
-                curses.init_pair(15, curses.COLOR_WHITE, -1)
-                curses.init_pair(16, curses.COLOR_BLACK, -1)
-                curses.init_pair(17, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-                curses.init_pair(18, curses.COLOR_WHITE, curses.COLOR_BLACK)
-                # Extended 256 colors for more distinct palette (pairs 19-26)
-                if curses.COLORS >= 256:
-                    for i, (_, color_code) in enumerate(EXTENDED_COLORS, start=19):
-                        curses.init_pair(i, color_code, -1)
-                # High-contrast fg/bg combinations for extended palette (pairs 27+)
-                # Using shared FG_BG_COMBOS from colors module
-                curses_color_map = {
-                    "black": curses.COLOR_BLACK,
-                    "red": curses.COLOR_RED,
-                    "green": curses.COLOR_GREEN,
-                    "yellow": curses.COLOR_YELLOW,
-                    "blue": curses.COLOR_BLUE,
-                    "magenta": curses.COLOR_MAGENTA,
-                    "cyan": curses.COLOR_CYAN,
-                    "white": curses.COLOR_WHITE,
-                }
-                for i, (fg_name, bg_name, _) in enumerate(FG_BG_COMBOS, start=27):
-                    if i < curses.COLOR_PAIRS:
-                        fg = curses_color_map[fg_name]
-                        bg = curses_color_map[bg_name]
-                        curses.init_pair(i, fg, bg)
-                self.color_enabled = True
-                # Detect 256-color support (for future use)
-                if curses.COLORS >= 256:
-                    self.extended_colors = True
-            self.fleetroll_attr = curses.A_BOLD | (
-                curses.color_pair(1) if self.color_enabled else 0
-            )
-            self.header_data_attr = curses.color_pair(2) if self.color_enabled else 0
-            self.column_attr = curses.A_BOLD | (curses.color_pair(3) if self.color_enabled else 0)
-            self.warning_attr = curses.color_pair(5) if self.color_enabled else 0
-        except curses_error:
-            return
 
     def safe_addstr(self, row: int, col: int, text: str, attr: int = 0) -> None:
         try:
@@ -203,155 +85,6 @@ class MonitorDisplay:
                 self.stdscr.addstr(row, col, text)
         except curses_error:
             return
-
-    def threshold_color_attr(self, seconds_value: int | None, thresholds: tuple[int, int]) -> int:
-        """Color by thresholds: green if < thresholds[0], yellow if < thresholds[1], red otherwise.
-
-        Args:
-            seconds_value: Value in seconds
-            thresholds: (green_threshold, yellow_threshold) in seconds
-
-        Returns:
-            Color attribute for curses
-        """
-        if not self.color_enabled:
-            return 0
-        if seconds_value is None:
-            return 0
-        green_max, yellow_max = thresholds
-        if seconds_value < green_max:
-            return self.curses_mod.color_pair(4)  # GREEN
-        if seconds_value < yellow_max:
-            return self.curses_mod.color_pair(5)  # YELLOW
-        return self.curses_mod.color_pair(6)  # RED
-
-    def uptime_attr(self, seconds_value: int | None) -> int:
-        """Color uptime: green < 1h, yellow < 6h, red >= 6h."""
-        return self.threshold_color_attr(seconds_value, (60 * 60, 6 * 60 * 60))
-
-    def last_ok_attr(self, seconds_value: int | None) -> int:
-        """Color last_ok age: green < 5m, yellow < 30m, red >= 30m."""
-        return self.threshold_color_attr(seconds_value, (5 * 60, 30 * 60))
-
-    def tc_act_attr(self, seconds_value: int | None) -> int:
-        """Color TC last active: green < 5m, yellow < 1h, red >= 1h."""
-        return self.threshold_color_attr(seconds_value, (5 * 60, 60 * 60))
-
-    def pp_last_attr(self, seconds_value: int | None, *, failed: bool = False) -> int:
-        """Color PP_LAST: green < 1h (success), yellow < 6h (success), red >= 6h or failed."""
-        if not self.color_enabled:
-            return 0
-        if failed:
-            return self.curses_mod.color_pair(6)  # RED
-        return self.threshold_color_attr(seconds_value, (60 * 60, 6 * 60 * 60))
-
-    def pp_match_attr(self, value: str) -> int:
-        """Color PP_MATCH: green=Y, yellow=N, gray=-."""
-        if not self.color_enabled:
-            return 0
-        if value == "Y":
-            return self.curses_mod.color_pair(4)  # GREEN
-        if value == "N":
-            return self.curses_mod.color_pair(5)  # YELLOW
-        return 0  # gray/default for "-"
-
-    def ro_health_attr(self, value: str) -> int:
-        """Color RO_HEALTH: green=Y, red=N, gray=-."""
-        if not self.color_enabled:
-            return 0
-        if value == "Y":
-            return self.curses_mod.color_pair(4)  # GREEN
-        if value == "N":
-            return self.curses_mod.color_pair(6)  # RED
-        return 0  # gray/default for "-"
-
-    def tc_quar_attr(self, value: str) -> int:
-        """Color TC_QUAR: red=YES (quarantined), gray=-."""
-        if not self.color_enabled:
-            return 0
-        if value == "YES":
-            return self.curses_mod.color_pair(6)  # RED
-        return 0  # gray/default for "-"
-
-    def tc_j_sf_attr(self, task_state: str | None) -> int:
-        """Color TC_T_DUR based on task completion state.
-
-        Args:
-            task_state: TaskCluster task state (COMPLETED/EXCEPTION/FAILED/RUNNING/PENDING)
-
-        Returns:
-            Color attribute: green=completed, yellow=exception, red=failed, default=other
-        """
-        if not self.color_enabled:
-            return 0
-        if not task_state:
-            return 0
-        # TaskCluster returns state in uppercase
-        state_upper = task_state.upper()
-        if state_upper == "COMPLETED":
-            return self.curses_mod.color_pair(4)  # GREEN
-        if state_upper == "EXCEPTION":
-            return self.curses_mod.color_pair(5)  # YELLOW
-        if state_upper == "FAILED":
-            return self.curses_mod.color_pair(6)  # RED
-        return 0  # gray/default for running/pending/unknown
-
-    def build_color_map(
-        self,
-        values: Iterable[str],
-        *,
-        palette: list[int],
-        base_attr: int = 0,
-        seed: int = 0,
-    ) -> dict[str, int]:
-        """Build a color map for categorical values.
-
-        Uses two tiers (reversed colors removed to avoid terminal-dependent conflicts):
-        1. Basic colors from palette (14 colors)
-        2. High-contrast fg/bg combinations (19 pairs starting at 27)
-
-        Total capacity: 33 unique colors (sufficient for up to 33 unique values).
-
-        Adjacent seeds (0, 1, 2) are automatically spread out to maximize
-        visual distinction between columns.
-
-        Args:
-            values: Unique values to assign colors to
-            palette: List of color_pair() values for basic colors
-            base_attr: Base attribute to OR with all colors
-            seed: Column index (0, 1, 2...) - automatically spread for distinction
-
-        Returns:
-            Dictionary mapping value to curses attribute
-        """
-        if not self.color_enabled:
-            return {}
-
-        palette_size = len(palette)
-        total_capacity = palette_size + len(FG_BG_COMBOS)
-
-        # Use shared color mapping algorithm
-        index_mapping = build_color_mapping(
-            values,
-            total_capacity=total_capacity,
-            seed=seed,
-        )
-
-        # Convert color indices to curses attributes
-        result: dict[str, int] = {}
-        for value, color_index in index_mapping.items():
-            if color_index < palette_size:
-                # Tier 1: Basic colors from palette
-                attr = palette[color_index] | base_attr
-            else:
-                # Tier 2: High-contrast fg/bg combinations
-                fg_bg_idx = color_index - palette_size
-                pair_num = 27 + fg_bg_idx
-                attr = self.curses_mod.color_pair(pair_num) | base_attr
-
-            result[value] = attr
-
-        return result
 
     def handle_key(self, key: int, *, draw: bool = True) -> bool:
         """Handle a keypress. Returns True if we should exit.
@@ -639,98 +372,6 @@ class MonitorDisplay:
 
         return all_columns, labels, widths
 
-    def _prepare_categorical_colors(
-        self,
-        sorted_hosts: list[str],
-    ) -> dict[str, dict[str, int]]:
-        """Build color maps for categorical columns (role, sha, vlt_sha).
-
-        Args:
-            sorted_hosts: List of hostnames to analyze
-
-        Returns:
-            Dictionary mapping column name to color map:
-            {
-                "sha": {value: curses_attr, ...},
-                "vlt_sha": {value: curses_attr, ...},
-                "role": {value: curses_attr, ...}
-            }
-        """
-        sha_values = set()
-        vlt_sha_values = set()
-        role_values = set()
-        for host in sorted_hosts:
-            short_host = strip_fqdn(host)
-            tc_worker_data = self.tc_data.get(short_host)
-            values = build_row_values(
-                host,
-                self.latest.get(host),
-                last_ok=self.latest_ok.get(host),
-                tc_data=tc_worker_data,
-                fqdn_suffix=self.fqdn_suffix,
-                sha_cache=self.sha_cache,
-                github_refs=self.github_refs,
-            )
-            sha = values.get("sha", "")
-            vlt_sha = values.get("vlt_sha", "")
-            role = values.get("role", "")
-            if sha and sha not in ("-", "?"):
-                sha_values.add(sha)
-            if vlt_sha and vlt_sha not in ("-", "?"):
-                vlt_sha_values.add(vlt_sha)
-            if role and role not in ("-", "?", "missing"):
-                role_values.add(role)
-
-        # Use 14-color palette: 7 standard + 8 extended (if available)
-        # No reversed colors to avoid terminal-dependent conflicts
-        # Total: 14 base + 19 fg/bg = 33 unique colors
-        sha_palette = [
-            # Standard 7 colors
-            self.curses_mod.color_pair(7),  # blue
-            self.curses_mod.color_pair(8),  # cyan
-            self.curses_mod.color_pair(9),  # green
-            self.curses_mod.color_pair(10),  # magenta
-            self.curses_mod.color_pair(11),  # yellow
-            self.curses_mod.color_pair(6),  # red
-            self.curses_mod.color_pair(15),  # white
-        ]
-        # Add extended colors if 256-color terminal
-        if self.extended_colors:
-            sha_palette.extend(
-                [
-                    self.curses_mod.color_pair(19),  # bright-orange
-                    self.curses_mod.color_pair(20),  # bright-purple
-                    self.curses_mod.color_pair(21),  # hot-pink
-                    self.curses_mod.color_pair(22),  # teal
-                    self.curses_mod.color_pair(23),  # maroon
-                    self.curses_mod.color_pair(24),  # gold
-                    self.curses_mod.color_pair(25),  # forest-green
-                    self.curses_mod.color_pair(26),  # orange-red
-                ]
-            )
-        role_palette = [
-            self.curses_mod.color_pair(12),  # red
-            self.curses_mod.color_pair(13),  # yellow
-            self.curses_mod.color_pair(14),  # magenta
-            self.curses_mod.color_pair(7),  # blue
-            self.curses_mod.color_pair(8),  # cyan
-            self.curses_mod.color_pair(9),  # green
-            self.curses_mod.color_pair(10),  # magenta
-            self.curses_mod.color_pair(11),  # yellow
-        ]
-
-        sha_colors = self.build_color_map(sha_values, palette=sha_palette, seed=0)
-        vlt_sha_colors = self.build_color_map(vlt_sha_values, palette=sha_palette, seed=1)
-        role_colors = self.build_color_map(
-            role_values, palette=role_palette, base_attr=self.curses_mod.A_BOLD, seed=2
-        )
-
-        return {
-            "sha": sha_colors,
-            "vlt_sha": vlt_sha_colors,
-            "role": role_colors,
-        }
-
     def _compute_visible_columns(
         self,
         all_columns: list[str],
@@ -804,269 +445,6 @@ class MonitorDisplay:
             )
 
         return columns, scroll_indicator
-
-    def _draw_column_header(
-        self,
-        *,
-        labels: dict[str, str],
-        columns: list[str],
-        widths: dict[str, int],
-        header_row: int = 1,
-    ) -> None:
-        """Render the column header labels with separators.
-
-        Args:
-            labels: Column name to label text mapping
-            columns: Ordered list of columns to display
-            widths: Column name to width mapping
-            header_row: Row number for the column header (default 1)
-        """
-        # Colored asterisk attribute (yellow to stand out from magenta headers)
-        asterisk_attr = self.curses_mod.color_pair(2) if self.color_enabled else 0
-
-        header_parts = render_row_cells(
-            labels, columns=columns, widths=widths, include_marker=False
-        )
-        header_line = " | ".join(header_parts)
-        if " | " in header_line:
-            parts = header_line.split(" | ")
-            col = 0
-            for idx, part in enumerate(parts):
-                if idx:
-                    self.safe_addstr(header_row, col, " | ")
-                    col += 3
-                # Check if this part contains the sort indicator (strip padding first)
-                if " *" in part:
-                    # Find position of " *" and split there
-                    asterisk_pos = part.find(" *")
-                    base_part = part[:asterisk_pos]
-                    padding = part[asterisk_pos + 2 :]  # Everything after " *"
-                    self.safe_addstr(header_row, col, base_part, self.column_attr)
-                    col += len(base_part)
-                    self.safe_addstr(header_row, col, " *", asterisk_attr)
-                    col += 2
-                    if padding:
-                        self.safe_addstr(header_row, col, padding, self.column_attr)
-                        col += len(padding)
-                else:
-                    self.safe_addstr(header_row, col, part, self.column_attr)
-                    col += len(part)
-        # Single column case
-        elif " *" in header_line:
-            asterisk_pos = header_line.find(" *")
-            base_line = header_line[:asterisk_pos]
-            padding = header_line[asterisk_pos + 2 :]
-            self.safe_addstr(header_row, 0, base_line, self.column_attr)
-            self.safe_addstr(header_row, len(base_line), " *", asterisk_attr)
-            if padding:
-                self.safe_addstr(header_row, len(base_line) + 2, padding, self.column_attr)
-        else:
-            self.safe_addstr(header_row, 0, header_line, self.column_attr)
-
-    def _render_header_line(
-        self, text: str, *, row: int, is_right_side: bool = False, start_col: int = 0
-    ) -> None:
-        """Render a single header line with appropriate coloring.
-
-        Args:
-            text: The text to render
-            row: The row number to render on
-            is_right_side: Whether this is the right side (data) section
-            start_col: Starting column position (for right-alignment)
-        """
-        if is_right_side:
-            # Right side: color fqdn=/source= sections
-            right_start = "fqdn=" if "fqdn=" in text else "source="
-            if right_start in text:
-                # Handle log warnings on the right side
-                if self.log_size_warnings and "⚠ Large logs:" in text:
-                    # Split: warning | data
-                    if " | " in text:
-                        warning_part, data_part = text.split(" | ", 1)
-                        col = start_col
-                        # Write warning in yellow
-                        if warning_part:
-                            self.safe_addstr(row, col, warning_part, self.warning_attr)
-                            col += len(warning_part)
-                            self.safe_addstr(row, col, " | ")
-                            col += 3
-                        # Write data part
-                        if right_start in data_part:
-                            before_data, after_data = data_part.split(right_start, 1)
-                            self.safe_addstr(row, col, before_data)
-                            col += len(before_data)
-                            self.safe_addstr(row, col, right_start, self.header_data_attr)
-                            col += len(right_start)
-                            self.safe_addstr(row, col, after_data, self.header_data_attr)
-                        else:
-                            self.safe_addstr(row, col, data_part)
-                    else:
-                        self.safe_addstr(row, start_col, text)
-                else:
-                    # No warning, just color the data section
-                    left_part, right_part = text.rsplit(right_start, 1)
-                    self.safe_addstr(row, start_col, left_part)
-                    self.safe_addstr(
-                        row, start_col + len(left_part), right_start, self.header_data_attr
-                    )
-                    self.safe_addstr(
-                        row,
-                        start_col + len(left_part) + len(right_start),
-                        right_part,
-                        self.header_data_attr,
-                    )
-            else:
-                self.safe_addstr(row, start_col, text)
-        # Left side: color "fleetroll X.Y.Z"
-        elif text.startswith("fleetroll"):
-            colon_pos = text.find(":")
-            if colon_pos > 0:
-                fleetroll_with_version = text[:colon_pos]
-            else:
-                fleetroll_with_version = "fleetroll"
-            self.safe_addstr(row, 0, fleetroll_with_version, self.fleetroll_attr)
-            self.safe_addstr(row, len(fleetroll_with_version), text[len(fleetroll_with_version) :])
-        else:
-            self.safe_addstr(row, 0, text)
-
-    def _draw_top_header(
-        self,
-        *,
-        total_pages: int,
-        current_page: int,
-        scroll_indicator: str,
-        updated: str,
-        usable_width: int,
-        filtered_host_count: int | None = None,
-    ) -> int:
-        """Render the top information banner with metadata.
-
-        Args:
-            total_pages: Total number of pagination pages
-            current_page: Current page number (1-indexed)
-            scroll_indicator: Column scroll status text
-            updated: Human-readable last update time
-            usable_width: Available screen width
-
-        Returns:
-            Number of rows used by the header (1 or 2)
-        """
-        try:
-            ver = get_version("fleetroll")
-        except Exception:
-            ver = "?"
-        left = f"fleetroll {ver} [? for help] sort={self.sort_field}"
-        if self.show_only_overrides:
-            left = f"{left}, filter=overrides"
-        os_label = os_filter_label(self.os_filter)
-        if os_label is not None:
-            left = f"{left}, os={os_label}"
-        if total_pages > 1:
-            # Add page indicator with up/down arrows
-            arrows = ""
-            if current_page > 1:
-                arrows += "▲ "
-            if current_page < total_pages:
-                arrows += "▼"
-            page_indicator = f" [{arrows.strip()} {current_page}/{total_pages}]"
-            left = f"{left}{page_indicator}"
-        if scroll_indicator:
-            left = f"{left}{scroll_indicator}"
-
-        # Build right section with optional log size warning
-        fqdn_part = f"fqdn={self.fqdn_suffix}, " if self.fqdn_suffix else ""
-        if filtered_host_count is not None:
-            hosts_display = f"{filtered_host_count}/{len(self.hosts)}"
-        else:
-            hosts_display = str(len(self.hosts))
-        right = f"{fqdn_part}source={self.host_source}, hosts={hosts_display}, updated={updated}"
-        if self.log_size_warnings:
-            warnings_text = ", ".join(self.log_size_warnings)
-            right = f"⚠ Large logs: {warnings_text} (run 'fleetroll maintain') | {right}"
-        # Determine if we need two-line mode
-        use_two_lines = usable_width > 0 and len(left) + 1 + len(right) > usable_width
-
-        if use_two_lines:
-            # Two-line mode: left on row 0, right on row 1 (right-aligned)
-            # Truncate left only if it exceeds usable_width on its own
-            if len(left) > usable_width:
-                left = clip_cell(left, usable_width).rstrip()
-            # Truncate right only if it exceeds usable_width on its own
-            if len(right) > usable_width:
-                right = clip_cell(right, usable_width).rstrip()
-            # Render left on row 0, right on row 1 (right-aligned)
-            self._render_header_line(left, row=0)
-            right_start_col = max(usable_width - len(right), 0)
-            self._render_header_line(right, row=1, is_right_side=True, start_col=right_start_col)
-            return 2
-
-        # Single-line mode: fit both on one line
-        if usable_width > 0:
-            padding = max(usable_width - len(left) - len(right), 1)
-            header = f"{left}{' ' * padding}{right}"
-        else:
-            header = left
-
-        # Render single-line header on row 0
-        if header.startswith("fleetroll"):
-            # Color "fleetroll X.Y.Z" (find first colon to know where version ends)
-            colon_pos = header.find(":")
-            if colon_pos > 0:
-                fleetroll_with_version = header[:colon_pos]
-            else:
-                fleetroll_with_version = "fleetroll"
-            self.safe_addstr(0, 0, fleetroll_with_version, self.fleetroll_attr)
-            header_offset = len(fleetroll_with_version)
-            # Handle warning section separately if present
-            if self.log_size_warnings and "⚠ Large logs:" in header:
-                # Split into left part, warning, and data part
-                middle = header[header_offset:]  # After "fleetroll X.Y.Z"
-                if " | " in middle:
-                    warning_part, data_part = middle.split(" | ", 1)
-                    # Find where data starts (fqdn= or source=)
-                    right_start = "fqdn=" if "fqdn=" in data_part else "source="
-                    if right_start in data_part:
-                        before_data, after_data = data_part.split(right_start, 1)
-                        col = header_offset
-                        # Write left part before warning
-                        if warning_part:
-                            self.safe_addstr(0, col, before_data)
-                            col += len(before_data)
-                        # Write warning in yellow
-                        warning_text = warning_part.strip()
-                        if warning_text:
-                            self.safe_addstr(0, col, warning_text, self.warning_attr)
-                            col += len(warning_text)
-                            self.safe_addstr(0, col, " | ")
-                            col += 3
-                        # Write data part in header color
-                        self.safe_addstr(0, col, right_start, self.header_data_attr)
-                        col += len(right_start)
-                        self.safe_addstr(0, col, after_data, self.header_data_attr)
-                    else:
-                        self.safe_addstr(0, header_offset, middle)
-                else:
-                    self.safe_addstr(0, header_offset, middle)
-            else:
-                # No warning, original logic
-                right_start = "fqdn=" if "fqdn=" in header else "source="
-                if right_start in header:
-                    left_part, right_part = header[header_offset:].rsplit(right_start, 1)
-                    self.safe_addstr(0, header_offset, left_part)
-                    self.safe_addstr(
-                        0, header_offset + len(left_part), right_start, self.header_data_attr
-                    )
-                    self.safe_addstr(
-                        0,
-                        header_offset + len(left_part) + len(right_start),
-                        right_part,
-                        self.header_data_attr,
-                    )
-                else:
-                    self.safe_addstr(0, header_offset, header[header_offset:])
-        else:
-            self.safe_addstr(0, 0, header)
-        return 1
 
     def _compute_row_render_data(
         self,
@@ -1262,44 +640,44 @@ class MonitorDisplay:
                     max_age_s = tc_age_s
                 else:
                     max_age_s = None
-                attr = self.last_ok_attr(max_age_s)
+                attr = self.colors.last_ok_attr(max_age_s)
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "tc_act":
                 # Apply color based on TC last active time
-                attr = self.tc_act_attr(tc_act_s)
+                attr = self.colors.tc_act_attr(tc_act_s)
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "pp_last":
-                attr = self.pp_last_attr(pp_age_s, failed=pp_failed)
+                attr = self.colors.pp_last_attr(pp_age_s, failed=pp_failed)
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "pp_match":
-                attr = self.pp_match_attr(values.get("pp_match", "-"))
+                attr = self.colors.pp_match_attr(values.get("pp_match", "-"))
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "healthy":
-                attr = self.ro_health_attr(values.get("healthy", "-"))
+                attr = self.colors.ro_health_attr(values.get("healthy", "-"))
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "tc_quar":
-                attr = self.tc_quar_attr(values.get("tc_quar", "-"))
+                attr = self.colors.tc_quar_attr(values.get("tc_quar", "-"))
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "tc_j_sf":
                 # Color TC_T_DUR based on task completion state
-                attr = self.tc_j_sf_attr(tc_task_state)
+                attr = self.colors.tc_j_sf_attr(tc_task_state)
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "uptime":
-                attr = self.uptime_attr(uptime_s)
+                attr = self.colors.uptime_attr(uptime_s)
             else:
                 attr = 0
             if col_name == "role" and cell.startswith("# "):
@@ -1401,7 +779,17 @@ class MonitorDisplay:
         filtered_count = (
             len(sorted_hosts) if (self.show_only_overrides or self.os_filter is not None) else None
         )
-        header_rows = self._draw_top_header(
+        header_info = HeaderInfo(
+            sort_field=self.sort_field,
+            show_only_overrides=self.show_only_overrides,
+            os_filter=self.os_filter,
+            fqdn_suffix=self.fqdn_suffix,
+            host_source=self.host_source,
+            total_hosts=len(self.hosts),
+            log_size_warnings=self.log_size_warnings,
+        )
+        header_rows = self.header_renderer.draw_top_header(
+            header_info=header_info,
             total_pages=metrics["total_pages"],
             current_page=metrics["current_page"],
             scroll_indicator=scroll_indicator,
@@ -1409,7 +797,7 @@ class MonitorDisplay:
             usable_width=metrics["usable_width"],
             filtered_host_count=filtered_count,
         )
-        self._draw_column_header(
+        self.header_renderer.draw_column_header(
             labels=labels, columns=columns, widths=widths, header_row=header_rows
         )
 
@@ -1419,7 +807,15 @@ class MonitorDisplay:
             page_size = max(page_size - 1, 0)
 
         # Prepare categorical colors
-        color_maps = self._prepare_categorical_colors(all_hosts_sorted)
+        color_maps = self.colors.prepare_categorical_colors(
+            all_hosts_sorted,
+            latest=self.latest,
+            latest_ok=self.latest_ok,
+            tc_data=self.tc_data,
+            fqdn_suffix=self.fqdn_suffix,
+            sha_cache=self.sha_cache,
+            github_refs=self.github_refs,
+        )
 
         host_slice = (
             sorted_hosts[self.offset :]
@@ -1440,96 +836,7 @@ class MonitorDisplay:
         # Refresh main screen first, then draw help popup on top
         if self.show_help:
             self.stdscr.noutrefresh()
-            self.draw_help_popup()
+            draw_help_popup(self.stdscr, self.curses_mod, color_enabled=self.colors.color_enabled)
             self.curses_mod.doupdate()
         else:
             self.stdscr.refresh()
-
-    def draw_help_popup(self) -> None:
-        """Draw a centered help popup with the column guide."""
-        if not self.curses_mod:
-            return
-
-        height, width = self.stdscr.getmaxyx()
-
-        # Combine mascot, version, and help text
-        try:
-            ver = get_version("fleetroll")
-        except Exception:
-            ver = "?"
-        version_line = f"fleetroll v{ver}"
-        mascot_with_version = FLEETROLL_MASCOT + [version_line]
-        all_lines = mascot_with_version + [""] + COLUMN_GUIDE_TEXT.strip().split("\n")
-        mascot_line_count = len(mascot_with_version)
-
-        # Add padding: 2 chars horizontal, 1 line vertical
-        h_pad = 2
-        v_pad = 1
-
-        # Calculate popup dimensions
-        content_width = max(len(line) for line in all_lines)
-        popup_width = content_width + (h_pad * 2)
-        popup_height = len(all_lines) + (v_pad * 2)
-
-        # Center the popup
-        start_y = max((height - popup_height) // 2, 0)
-        start_x = max((width - popup_width) // 2, 0)
-
-        # Clip to screen (leave room for border)
-        if start_y + popup_height + 2 > height:
-            popup_height = max(height - start_y - 2, 1)
-        if start_x + popup_width + 2 > width:
-            popup_width = max(width - start_x - 2, 10)
-
-        # Create a window for the popup with border
-        try:
-            popup_win = self.curses_mod.newwin(popup_height + 2, popup_width + 2, start_y, start_x)
-        except curses_error:
-            return
-
-        # Get attributes for popup (black on white - pair 18)
-        popup_attr = (
-            self.curses_mod.color_pair(18) if self.color_enabled else self.curses_mod.A_REVERSE
-        )
-        # Yellow text on white background (color pair 17)
-        mascot_attr = (
-            self.curses_mod.color_pair(17) if self.color_enabled else self.curses_mod.A_REVERSE
-        )
-
-        # Fill background and draw border using curses built-in
-        popup_win.bkgd(" ", popup_attr)
-        popup_win.border()
-
-        # Draw content lines with padding
-        current_row = v_pad + 1  # Start after border and top padding
-        max_content_rows = popup_height - (v_pad * 2)
-
-        for i, line in enumerate(all_lines[:max_content_rows]):
-            if current_row >= popup_height + 1:
-                break
-
-            # Center mascot lines, left-align others
-            if i < mascot_line_count:
-                padding_needed = content_width - len(line)
-                left_pad = padding_needed // 2
-                right_pad = padding_needed - left_pad
-                padded = " " * h_pad + " " * left_pad + line + " " * right_pad + " " * h_pad
-            else:
-                padded = " " * h_pad + line.ljust(content_width) + " " * h_pad
-
-            # Clip if too long
-            if len(padded) > popup_width:
-                padded = padded[:popup_width]
-
-            # Draw content with appropriate attribute
-            try:
-                if i < mascot_line_count:
-                    popup_win.addstr(current_row, 1, padded, mascot_attr)
-                else:
-                    popup_win.addstr(current_row, 1, padded, popup_attr)
-            except curses_error:
-                pass
-
-            current_row += 1
-
-        popup_win.noutrefresh()
