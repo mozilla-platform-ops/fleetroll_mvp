@@ -101,6 +101,17 @@ uv sync
 # the `uv run` from fleetroll commands (below and in general).
 ```
 
+### Optional: SSH short hostname expansion
+
+Host list files support a `# fqdn:` directive that auto-expands short hostnames, but when targeting a single host on the command line you need the full FQDN. To allow using short names like `t-linux64-ms-001` directly, add a match block to `~/.ssh/config`:
+
+```ssh-config
+Host t-linux64-ms-* macmini-*
+    HostName %h.test.releng.mdc1.mozilla.com
+```
+
+This tells SSH to append the domain suffix to any matching short hostname.
+
 
 ## Usage
 
