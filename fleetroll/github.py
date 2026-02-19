@@ -139,6 +139,12 @@ def fetch_branch_shas(owner: str, repo: str) -> list[dict[str, str]]:
 
         return results
 
+    except requests.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            logger.warning("Repo not found: %s/%s (skipping)", owner, repo)
+        else:
+            logger.exception("Failed to fetch branches for %s/%s", owner, repo)
+        return []
     except requests.RequestException:
         logger.exception("Failed to fetch branches for %s/%s", owner, repo)
         return []
