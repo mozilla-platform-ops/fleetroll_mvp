@@ -250,6 +250,41 @@ class TestParseHostList:
         result = parse_host_list(f)
         assert result == ["host1", "host2"]
 
+    def test_fqdn_directive_appends_suffix(self, tmp_dir: Path):
+        """Short hostnames get the fqdn suffix appended."""
+        f = tmp_dir / "hosts.list"
+        f.write_text("# fqdn: .example.com\nhost1\nhost2\n")
+        result = parse_host_list(f)
+        assert result == ["host1.example.com", "host2.example.com"]
+
+    def test_fqdn_directive_skips_fqdn_hosts(self, tmp_dir: Path):
+        """Hosts that already contain a dot are left unchanged."""
+        f = tmp_dir / "hosts.list"
+        f.write_text("# fqdn: .example.com\nhost1.other.com\nhost2.other.com\n")
+        result = parse_host_list(f)
+        assert result == ["host1.other.com", "host2.other.com"]
+
+    def test_fqdn_directive_mixed(self, tmp_dir: Path):
+        """Mix of short and FQDN hosts: only short ones get the suffix."""
+        f = tmp_dir / "hosts.list"
+        f.write_text("# fqdn: .example.com\nshorthost\nfull.other.com\n")
+        result = parse_host_list(f)
+        assert result == ["shorthost.example.com", "full.other.com"]
+
+    def test_fqdn_directive_without_leading_dot(self, tmp_dir: Path):
+        """Suffix without leading dot is normalized to include one."""
+        f = tmp_dir / "hosts.list"
+        f.write_text("# fqdn: example.com\nhost1\n")
+        result = parse_host_list(f)
+        assert result == ["host1.example.com"]
+
+    def test_no_fqdn_directive_unchanged(self, tmp_dir: Path):
+        """Without fqdn directive, existing behavior is unaffected."""
+        f = tmp_dir / "hosts.list"
+        f.write_text("host1\nhost2.example.com\n")
+        result = parse_host_list(f)
+        assert result == ["host1", "host2.example.com"]
+
 
 class TestLooksLikeHost:
     """Tests for looks_like_host function."""

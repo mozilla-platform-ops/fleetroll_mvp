@@ -136,18 +136,32 @@ def is_host_file(host_arg: str) -> bool:
 
 
 def parse_host_list(file_path: Path) -> list[str]:
-    """Parse host list file. One host per line, ignore comments (#) and blank lines."""
+    """Parse host list file. One host per line, ignore comments (#) and blank lines.
+
+    Supports optional ``# fqdn: .suffix`` directive: short hostnames (no dots)
+    get the suffix appended automatically.
+    """
     if not (file_path.exists() and file_path.is_file()):
         raise FleetRollError(f"Host list file not found: {file_path}")
+    fqdn_suffix: str | None = None
     hosts = []
     with file_path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if not line or line.startswith("#"):
+            if not line:
+                continue
+            if line.startswith("#"):
+                m = re.match(r"^#\s*fqdn:\s*(\S+)", line)
+                if m:
+                    fqdn_suffix = m.group(1)
+                    if not fqdn_suffix.startswith("."):
+                        fqdn_suffix = "." + fqdn_suffix
                 continue
             hosts.append(line)
     if not hosts:
         raise FleetRollError(f"No valid hosts found in {file_path}")
+    if fqdn_suffix:
+        hosts = [h + fqdn_suffix if "." not in h else h for h in hosts]
     return hosts
 
 
