@@ -53,7 +53,7 @@ For background on the puppet lifecycle in our environement, see [docs/puppet-exe
 
 Fleetroll uses a puppet state metadata file for ground-truth tracking of what puppet has actually applied on each host. This eliminates the need for complex timestamp-based heuristics when verifying rollout health.
 
-**Location**: `/etc/puppet/last_run_metadata.json` (both Linux and macOS)
+**Location**: `/etc/puppet/last_run_metadata.json` (Linux), `/opt/puppet_environments/last_run_metadata.json` (macOS)
 
 **What it does**:
 - Written automatically by the puppet wrapper script after each run

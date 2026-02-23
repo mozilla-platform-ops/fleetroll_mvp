@@ -180,7 +180,11 @@ fi
 # Note: macOS hosts in this environment don't generate Puppet's standard YAML state files
 # (last_run_report.yaml or last_run_summary.yaml) due to how puppet is invoked via boot script.
 # macOS hosts require the JSON state file to be deployed for puppet run detection.
-pp_json_file="/etc/puppet/last_run_metadata.json"
+if [ "$os_type" = "Darwin" ]; then
+  pp_json_file="/opt/puppet_environments/last_run_metadata.json"
+else
+  pp_json_file="/etc/puppet/last_run_metadata.json"
+fi
 if sudo -n test -e "$pp_json_file" 2>/dev/null; then
   # Read JSON state file and base64 encode it (handles newlines and any formatting)
   pp_json_b64=$(sudo -n cat "$pp_json_file" 2>/dev/null | base64 | tr -d '\\n' || true)

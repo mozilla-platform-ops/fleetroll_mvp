@@ -20,7 +20,7 @@ Override Set/Unset → Puppet Ran (after change) → Puppet Succeeded → TC_ACT
 
 The puppet wrapper script writes ground-truth state after each run:
 
-**Location**: `/etc/puppet/last_run_metadata.json` (both Linux and macOS)
+**Location**: `/etc/puppet/last_run_metadata.json` (Linux), `/opt/puppet_environments/last_run_metadata.json` (macOS)
 
 **Format**: JSON with these key fields:
 - `ts` - ISO 8601 timestamp when puppet completed

@@ -25,9 +25,7 @@ Have the puppet wrapper script write out a state file with the actual applied st
 
 ### Puppet State Metadata File
 
-**Location**: `/etc/puppet/last_run_metadata.json`
-- Same path for both Linux and macOS
-- Uses existing `/etc/puppet/` directory (already present for ronin_settings)
+**Location**: `/etc/puppet/last_run_metadata.json` (Linux), `/opt/puppet_environments/last_run_metadata.json` (macOS)
 - Generic name (no "fleetroll" reference) - any tool can read it
 - World-readable (0644) for SSH access
 
