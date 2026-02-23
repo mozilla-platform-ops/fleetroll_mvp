@@ -307,9 +307,9 @@ def debug_host_script(
 )
 @click.option(
     "--group",
-    default="root",
+    default="auto",
     show_default=True,
-    help="File group.",
+    help="File group. 'auto' uses wheel on macOS, root on Linux.",
 )
 @click.option(
     "--no-backup",
@@ -401,9 +401,9 @@ def host_set_override(
 )
 @click.option(
     "--group",
-    default="root",
+    default="auto",
     show_default=True,
-    help="File group.",
+    help="File group. 'auto' uses wheel on macOS, root on Linux.",
 )
 @click.option(
     "--no-backup",

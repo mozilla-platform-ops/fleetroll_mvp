@@ -330,7 +330,8 @@ def remote_set_script(
 ) -> str:
     """Generate remote shell script for setting override file."""
     m = shlex.quote(mode)
-    og = shlex.quote(f"{owner}:{group}")
+    own = shlex.quote(owner)
+    grp = shlex.quote(group)
     b = "true" if backup else "false"
     suf = shlex.quote(backup_suffix)
     # stdin is the desired file contents
@@ -353,6 +354,18 @@ if [ "$os_type" = "Darwin" ]; then
 else
   op="/etc/puppet/ronin_settings"
 fi
+
+# Resolve owner and group (auto group = wheel on Darwin, root on Linux)
+own={own}
+grp={grp}
+if [ "$grp" = "auto" ]; then
+  if [ "$os_type" = "Darwin" ]; then
+    grp="wheel"
+  else
+    grp="root"
+  fi
+fi
+
 dir=$(dirname "$op")
 tmp=$(sudo -n mktemp "$dir/.ronin_settings.tmp.XXXXXX")
 
@@ -361,7 +374,7 @@ sudo -n tee "$tmp" >/dev/null
 
 # Normalize perms/ownership
 sudo -n chmod {m} "$tmp"
-sudo -n chown {og} "$tmp"
+sudo -n chown "$own:$grp" "$tmp"
 
 # Check if content is identical
 content_changed=1
@@ -374,7 +387,7 @@ fi
 if [ "$content_changed" = "0" ]; then
   # Content identical - just ensure perms/ownership are correct
   sudo -n chmod {m} "$op"
-  sudo -n chown {og} "$op"
+  sudo -n chown "$own:$grp" "$op"
   echo "CONTENT_CHANGED=0"
 else
   # Content changed - backup if requested, then replace
@@ -405,7 +418,8 @@ def remote_set_vault_script(
 ) -> str:
     """Generate remote shell script for setting vault.yaml file."""
     m = shlex.quote(mode)
-    og = shlex.quote(f"{owner}:{group}")
+    own = shlex.quote(owner)
+    grp = shlex.quote(group)
     b = "true" if backup else "false"
     suf = shlex.quote(backup_suffix)
     script = f"""
@@ -420,6 +434,17 @@ else
   vp="/root/vault.yaml"
 fi
 
+# Resolve owner and group (auto group = wheel on Darwin, root on Linux)
+own={own}
+grp={grp}
+if [ "$grp" = "auto" ]; then
+  if [ "$os_type" = "Darwin" ]; then
+    grp="wheel"
+  else
+    grp="root"
+  fi
+fi
+
 dir=$(dirname "$vp")
 tmp=$(sudo -n mktemp "$dir/.vault.tmp.XXXXXX")
 
@@ -428,7 +453,7 @@ sudo -n tee "$tmp" >/dev/null
 
 # Normalize perms/ownership
 sudo -n chmod {m} "$tmp"
-sudo -n chown {og} "$tmp"
+sudo -n chown "$own:$grp" "$tmp"
 
 # Check if content is identical
 content_changed=1
@@ -441,7 +466,7 @@ fi
 if [ "$content_changed" = "0" ]; then
   # Content identical - just ensure perms/ownership are correct
   sudo -n chmod {m} "$vp"
-  sudo -n chown {og} "$vp"
+  sudo -n chown "$own:$grp" "$vp"
   echo "CONTENT_CHANGED=0"
 else
   # Content changed - backup if requested, then replace

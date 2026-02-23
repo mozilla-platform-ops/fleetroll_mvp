@@ -14,6 +14,8 @@ DEFAULT_PUPPET_LAST_RUN_PATH = "/opt/puppetlabs/puppet/cache/state/last_run_repo
 OSX_OVERRIDE_PATH = "/opt/puppet_environments/ronin_settings"
 # OSX_ROLE_PATH: same as Linux (/etc/puppet_role)
 OSX_VAULT_PATH = "/var/root/vault.yaml"
+# On macOS, the default group for override/vault files is "wheel" (not "root")
+OSX_DEFAULT_GROUP = "wheel"
 # OSX_PUPPET_DONE_PATH: not used on OS X yet
 OSX_PUPPET_LAST_RUN_PATH = "TBD"
 

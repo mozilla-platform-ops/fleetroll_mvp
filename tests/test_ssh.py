@@ -205,7 +205,20 @@ class TestRemoteSetScript:
             backup_suffix="suffix",
         )
         assert "chown" in script
-        assert "nobody:nogroup" in script
+        assert "nobody" in script
+        assert "nogroup" in script
+
+    def test_auto_group_resolves_by_os(self):
+        """Auto group resolves to wheel on Darwin, root on Linux."""
+        script = remote_set_script(
+            mode="0644",
+            owner="root",
+            group="auto",
+            backup=False,
+            backup_suffix="suffix",
+        )
+        assert "wheel" in script
+        assert "Darwin" in script
 
     def test_uses_tee_for_stdin(self):
         """Script uses tee to write stdin to temp file."""
