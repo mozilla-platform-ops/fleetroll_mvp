@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from fleetroll.cli import cli, setup_logging
+from fleetroll.constants import AUDIT_FILE_NAME, DB_FILE_NAME
 
 
 @pytest.fixture
@@ -243,3 +244,146 @@ class TestCliLogging:
                 logger.removeHandler(handler)
             for handler in original_handlers:
                 logger.addHandler(handler)
+
+
+class TestCliMissingHelp:
+    """--help smoke tests for commands not yet covered."""
+
+    def test_maintain_help(self, runner: CliRunner):
+        """maintain --help shows command options."""
+        result = runner.invoke(cli, ["maintain", "--help"])
+        assert result.exit_code == 0
+        assert "--confirm" in result.output
+        assert "--force" in result.output
+
+    def test_tc_fetch_help(self, runner: CliRunner):
+        """tc-fetch --help shows command options."""
+        result = runner.invoke(cli, ["tc-fetch", "--help"])
+        assert result.exit_code == 0
+        assert "--verbose" in result.output
+        assert "--quiet" in result.output
+
+    def test_gh_fetch_help(self, runner: CliRunner):
+        """gh-fetch --help shows command options."""
+        result = runner.invoke(cli, ["gh-fetch", "--help"])
+        assert result.exit_code == 0
+        assert "--quiet" in result.output
+
+    def test_host_monitor_help(self, runner: CliRunner):
+        """host-monitor --help shows command options."""
+        result = runner.invoke(cli, ["host-monitor", "--help"])
+        assert result.exit_code == 0
+        assert "--once" in result.output
+        assert "--sort" in result.output
+
+    def test_show_override_help(self, runner: CliRunner):
+        """show-override --help shows command options."""
+        result = runner.invoke(cli, ["show-override", "--help"])
+        assert result.exit_code == 0
+        assert "--audit-log" in result.output
+
+
+class TestCliMutualExclusion:
+    """Tests for mutually exclusive flags."""
+
+    def test_host_audit_verbose_and_quiet_rejected(self, runner: CliRunner):
+        """host-audit rejects --verbose and --quiet together."""
+        result = runner.invoke(cli, ["host-audit", "somehost", "--verbose", "--quiet"])
+        assert result.exit_code != 0
+
+    def test_tc_fetch_verbose_and_quiet_rejected(self, runner: CliRunner):
+        """tc-fetch rejects --verbose and --quiet together."""
+        result = runner.invoke(cli, ["tc-fetch", "somehost", "--verbose", "--quiet"])
+        assert result.exit_code != 0
+
+
+class TestMaintainCommand:
+    """Tests for the maintain command via CliRunner."""
+
+    def _audit_log_arg(self, tmp_path: Path) -> str:
+        """Return the --audit-log value pointing into tmp_path."""
+        return str(tmp_path / AUDIT_FILE_NAME)
+
+    def test_dry_run_no_files(self, runner: CliRunner, tmp_path: Path):
+        """maintain without --confirm prints dry-run header; skips missing files."""
+        result = runner.invoke(cli, ["maintain", "--audit-log", self._audit_log_arg(tmp_path)])
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+        assert "Run again with --confirm" in result.output
+        # Both files are absent
+        assert f"SKIP {AUDIT_FILE_NAME}" in result.output
+        assert f"SKIP {DB_FILE_NAME}" in result.output
+
+    def test_dry_run_small_file_skipped(self, runner: CliRunner, tmp_path: Path):
+        """maintain skips files below the 100 MB threshold without --force."""
+        audit = tmp_path / AUDIT_FILE_NAME
+        audit.write_text("small content")
+        result = runner.invoke(cli, ["maintain", "--audit-log", self._audit_log_arg(tmp_path)])
+        assert result.exit_code == 0
+        assert "below" in result.output
+        assert "threshold" in result.output
+
+    def test_dry_run_force_would_rotate(self, runner: CliRunner, tmp_path: Path):
+        """maintain --force reports it would rotate the audit log (dry-run)."""
+        audit = tmp_path / AUDIT_FILE_NAME
+        audit.write_text("content")
+        result = runner.invoke(
+            cli, ["maintain", "--audit-log", self._audit_log_arg(tmp_path), "--force"]
+        )
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+        assert "Would rotate" in result.output
+        # File should still exist — dry run does not modify it
+        assert audit.exists()
+
+    def test_confirm_force_rotates_audit_log(self, runner: CliRunner, tmp_path: Path):
+        """maintain --confirm --force actually renames the audit log."""
+        audit = tmp_path / AUDIT_FILE_NAME
+        audit.write_text("content to rotate")
+        result = runner.invoke(
+            cli,
+            ["maintain", "--audit-log", self._audit_log_arg(tmp_path), "--confirm", "--force"],
+        )
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        # Original file is gone; an archive was created
+        assert not audit.exists()
+        archives = list(tmp_path.glob(f"{AUDIT_FILE_NAME}.*"))
+        assert len(archives) == 1
+
+    def test_confirm_compacts_database(self, runner: CliRunner, tmp_path: Path):
+        """maintain --confirm compacts the SQLite database when it exists."""
+        from fleetroll.db import init_db
+
+        db_path = tmp_path / DB_FILE_NAME
+        init_db(db_path)
+        result = runner.invoke(
+            cli,
+            ["maintain", "--audit-log", self._audit_log_arg(tmp_path), "--confirm", "--force"],
+        )
+        assert result.exit_code == 0
+        assert f"OK {DB_FILE_NAME}" in result.output
+        assert "compacted" in result.output
+
+    def test_confirm_no_files_rotated_summary(self, runner: CliRunner, tmp_path: Path):
+        """maintain --confirm with no files to rotate shows appropriate summary."""
+        from fleetroll.db import init_db
+
+        db_path = tmp_path / DB_FILE_NAME
+        init_db(db_path)
+        result = runner.invoke(
+            cli, ["maintain", "--audit-log", self._audit_log_arg(tmp_path), "--confirm"]
+        )
+        assert result.exit_code == 0
+        assert "No files rotated" in result.output
+
+    def test_confirm_rotated_summary(self, runner: CliRunner, tmp_path: Path):
+        """maintain --confirm with a rotated file shows rotated count in summary."""
+        audit = tmp_path / AUDIT_FILE_NAME
+        audit.write_text("content")
+        result = runner.invoke(
+            cli,
+            ["maintain", "--audit-log", self._audit_log_arg(tmp_path), "--confirm", "--force"],
+        )
+        assert result.exit_code == 0
+        assert "1 file(s) rotated" in result.output
