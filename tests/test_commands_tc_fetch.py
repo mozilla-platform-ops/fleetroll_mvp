@@ -137,129 +137,118 @@ class TestFormatTcFetchQuiet:
 class TestGetHostRolesBulk:
     """Tests for get_host_roles_bulk function."""
 
-    def test_finds_roles_for_hosts(self, tmp_path, temp_db):
+    def test_finds_roles_for_hosts(self, db_conn):
         """Should return roles for hosts from SQLite."""
-        from fleetroll.db import get_connection, insert_host_observation
+        from fleetroll.db import insert_host_observation
 
-        conn = get_connection(temp_db)
         insert_host_observation(
-            conn,
+            db_conn,
             {"host": "host1", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "gecko_t_linux"}},
         )
         insert_host_observation(
-            conn,
+            db_conn,
             {"host": "host2", "ts": "2024-01-15T11:00:00Z", "observed": {"role": "gecko_t_win"}},
         )
-        conn.commit()
+        db_conn.commit()
 
-        result = get_host_roles_bulk({"host1", "host2"}, conn)
+        result = get_host_roles_bulk({"host1", "host2"}, db_conn)
 
         assert result["host1"] == "gecko_t_linux"
         assert result["host2"] == "gecko_t_win"
 
-    def test_uses_most_recent_role(self, tmp_path, temp_db):
+    def test_uses_most_recent_role(self, db_conn):
         """Should use most recent role when multiple records exist."""
-        from fleetroll.db import get_connection, insert_host_observation
+        from fleetroll.db import insert_host_observation
 
-        conn = get_connection(temp_db)
         insert_host_observation(
-            conn, {"host": "host1", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "old_role"}}
+            db_conn,
+            {"host": "host1", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "old_role"}},
         )
         insert_host_observation(
-            conn, {"host": "host1", "ts": "2024-01-15T12:00:00Z", "observed": {"role": "new_role"}}
+            db_conn,
+            {"host": "host1", "ts": "2024-01-15T12:00:00Z", "observed": {"role": "new_role"}},
         )
-        conn.commit()
+        db_conn.commit()
 
-        result = get_host_roles_bulk({"host1"}, conn)
+        result = get_host_roles_bulk({"host1"}, db_conn)
         assert result["host1"] == "new_role"
 
-    def test_returns_none_for_missing_hosts(self, tmp_path, temp_db):
+    def test_returns_none_for_missing_hosts(self, db_conn):
         """Should return None for hosts not in SQLite."""
-        from fleetroll.db import get_connection, insert_host_observation
+        from fleetroll.db import insert_host_observation
 
-        conn = get_connection(temp_db)
         insert_host_observation(
-            conn, {"host": "host1", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "some_role"}}
+            db_conn,
+            {"host": "host1", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "some_role"}},
         )
-        conn.commit()
+        db_conn.commit()
 
-        result = get_host_roles_bulk({"host1", "host2", "host3"}, conn)
+        result = get_host_roles_bulk({"host1", "host2", "host3"}, db_conn)
         assert result["host1"] == "some_role"
         assert result["host2"] is None
         assert result["host3"] is None
 
-    def test_ignores_records_without_role(self, tmp_path, temp_db):
+    def test_ignores_records_without_role(self, db_conn):
         """Should ignore records without role data."""
-        from fleetroll.db import get_connection, insert_host_observation
+        from fleetroll.db import insert_host_observation
 
-        conn = get_connection(temp_db)
         insert_host_observation(
-            conn, {"host": "host1", "ts": "2024-01-15T10:00:00Z", "observed": {}}
+            db_conn, {"host": "host1", "ts": "2024-01-15T10:00:00Z", "observed": {}}
         )
         insert_host_observation(
-            conn,
+            db_conn,
             {"host": "host1", "ts": "2024-01-15T11:00:00Z", "observed": {"role": "valid_role"}},
         )
-        conn.commit()
+        db_conn.commit()
 
-        result = get_host_roles_bulk({"host1"}, conn)
+        result = get_host_roles_bulk({"host1"}, db_conn)
         assert result["host1"] == "valid_role"
 
-    def test_empty_audit_log(self, tmp_path, temp_db):
+    def test_empty_audit_log(self, db_conn):
         """Should return all None for empty database."""
-        from fleetroll.db import get_connection
-
-        conn = get_connection(temp_db)
-
-        result = get_host_roles_bulk({"host1", "host2"}, conn)
+        result = get_host_roles_bulk({"host1", "host2"}, db_conn)
         assert result["host1"] is None
         assert result["host2"] is None
 
-    def test_filters_by_requested_hosts(self, tmp_path, temp_db):
+    def test_filters_by_requested_hosts(self, db_conn):
         """Should only process requested hosts, not all hosts in database."""
-        from fleetroll.db import get_connection, insert_host_observation
+        from fleetroll.db import insert_host_observation
 
-        conn = get_connection(temp_db)
         insert_host_observation(
-            conn, {"host": "host1", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "role1"}}
+            db_conn, {"host": "host1", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "role1"}}
         )
         insert_host_observation(
-            conn, {"host": "host2", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "role2"}}
+            db_conn, {"host": "host2", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "role2"}}
         )
         insert_host_observation(
-            conn, {"host": "host3", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "role3"}}
+            db_conn, {"host": "host3", "ts": "2024-01-15T10:00:00Z", "observed": {"role": "role3"}}
         )
-        conn.commit()
+        db_conn.commit()
 
-        result = get_host_roles_bulk({"host1", "host3"}, conn)
+        result = get_host_roles_bulk({"host1", "host3"}, db_conn)
         assert result["host1"] == "role1"
         assert result["host3"] == "role3"
         # host2 should not be in result
         assert "host2" not in result
 
-    def test_missing_timestamp(self, tmp_path, temp_db):
+    def test_missing_timestamp(self, db_conn):
         """Should use most recent record with valid timestamp."""
-        from fleetroll.db import get_connection, insert_host_observation
+        from fleetroll.db import insert_host_observation
 
-        conn = get_connection(temp_db)
         # SQLite requires ts, so this test doesn't apply the same way
         # Just test that the function works with valid timestamps
         insert_host_observation(
-            conn,
+            db_conn,
             {"host": "host1", "ts": "2024-01-15T11:00:00Z", "observed": {"role": "role_with_ts"}},
         )
-        conn.commit()
+        db_conn.commit()
 
-        result = get_host_roles_bulk({"host1"}, conn)
+        result = get_host_roles_bulk({"host1"}, db_conn)
         assert result["host1"] == "role_with_ts"
 
-    def test_nonexistent_audit_log(self, tmp_path, temp_db):
+    def test_nonexistent_audit_log(self, db_conn):
         """Should handle empty database gracefully."""
-        from fleetroll.db import get_connection
-
-        conn = get_connection(temp_db)
-
-        result = get_host_roles_bulk({"host1", "host2"}, conn)
+        result = get_host_roles_bulk({"host1", "host2"}, db_conn)
         assert result["host1"] is None
         assert result["host2"] is None
 
