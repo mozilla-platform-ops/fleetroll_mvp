@@ -1,0 +1,340 @@
+# Project-specific playbook rules
+# These are merged with your global ~/.cass-memory/playbook.yaml
+# Project rules take precedence over global rules
+schema_version: 2
+name: repo-playbook
+description: Project-specific rules for this repository
+metadata:
+  createdAt: 2026-02-25T00:25:28.806Z
+  totalReflections: 0
+  totalSessionsProcessed: 0
+deprecatedPatterns: []
+bullets:
+  - id: b-mm19ofjo-ur2jss
+    scope: global
+    category: workflow
+    content: When adding filter/sort toggles in the monitor TUI, always reset the
+      page offset to 0 when toggling to avoid landing on an invalid page.
+    source: learned
+    type: rule
+    isNegative: false
+    kind: workflow_rule
+    state: draft
+    maturity: candidate
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    confidenceDecayHalfLifeDays: 90
+    createdAt: 2026-02-24T23:59:04.116Z
+    updatedAt: 2026-02-24T23:59:04.116Z
+    pinned: false
+    deprecated: false
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    tags: []
+  - id: b-mm19ofjp-zwc6iw
+    scope: global
+    category: architecture
+    content: Store domain-specific data in separate JSONL files (e.g., notes.jsonl,
+      taskcluster_workers.jsonl) rather than mixing into the main audit log.
+      This enables efficient per-domain queries without scanning unrelated
+      records.
+    source: learned
+    type: rule
+    isNegative: false
+    kind: workflow_rule
+    state: draft
+    maturity: candidate
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    confidenceDecayHalfLifeDays: 90
+    createdAt: 2026-02-24T23:59:04.117Z
+    updatedAt: 2026-02-24T23:59:04.117Z
+    pinned: false
+    deprecated: false
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    tags: []
+  - id: b-mm19ofjp-0xyf5t
+    scope: global
+    category: architecture
+    content: Follow the existing action type naming convention `host.<action_name>`
+      (e.g., `host.note_add`, `host.set_override`) for all host-scoped
+      operations stored in JSONL logs.
+    source: learned
+    type: rule
+    isNegative: false
+    kind: workflow_rule
+    state: draft
+    maturity: candidate
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    confidenceDecayHalfLifeDays: 90
+    createdAt: 2026-02-24T23:59:04.117Z
+    updatedAt: 2026-02-24T23:59:04.117Z
+    pinned: false
+    deprecated: false
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    tags: []
+  - id: b-mm19ofjq-cg2mcw
+    scope: global
+    category: workflow
+    content: When designing new commands, explore existing similar commands (set.py,
+      unset.py, audit.py) first and follow their patterns for argument
+      structure, batch mode, --confirm flag, --json output, and
+      ThreadPoolExecutor usage.
+    source: learned
+    type: rule
+    isNegative: false
+    kind: workflow_rule
+    state: draft
+    maturity: candidate
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    confidenceDecayHalfLifeDays: 90
+    createdAt: 2026-02-24T23:59:04.118Z
+    updatedAt: 2026-02-24T23:59:04.118Z
+    pinned: false
+    deprecated: false
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    tags: []
+  - id: b-mm19ofjr-w3mc2q
+    scope: global
+    category: documentation
+    content: For significant new features, create a design doc in docs/ with full
+      design rationale before implementing. Reference it from the bead
+      description to keep beads concise while preserving design decisions.
+    source: learned
+    type: rule
+    isNegative: false
+    kind: workflow_rule
+    state: draft
+    maturity: candidate
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    confidenceDecayHalfLifeDays: 90
+    createdAt: 2026-02-24T23:59:04.119Z
+    updatedAt: 2026-02-24T23:59:04.119Z
+    pinned: false
+    deprecated: false
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    tags: []
+  - id: b-mm19ofjr-tcs5do
+    scope: global
+    category: architecture
+    content: New constants (file paths, default values) belong in
+      fleetroll/constants.py - never hardcode them in command files or
+      utilities.
+    source: learned
+    type: rule
+    isNegative: false
+    kind: workflow_rule
+    state: draft
+    maturity: candidate
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    confidenceDecayHalfLifeDays: 90
+    createdAt: 2026-02-24T23:59:04.119Z
+    updatedAt: 2026-02-24T23:59:04.119Z
+    pinned: false
+    deprecated: false
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    tags: []
+  - id: b-mm19ofjr-k8bzwt
+    scope: global
+    category: testing
+    content: After implementing a TUI feature, verify with `uv run verify-imports
+      fleetroll.commands.monitor` as a quick smoke test before running the full
+      test suite.
+    source: learned
+    type: rule
+    isNegative: false
+    kind: workflow_rule
+    state: draft
+    maturity: candidate
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    confidenceDecayHalfLifeDays: 90
+    createdAt: 2026-02-24T23:59:04.119Z
+    updatedAt: 2026-02-24T23:59:04.119Z
+    pinned: false
+    deprecated: false
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    tags: []
+  - id: b-mm19qbsk-px0exq
+    scope: global
+    category: debugging
+    content: When coloring columns with many distinct categorical values (e.g., SHA
+      columns), the basic 8-color curses palette combined with A_REVERSE only
+      provides ~16 distinct visual appearances. Always check `curses.COLORS >=
+      256` and use extended 256-color palette when available.
+    source: learned
+    type: rule
+    isNegative: false
+    kind: workflow_rule
+    state: draft
+    maturity: candidate
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    confidenceDecayHalfLifeDays: 90
+    createdAt: 2026-02-25T00:00:32.564Z
+    updatedAt: 2026-02-25T00:00:32.564Z
+    pinned: false
+    deprecated: false
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    tags: []
+  - id: b-mm19qbsm-qv7u8s
+    scope: global
+    category: testing
+    content: When designing interactive sorting in the TUI, extract pure functions
+      like `compute_header_layout(left, right, width)` that can be unit-tested
+      independently from curses rendering.
+    source: learned
+    type: rule
+    isNegative: false
+    kind: workflow_rule
+    state: draft
+    maturity: candidate
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    confidenceDecayHalfLifeDays: 90
+    createdAt: 2026-02-25T00:00:32.566Z
+    updatedAt: 2026-02-25T00:00:32.566Z
+    pinned: false
+    deprecated: false
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    tags: []
+  - id: b-mm19rtid-olyul7
+    content: "When integrating external data sources (e.g., TaskCluster), use a
+      polling pattern with file mtime checks: store the last-known mtime and
+      only reload when it changes. This avoids unnecessary I/O on every screen
+      redraw."
+    category: performance
+    kind: workflow_rule
+    type: rule
+    isNegative: false
+    scope: global
+    source: learned
+    tags: []
+    state: draft
+    maturity: candidate
+    createdAt: 2026-02-25T00:01:42.181Z
+    updatedAt: 2026-02-25T00:01:42.181Z
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    deprecated: false
+    pinned: false
+    confidenceDecayHalfLifeDays: 90
+  - id: b-mm19rtie-bmcnxo
+    content: For batch SSH operations, use ThreadPoolExecutor with a configurable
+      --workers flag (default 10). This is the established pattern for all
+      multi-host commands in this codebase.
+    category: performance
+    kind: workflow_rule
+    type: rule
+    isNegative: false
+    scope: global
+    source: learned
+    tags: []
+    state: draft
+    maturity: candidate
+    createdAt: 2026-02-25T00:01:42.182Z
+    updatedAt: 2026-02-25T00:01:42.182Z
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    deprecated: false
+    pinned: false
+    confidenceDecayHalfLifeDays: 90
+  - id: b-mm19rtif-9ly53y
+    content: When fetching remote data (e.g., tc_fetch for TaskCluster workers), run
+      fetches in a background thread to avoid blocking the TUI main loop.
+    category: performance
+    kind: workflow_rule
+    type: rule
+    isNegative: false
+    scope: global
+    source: learned
+    tags: []
+    state: draft
+    maturity: candidate
+    createdAt: 2026-02-25T00:01:42.183Z
+    updatedAt: 2026-02-25T00:01:42.183Z
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    deprecated: false
+    pinned: false
+    confidenceDecayHalfLifeDays: 90
+  - id: b-mm19rtig-uno893
+    content: "SSH remote script execution follows a two-step pattern: build the
+      script as a string with `build_<action>_script()`, then execute it with
+      `run_remote_script()`. Always add trap cleanup for temp files in remote
+      scripts."
+    category: integration
+    kind: workflow_rule
+    type: rule
+    isNegative: false
+    scope: global
+    source: learned
+    tags: []
+    state: draft
+    maturity: candidate
+    createdAt: 2026-02-25T00:01:42.184Z
+    updatedAt: 2026-02-25T00:01:42.184Z
+    sourceSessions:
+      - manual-cli
+    sourceAgents:
+      - unknown
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    deprecated: false
+    pinned: false
+    confidenceDecayHalfLifeDays: 90
