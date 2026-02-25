@@ -35,7 +35,9 @@
       "Bash(cass search:*)",
       "Bash(cass expand:*)",
       "Bash(git add:*)",
-      "Bash(git show:*)"
+      "Bash(git show:*)",
+      "Bash(cm onboard:*)",
+      "Bash(cm context:*)"
     ]
   }
 }
