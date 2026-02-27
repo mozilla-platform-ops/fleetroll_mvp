@@ -1,10 +1,12 @@
 from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
 
 from fleetroll.commands.monitor import (
     age_seconds,
     build_row_values,
     clip_cell,
     compute_columns_and_widths,
+    compute_visible_columns,
     detect_common_fqdn_suffix,
     format_ts_with_age,
     humanize_age,
@@ -12,6 +14,7 @@ from fleetroll.commands.monitor import (
     render_monitor_lines,
     render_row_cells,
 )
+from fleetroll.commands.monitor.row_renderer import RowRenderer
 from fleetroll.humanhash import humanize
 
 
@@ -1012,3 +1015,258 @@ def test_color_mapping_stable_across_subsets():
     # The fix is at the call site: draw_screen() must pass the full host list
     # to _prepare_categorical_colors() to keep colors stable during filtering.
     assert full_map["echo-foxtrot"] != subset_map["echo-foxtrot"]
+
+
+# ---------------------------------------------------------------------------
+# compute_visible_columns
+# ---------------------------------------------------------------------------
+
+
+def _simple_widths(cols: list[str], width: int = 5) -> dict[str, int]:
+    """Build a widths dict where every column has the same fixed width."""
+    return dict.fromkeys(cols, width)
+
+
+def test_compute_visible_columns_all_fit() -> None:
+    """All columns visible when terminal is wide enough."""
+    all_cols = ["host", "a", "b", "c"]
+    widths = _simple_widths(all_cols, width=5)
+    # host(5) + " | "(3) + a(5) + " | "(3) + b(5) + " | "(3) + c(5) = 29, usable=60
+    columns, indicator, col_offset, max_col_offset = compute_visible_columns(
+        all_cols, widths=widths, usable_width=60, col_offset=0
+    )
+    assert columns == ["host", "a", "b", "c"]
+    assert indicator == ""
+    assert max_col_offset == 0
+    assert col_offset == 0
+
+
+def test_compute_visible_columns_some_hidden() -> None:
+    """Only a subset of scrollable columns visible on narrow terminal."""
+    all_cols = ["host", "a", "b", "c"]
+    # host=10, each scrollable=5
+    widths = {"host": 10, "a": 5, "b": 5, "c": 5}
+    # available = usable(30) - host(10) - 3 = 17
+    # a(5) + b(3+5=8) = 13 ≤ 17 ✓; c(3+5=8): 13+8=21 > 17 ✗
+    columns, indicator, col_offset, max_col_offset = compute_visible_columns(
+        all_cols, widths=widths, usable_width=30, col_offset=0
+    )
+    assert columns == ["host", "a", "b"]
+    assert max_col_offset == 1
+    assert col_offset == 0
+    assert "▶" in indicator
+    assert "◀" not in indicator
+    assert "1-2/3" in indicator
+
+
+def test_compute_visible_columns_scrolled_right() -> None:
+    """Scrolled to the last position shows only left arrow."""
+    all_cols = ["host", "a", "b", "c"]
+    widths = {"host": 10, "a": 5, "b": 5, "c": 5}
+    columns, indicator, col_offset, max_col_offset = compute_visible_columns(
+        all_cols, widths=widths, usable_width=30, col_offset=1
+    )
+    assert "host" in columns
+    assert "a" not in columns
+    assert "◀" in indicator
+    assert "▶" not in indicator
+    assert "2-3/3" in indicator
+
+
+def test_compute_visible_columns_scrolled_middle() -> None:
+    """Scrolled to a middle position shows both arrows."""
+    all_cols = ["host", "a", "b", "c", "d"]
+    widths = {"host": 10, "a": 5, "b": 5, "c": 5, "d": 5}
+    # available = usable(23) - host(10) - 3 = 10
+    # a(5) + b(3+5=8): 5+8=13>10, so only a fits at offset=0 → max_col_offset = 3
+    # at offset=1: b(5), c(3+5=8): 5+8=13>10, so only b fits → still max_col_offset=3
+    # Let's use wider terminal: available = 13: a(5)+b(8)=13≤13 → visible=2, max=4-2=2
+    columns, indicator, col_offset, max_col_offset = compute_visible_columns(
+        all_cols, widths=widths, usable_width=26, col_offset=1
+    )
+    assert "host" in columns
+    assert max_col_offset > 0
+    assert "◀" in indicator
+    assert "▶" in indicator
+
+
+def test_compute_visible_columns_col_offset_clamped() -> None:
+    """col_offset beyond max is clamped to max_col_offset."""
+    all_cols = ["host", "a", "b", "c"]
+    widths = {"host": 10, "a": 5, "b": 5, "c": 5}
+    columns, indicator, col_offset, max_col_offset = compute_visible_columns(
+        all_cols, widths=widths, usable_width=30, col_offset=99
+    )
+    assert col_offset == max_col_offset
+
+
+def test_compute_visible_columns_single_scrollable() -> None:
+    """Single scrollable column — no scrolling ever needed."""
+    all_cols = ["host", "a"]
+    widths = {"host": 5, "a": 5}
+    columns, indicator, col_offset, max_col_offset = compute_visible_columns(
+        all_cols, widths=widths, usable_width=20, col_offset=0
+    )
+    assert columns == ["host", "a"]
+    assert max_col_offset == 0
+    assert indicator == ""
+
+
+def test_compute_visible_columns_zero_usable_width() -> None:
+    """Zero usable width yields only the frozen host column."""
+    all_cols = ["host", "a", "b"]
+    widths = {"host": 5, "a": 5, "b": 5}
+    columns, indicator, col_offset, max_col_offset = compute_visible_columns(
+        all_cols, widths=widths, usable_width=0, col_offset=0
+    )
+    assert columns == ["host"]
+
+
+# ---------------------------------------------------------------------------
+# RowRenderer.compute_row_render_data
+# ---------------------------------------------------------------------------
+
+
+def _make_renderer() -> RowRenderer:
+    return RowRenderer(safe_addstr=lambda *a: None, colors=MagicMock())
+
+
+def test_compute_row_render_data_tc_act_s() -> None:
+    """TC_ACT age in seconds is computed from scan_ts - last_date_active."""
+    renderer = _make_renderer()
+    result = renderer.compute_row_render_data(
+        "host1.example.com",
+        latest={},
+        latest_ok={},
+        tc_data={
+            "host1": {
+                "ts": "2024-01-15T12:00:00+00:00",
+                "last_date_active": "2024-01-15T10:00:00+00:00",
+            }
+        },
+        fqdn_suffix=None,
+        sha_cache=None,
+        github_refs={},
+    )
+    assert result["tc_act_s"] == 7200  # 2 hours
+
+
+def test_compute_row_render_data_tc_act_s_naive_timestamps() -> None:
+    """Naive (no-tz) timestamps are treated as UTC."""
+    renderer = _make_renderer()
+    result = renderer.compute_row_render_data(
+        "host1",
+        latest={},
+        latest_ok={},
+        tc_data={
+            "host1": {
+                "ts": "2024-01-15T12:00:00",
+                "last_date_active": "2024-01-15T11:30:00",
+            }
+        },
+        fqdn_suffix=None,
+        sha_cache=None,
+        github_refs={},
+    )
+    assert result["tc_act_s"] == 1800  # 30 minutes
+
+
+def test_compute_row_render_data_no_tc_data() -> None:
+    """Missing TC data yields None for TC fields."""
+    renderer = _make_renderer()
+    result = renderer.compute_row_render_data(
+        "host1",
+        latest={},
+        latest_ok={},
+        tc_data={},
+        fqdn_suffix=None,
+        sha_cache=None,
+        github_refs={},
+    )
+    assert result["tc_act_s"] is None
+    assert result["tc_worker_data"] is None
+    assert result["tc_ts_value"] is None
+    assert result["tc_task_state"] is None
+
+
+def test_compute_row_render_data_pp_age_s() -> None:
+    """Puppet age is computed as audit_epoch - puppet_last_run_epoch."""
+    renderer = _make_renderer()
+    # 2024-01-15T12:00:00+00:00 = epoch 1705320000
+    host_record = {
+        "ts": "2024-01-15T12:00:00+00:00",
+        "ok": True,
+        "observed": {
+            "puppet_last_run_epoch": 1705316400,  # 1h before audit
+            "puppet_success": True,
+        },
+    }
+    result = renderer.compute_row_render_data(
+        "host1",
+        latest={"host1": host_record},
+        latest_ok={"host1": host_record},
+        tc_data={},
+        fqdn_suffix=None,
+        sha_cache=None,
+        github_refs={},
+    )
+    assert result["pp_age_s"] == 3600  # 1 hour
+    assert result["pp_failed"] is False
+
+
+def test_compute_row_render_data_pp_failed() -> None:
+    """pp_failed is True when puppet_success is False."""
+    renderer = _make_renderer()
+    host_record = {
+        "ts": "2024-01-15T12:00:00+00:00",
+        "ok": True,
+        "observed": {
+            "puppet_last_run_epoch": 1705316400,
+            "puppet_success": False,
+        },
+    }
+    result = renderer.compute_row_render_data(
+        "host1",
+        latest={"host1": host_record},
+        latest_ok={"host1": host_record},
+        tc_data={},
+        fqdn_suffix=None,
+        sha_cache=None,
+        github_refs={},
+    )
+    assert result["pp_failed"] is True
+
+
+def test_compute_row_render_data_no_puppet_epoch() -> None:
+    """Missing puppet_last_run_epoch yields pp_age_s=None."""
+    renderer = _make_renderer()
+    host_record = {
+        "ts": "2024-01-15T12:00:00+00:00",
+        "ok": True,
+        "observed": {},
+    }
+    result = renderer.compute_row_render_data(
+        "host1",
+        latest={"host1": host_record},
+        latest_ok={},
+        tc_data={},
+        fqdn_suffix=None,
+        sha_cache=None,
+        github_refs={},
+    )
+    assert result["pp_age_s"] is None
+
+
+def test_compute_row_render_data_returns_host() -> None:
+    """Result always includes the host key."""
+    renderer = _make_renderer()
+    result = renderer.compute_row_render_data(
+        "host1.example.com",
+        latest={},
+        latest_ok={},
+        tc_data={},
+        fqdn_suffix=None,
+        sha_cache=None,
+        github_refs={},
+    )
+    assert result["host"] == "host1.example.com"

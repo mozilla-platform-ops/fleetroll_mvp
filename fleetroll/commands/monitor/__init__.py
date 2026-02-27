@@ -33,7 +33,7 @@ from .data import (
 )
 
 # Re-export from display module
-from .display import MonitorDisplay
+from .display import MonitorDisplay, compute_visible_columns
 
 # Re-export from entry module
 from .entry import cmd_host_monitor
@@ -57,6 +57,7 @@ __all__ = [
     "clip_cell",
     "cmd_host_monitor",
     "compute_columns_and_widths",
+    "compute_visible_columns",
     "detect_common_fqdn_suffix",
     "format_monitor_row",
     "format_ts_with_age",

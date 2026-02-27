@@ -30,6 +30,80 @@ from .row_renderer import RowRenderer
 from .types import cycle_os_filter
 
 
+def compute_visible_columns(
+    all_columns: list[str],
+    *,
+    widths: dict[str, int],
+    usable_width: int,
+    col_offset: int,
+) -> tuple[list[str], str, int, int]:
+    """Determine which columns fit on screen with horizontal scrolling.
+
+    Args:
+        all_columns: Complete list of column names in display order
+        widths: Column name to pixel/character width mapping
+        usable_width: Available screen width in characters
+        col_offset: Current horizontal scroll position (0-based index into scrollable cols)
+
+    Returns:
+        Tuple of (visible_columns, scroll_indicator, new_col_offset, max_col_offset) where:
+        - visible_columns: Column names to display (frozen "host" + scrollable subset)
+        - scroll_indicator: String with scroll arrows and position, e.g. " [▶ 1-3/5]"
+        - new_col_offset: col_offset clamped to valid range
+        - max_col_offset: Maximum valid col_offset value
+    """
+    frozen_col = "host"
+    scrollable_cols = [c for c in all_columns if c != frozen_col]
+
+    frozen_width = widths[frozen_col]
+    available_width = max(usable_width - frozen_width - 3, 0)  # 3 for " | "
+
+    # First pass: determine how many cols fit from col_offset to compute max_col_offset
+    visible_scrollable: list[str] = []
+    running_width = 0
+    for col in scrollable_cols[col_offset:]:
+        col_width = widths[col]
+        separator_width = 3 if visible_scrollable else 0
+        if running_width + col_width + separator_width <= available_width:
+            visible_scrollable.append(col)
+            running_width += col_width + separator_width
+        else:
+            break
+
+    max_col_offset = max(len(scrollable_cols) - len(visible_scrollable), 0)
+    col_offset = min(col_offset, max_col_offset)
+
+    # Second pass: rebuild with clamped offset
+    visible_scrollable = []
+    running_width = 0
+    for col in scrollable_cols[col_offset:]:
+        col_width = widths[col]
+        separator_width = 3 if visible_scrollable else 0
+        if running_width + col_width + separator_width <= available_width:
+            visible_scrollable.append(col)
+            running_width += col_width + separator_width
+        else:
+            break
+
+    columns = [frozen_col] + visible_scrollable
+
+    scroll_indicator = ""
+    if max_col_offset > 0:
+        first_visible_idx = col_offset + 1
+        last_visible_idx = col_offset + len(visible_scrollable)
+        total_scrollable = len(scrollable_cols)
+        arrows = ""
+        if col_offset > 0:
+            arrows += "◀ "
+        if col_offset < max_col_offset:
+            arrows += "▶"
+        scroll_indicator = (
+            f" [{arrows.strip()} {first_visible_idx}-{last_visible_idx}/{total_scrollable}]"
+        )
+
+    return columns, scroll_indicator, col_offset, max_col_offset
+
+
 class MonitorDisplay:
     """Curses-based monitor display with encapsulated state."""
 
@@ -378,71 +452,12 @@ class MonitorDisplay:
         widths: dict[str, int],
         usable_width: int,
     ) -> tuple[list[str], str]:
-        """Determine which columns fit on screen with horizontal scrolling.
-
-        Args:
-            all_columns: Complete list of column names
-            widths: Column name to width mapping
-            usable_width: Available screen width
-
-        Returns:
-            Tuple of (visible_columns, scroll_indicator) where:
-            - visible_columns: List of column names to display (includes frozen "host")
-            - scroll_indicator: String showing scroll arrows and position
-        """
-        # HOST is frozen (always visible), other columns scroll
-        frozen_col = "host"
-        scrollable_cols = [c for c in all_columns if c != frozen_col]
-
-        # Calculate space available for scrollable columns
-        frozen_width = widths[frozen_col]
-        available_width = max(usable_width - frozen_width - 3, 0)  # 3 for " | "
-
-        # Determine which scrollable columns fit
-        visible_scrollable = []
-        running_width = 0
-        for col_idx, col in enumerate(scrollable_cols[self.col_offset :], start=self.col_offset):
-            col_width = widths[col]
-            separator_width = 3 if visible_scrollable else 0
-            if running_width + col_width + separator_width <= available_width:
-                visible_scrollable.append(col)
-                running_width += col_width + separator_width
-            else:
-                break
-
-        # Calculate max col offset
-        self.max_col_offset = max(len(scrollable_cols) - len(visible_scrollable), 0)
-        self.col_offset = min(self.col_offset, self.max_col_offset)
-
-        # Rebuild visible columns with correct offset
-        visible_scrollable = []
-        running_width = 0
-        for col in scrollable_cols[self.col_offset :]:
-            col_width = widths[col]
-            separator_width = 3 if visible_scrollable else 0
-            if running_width + col_width + separator_width <= available_width:
-                visible_scrollable.append(col)
-                running_width += col_width + separator_width
-            else:
-                break
-
-        columns = [frozen_col] + visible_scrollable
-
-        # Add scroll indicator to header if needed
-        scroll_indicator = ""
-        if self.max_col_offset > 0:
-            first_visible_idx = self.col_offset + 1
-            last_visible_idx = self.col_offset + len(visible_scrollable)
-            total_scrollable = len(scrollable_cols)
-            arrows = ""
-            if self.col_offset > 0:
-                arrows += "◀ "
-            if self.col_offset < self.max_col_offset:
-                arrows += "▶"
-            scroll_indicator = (
-                f" [{arrows.strip()} {first_visible_idx}-{last_visible_idx}/{total_scrollable}]"
-            )
-
+        """Determine which columns fit on screen with horizontal scrolling."""
+        columns, scroll_indicator, col_offset, max_col_offset = compute_visible_columns(
+            all_columns, widths=widths, usable_width=usable_width, col_offset=self.col_offset
+        )
+        self.col_offset = col_offset
+        self.max_col_offset = max_col_offset
         return columns, scroll_indicator
 
     def _get_sort_key(self, hostname: str) -> tuple:

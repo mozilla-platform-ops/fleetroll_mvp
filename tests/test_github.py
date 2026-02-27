@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 from fleetroll.github import (
     collect_repo_branches,
+    do_github_fetch,
     fetch_branch_shas,
     parse_github_repo_url,
     should_fetch,
@@ -306,3 +307,168 @@ class TestFetchBranchShas:
 
         assert len(result) == 1
         assert result[0] == {"ref": "master", "sha": "abc123"}
+
+
+class TestDoGithubFetch:
+    """Tests for do_github_fetch orchestration function."""
+
+    def _make_db(self, tmp_path):
+        from fleetroll.db import init_db
+
+        db_path = tmp_path / "test.db"
+        init_db(db_path)
+        return db_path
+
+    def _insert_recent_ref(self, db_path):
+        """Insert a ref with the current timestamp to trigger throttle."""
+        from fleetroll.db import get_connection, insert_github_ref
+        from fleetroll.utils import utc_now_iso
+
+        conn = get_connection(db_path)
+        insert_github_ref(
+            conn,
+            {
+                "type": "branch_ref",
+                "ts": utc_now_iso(),
+                "owner": "o",
+                "repo": "r",
+                "branch": "main",
+                "sha": "test_git_sha_1234",
+            },
+        )
+        conn.commit()
+        conn.close()
+
+    @patch("fleetroll.github.collect_repo_branches")
+    @patch("fleetroll.github.fetch_branch_shas")
+    def test_successful_fetch_quiet(self, mock_fetch, mock_collect, tmp_path, capsys):
+        """Successful fetch in quiet mode emits SUCCESS line."""
+        db_path = self._make_db(tmp_path)
+        mock_collect.return_value = {("owner", "repo"): {"main"}}
+        mock_fetch.return_value = [{"ref": "main", "sha": "test_git_sha_abcd"}]
+
+        with patch("fleetroll.db.get_db_path", return_value=db_path):
+            do_github_fetch(quiet=True)
+
+        out = capsys.readouterr().out
+        assert "SUCCESS" in out
+        assert "1 branch refs" in out
+
+    @patch("fleetroll.github.collect_repo_branches")
+    @patch("fleetroll.github.fetch_branch_shas")
+    def test_successful_fetch_verbose(self, mock_fetch, mock_collect, tmp_path, capsys):
+        """Successful fetch in verbose mode prints per-repo progress."""
+        db_path = self._make_db(tmp_path)
+        mock_collect.return_value = {("owner", "repo"): {"main"}}
+        mock_fetch.return_value = [{"ref": "main", "sha": "test_git_sha_abcd"}]
+
+        with patch("fleetroll.db.get_db_path", return_value=db_path):
+            do_github_fetch(quiet=False)
+
+        out = capsys.readouterr().out
+        assert "owner/repo" in out
+        assert "1/1" in out
+
+    @patch("fleetroll.github.collect_repo_branches")
+    @patch("fleetroll.github.fetch_branch_shas")
+    def test_throttle_skips_recent_fetch(self, mock_fetch, mock_collect, tmp_path, capsys):
+        """Should skip and print throttle message when data is recent."""
+        db_path = self._make_db(tmp_path)
+        self._insert_recent_ref(db_path)
+
+        with patch("fleetroll.db.get_db_path", return_value=db_path):
+            do_github_fetch(quiet=False)
+
+        out = capsys.readouterr().out
+        assert "recently fetched" in out
+        mock_fetch.assert_not_called()
+
+    @patch("fleetroll.github.collect_repo_branches")
+    @patch("fleetroll.github.fetch_branch_shas")
+    def test_throttle_silent_in_quiet_mode(self, mock_fetch, mock_collect, tmp_path, capsys):
+        """Throttle skip produces no output in quiet mode."""
+        db_path = self._make_db(tmp_path)
+        self._insert_recent_ref(db_path)
+
+        with patch("fleetroll.db.get_db_path", return_value=db_path):
+            do_github_fetch(quiet=True)
+
+        out = capsys.readouterr().out
+        assert out == ""
+        mock_fetch.assert_not_called()
+
+    @patch("fleetroll.github.collect_repo_branches")
+    @patch("fleetroll.github.fetch_branch_shas")
+    def test_override_delay_bypasses_throttle(self, mock_fetch, mock_collect, tmp_path):
+        """override_delay=True fetches even when data is recent."""
+        db_path = self._make_db(tmp_path)
+        self._insert_recent_ref(db_path)
+        mock_collect.return_value = {("o", "r"): {"main"}}
+        mock_fetch.return_value = [{"ref": "main", "sha": "test_git_sha_efgh"}]
+
+        with patch("fleetroll.db.get_db_path", return_value=db_path):
+            do_github_fetch(override_delay=True, quiet=True)
+
+        mock_fetch.assert_called_once()
+
+    @patch("fleetroll.github.collect_repo_branches")
+    @patch("fleetroll.github.fetch_branch_shas")
+    def test_branch_not_found_warns(self, mock_fetch, mock_collect, tmp_path, capsys):
+        """Branch absent in API response is reported as WARNING in quiet mode."""
+        db_path = self._make_db(tmp_path)
+        mock_collect.return_value = {("owner", "repo"): {"missing-branch"}}
+        mock_fetch.return_value = [{"ref": "main", "sha": "test_git_sha_abcd"}]
+
+        with patch("fleetroll.db.get_db_path", return_value=db_path):
+            do_github_fetch(quiet=True)
+
+        out = capsys.readouterr().out
+        assert "WARNING" in out
+
+    @patch("fleetroll.github.collect_repo_branches")
+    @patch("fleetroll.github.fetch_branch_shas")
+    def test_no_refs_returned_warns(self, mock_fetch, mock_collect, tmp_path, capsys):
+        """Empty API response results in WARNING in quiet mode."""
+        db_path = self._make_db(tmp_path)
+        mock_collect.return_value = {("owner", "repo"): {"main"}}
+        mock_fetch.return_value = []
+
+        with patch("fleetroll.db.get_db_path", return_value=db_path):
+            do_github_fetch(quiet=True)
+
+        out = capsys.readouterr().out
+        assert "WARNING" in out
+
+    @patch("fleetroll.github.collect_repo_branches")
+    @patch("fleetroll.github.fetch_branch_shas")
+    def test_writes_ref_to_db(self, mock_fetch, mock_collect, tmp_path):
+        """Successfully fetched branch refs are persisted to the database."""
+        from fleetroll.db import get_connection
+
+        db_path = self._make_db(tmp_path)
+        mock_collect.return_value = {("owner", "repo"): {"main"}}
+        mock_fetch.return_value = [{"ref": "main", "sha": "test_git_sha_abcd"}]
+
+        with patch("fleetroll.db.get_db_path", return_value=db_path):
+            do_github_fetch(quiet=True)
+
+        conn = get_connection(db_path)
+        rows = conn.execute("SELECT * FROM github_refs").fetchall()
+        conn.close()
+        assert len(rows) == 1
+        assert rows[0]["branch"] == "main"
+        assert rows[0]["sha"] == "test_git_sha_abcd"
+
+    @patch("fleetroll.github.collect_repo_branches")
+    @patch("fleetroll.github.fetch_branch_shas")
+    def test_no_repos_found(self, mock_fetch, mock_collect, tmp_path, capsys):
+        """Empty overrides dir yields zero repos and no API calls."""
+        db_path = self._make_db(tmp_path)
+        mock_collect.return_value = {}
+
+        with patch("fleetroll.db.get_db_path", return_value=db_path):
+            do_github_fetch(quiet=False)
+
+        out = capsys.readouterr().out
+        assert "0 unique repo" in out
+        mock_fetch.assert_not_called()
