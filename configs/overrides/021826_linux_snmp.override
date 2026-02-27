@@ -6,7 +6,7 @@
 #   user: aerickson
 
 # puppet overrides
-PUPPET_REPO="https://github.com/aerickson/ronin_puppet.git"
+PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
 PUPPET_BRANCH="021826_linux_snmp"
 PUPPET_MAIL="aerickson@mozilla.com"
 
