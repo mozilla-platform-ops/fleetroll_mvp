@@ -1,0 +1,4 @@
+{
+  "include": [""],
+  "exclude": ["*adb*", "*-pg"]  // Exclude database servers
+}
