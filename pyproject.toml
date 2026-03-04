@@ -47,6 +47,7 @@ addopts = [
 markers = [
     "allow_validation: allow override syntax validation in tests",
     "integration: end-to-end tests requiring Docker",
+    "tui: tmux-based TUI integration tests (require tmux)",
 ]
 
 [tool.pytest-watcher]
@@ -129,6 +130,12 @@ max-complexity = 25
 ]
 "tests/integration/**/*.py" = [
     "S607",     # subprocess with partial path - intentional use of docker/ssh-keygen
+]
+"tests/tui/**/*.py" = [
+    "S607",     # subprocess with partial path - intentional use of tmux
+]
+"tests/tmux_helpers.py" = [
+    "S607",     # subprocess with partial path - intentional use of tmux
 ]
 "fleetroll/db.py" = [
     "S608",     # SQL injection false positives - placeholders are safely constructed

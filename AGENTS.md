@@ -359,3 +359,143 @@ Then prompt the user with a suggested commit message. The user will handle `git 
 
 
 <!-- end-bv-agent-instructions -->
+
+---
+
+## tmux TUI Testing
+
+The `host-monitor` command runs a curses-based TUI. tmux is used as a headless
+rendering surface for integration tests: launch in a detached session, read
+screen state with `capture-pane`, and simulate input with `send-keys`.
+
+### Key tmux commands
+
+```bash
+# Start a detached session (120 cols × 40 rows, run cmd)
+tmux new-session -d -s <name> -x 120 -y 40 '<cmd>'
+
+# Read current pane contents as plain text
+tmux capture-pane -t <name> -p
+
+# Read pane with ANSI escape sequences (for color assertions)
+tmux capture-pane -t <name> -p -e
+
+# Send a key or character
+tmux send-keys -t <name> 'q' ''
+
+# Resize the window
+tmux resize-window -t <name> -x 80 -y 24
+
+# Tear down the session
+tmux kill-session -t <name>
+```
+
+### Poll, don't sleep
+
+The monitor event loop has a 200 ms `getch` timeout. Never use bare
+`time.sleep()` to wait for renders — use `TmuxSession.wait_for()` or
+`wait_until()` instead:
+
+```python
+# Good — polls capture-pane until text appears or timeout
+sess.wait_for("HOST", timeout=5.0)
+
+# Good — polls until any predicate becomes truthy
+sess.wait_until(lambda: "▶" in sess.capture(), timeout=3.0)
+
+# Bad — brittle; may be too short or waste time
+time.sleep(2)
+```
+
+### TmuxSession helper class
+
+`tests/tmux_helpers.py` provides a context-manager class:
+
+```python
+from tests.tmux_helpers import TmuxSession
+
+with TmuxSession(cmd="HOME=/tmp/h uv run fleetroll host-monitor hosts.txt",
+                 cols=160, rows=40) as sess:
+    sess.wait_for("HOST", timeout=10.0)   # wait for initial render
+    sess.send_keys("?")                   # open help popup
+    sess.wait_for("quit", timeout=3.0)
+    sess.send_keys("q")                   # close popup / quit
+```
+
+Key methods:
+
+| Method | Description |
+|---|---|
+| `capture(with_escapes=False)` | Return pane text (pass `with_escapes=True` for ANSI colors) |
+| `send_keys(*keys)` | Send one or more key sequences |
+| `resize(cols, rows)` | Resize the window |
+| `wait_for(text, timeout)` | Poll until text appears on screen |
+| `wait_until(fn, timeout)` | Poll until callable returns truthy |
+| `kill()` | Kill the session (called automatically by context manager) |
+
+### Pytest fixtures
+
+`tests/tmux_helpers.py` also provides two fixtures:
+
+- **`tmux_monitor_env`** — creates isolated `$HOME`, seeds the SQLite DB with
+  5 hosts via `insert_host_observation()`, writes a hosts list file.  Returns
+  a dict with `home`, `db_path`, `hosts_file`, and `hosts`.
+- **`tmux_session`** — launches the monitor TUI, waits for `HOST` to appear,
+  yields a ready `TmuxSession`, and kills it on teardown.
+
+### Test data
+
+`seed_test_db(db_path, hosts)` inserts one `ok=1` observation per host through
+the real DB layer.  Tests use these known records to assert on rendered values
+(role names, SHA prefixes, etc.).
+
+Each test gets its own `$HOME` via `monkeypatch.setenv("HOME", ...)`, matching
+the pattern in `tests/integration/conftest.py`.
+
+### Assertions
+
+```python
+screen = sess.capture()
+assert "HOST" in screen                     # text present
+assert "gecko_t_linux_talos" in screen      # row data
+assert "▶" in screen or "[" in screen      # scroll indicator present
+
+# Color assertions (require with_escapes=True)
+colored = sess.capture(with_escapes=True)
+assert "\x1b[" in colored                   # some ANSI coloring active
+```
+
+### Running TUI tests
+
+```bash
+# Run only TUI tests
+uv run pytest -m tui -v
+
+# Run all tests except TUI (fast path)
+uv run pytest -m 'not tui' -v
+
+# Run a specific TUI test
+uv run pytest tests/tui/test_monitor_tui.py::TestQuit::test_q_exits -v
+```
+
+### Marker and skip
+
+All TUI test classes carry `@pytest.mark.tui` (applied via `pytestmark`).
+Tests are automatically skipped when tmux is not installed (`skip_no_tmux`).
+
+### Manual verification
+
+```bash
+# Seed a throw-away DB
+export HOME=$(mktemp -d)
+
+# Start a session manually
+tmux new-session -d -s smoke -x 120 -y 40 \
+  "uv run fleetroll host-monitor /path/to/hosts.txt"
+
+# Inspect the rendered screen
+tmux capture-pane -t smoke -p
+
+# Kill when done
+tmux kill-session -t smoke
+```
