@@ -55,7 +55,7 @@ now = true
 clear = true
 runner = "pytest"
 runner_args = ['--quiet']
-delay = 0.2
+delay = 3
 notify_on_failure = true
 
 [tool.ruff]
