@@ -646,6 +646,7 @@ def note_clear(hostname: str, reason: str | None, notes_file: str | None, json_o
 )
 @click.option(
     "--include-cleared",
+    "-i",
     is_flag=True,
     help="Show all records including clear tombstones.",
 )
