@@ -42,7 +42,7 @@ addopts = [
     #"--cov=fleetroll",
     #"--cov-report=term-missing",
     #"--cov-report=html",
-    "--cov-fail-under=50",
+    "--cov-fail-under=60",
 ]
 markers = [
     "allow_validation: allow override syntax validation in tests",
@@ -143,6 +143,13 @@ max-complexity = 25
 "fleetroll/commands/tc_fetch.py" = ["C901", "PLR0912", "PLR0915"]
 "fleetroll/commands/unset.py" = ["PLR0915"]
 "fleetroll/commands/vault.py" = ["C901", "PLR0912", "PLR0915"]
+
+[tool.coverage.run]
+source = ["fleetroll"]
+relative_files = true
+
+[tool.coverage.report]
+skip_empty = true
 
 [tool.ty.terminal]
 error-on-warning = false
