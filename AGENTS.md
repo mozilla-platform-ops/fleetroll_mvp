@@ -156,6 +156,31 @@ cass robot-docs schemas
 - `stderr` = diagnostics
 - `exit 0` = success
 
+
+## MCP CLI Command
+You have access to an `mcp-cli` CLI command for interacting with MCP servers.
+
+The actual `mcp-cli` command to use is `bunx @wener/mcp-cli`.
+
+**MANDATORY PREREQUISITE**
+You MUST call 'mcp-cli info <server>/<tool>' BEFORE ANY 'mcp-cli call <server>/<tool>'.
+
+Available Commands:
+# STEP 1: ALWAYS CHECK SCHEMA FIRST (MANDATORY)
+mcp-cli info <server>/<tool>             # REQUIRED before ANY call
+# STEP 2: Only after checking schema, make the call
+mcp-cli call <server>/<tool> '<json>'    # Only run AFTER mcp-cli info
+mcp-cli call <server>/<tool> -           # Invoke with JSON from stdin
+
+# Discovery commands
+mcp-cli servers                          # List all connected MCP servers
+mcp-cli tools [server]                   # List available tools
+mcp-cli grep <pattern>                   # Search tool names and descriptions
+mcp-cli resources [server]               # List MCP resources
+mcp-cli read <server>/<resource>         # Read an MCP resource
+mcp-cli dump request-tools               # Export tools in chat-completions format
+
+
 ## Git Operations
 
 When we're ready to commit the work, stage the files and ensure tests and pre-commit passes.
@@ -179,6 +204,7 @@ Suggested commit message:
   Extract header, row, and footer rendering into separate
   methods for testability.
 ```
+
 
 ## Code Quality Practices
 
