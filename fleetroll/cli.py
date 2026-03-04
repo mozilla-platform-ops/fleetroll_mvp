@@ -28,7 +28,9 @@ from .commands import (
     cmd_host_set_vault,
     cmd_host_unset,
     cmd_maintain,
+    cmd_note_add,
     cmd_override_show,
+    cmd_show_notes,
     cmd_tc_fetch,
     cmd_vault_show,
 )
@@ -579,6 +581,49 @@ def maintain(audit_log: str | None, confirm: bool, force: bool):
     except (FleetRollError, UserError) as e:
         click.echo(f"ERROR: {e}", err=True)
         sys.exit(1)
+
+
+@cli.command("note-add")
+@click.argument("hostname")
+@click.argument("note_text")
+@click.option(
+    "--notes-file",
+    type=click.Path(),
+    help="Path to notes JSONL file (default: data/notes.jsonl).",
+)
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Emit machine-readable JSON to stdout.",
+)
+def note_add(hostname: str, note_text: str, notes_file: str | None, json_output: bool):
+    """Add a note for a host."""
+    cmd_note_add(hostname, note_text, notes_file=notes_file, json_output=json_output)
+
+
+@cli.command("show-notes")
+@click.argument("hostname")
+@click.option(
+    "--limit",
+    type=int,
+    default=None,
+    help="Maximum number of notes to show (most recent).",
+)
+@click.option(
+    "--notes-file",
+    type=click.Path(),
+    help="Path to notes JSONL file (default: data/notes.jsonl).",
+)
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Emit machine-readable JSON to stdout.",
+)
+def show_notes(hostname: str, limit: int | None, notes_file: str | None, json_output: bool):
+    """Show notes for a host."""
+    cmd_show_notes(hostname, limit=limit, notes_file=notes_file, json_output=json_output)
 
 
 def main():

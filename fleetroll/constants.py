@@ -34,6 +34,9 @@ VAULT_YAMLS_DIR_NAME = "vault_yamls"
 DRY_RUN_PREVIEW_LIMIT = 5
 DEFAULT_GITHUB_REPO = "mozilla-platform-ops/ronin_puppet"
 
+NOTES_FILE_NAME = "notes.jsonl"
+DATA_DIR_NAME = "data"
+
 # SQLite database settings
 DB_FILE_NAME = "fleetroll.db"
 DB_RETENTION_LIMIT = 10  # Keep latest N records per key in SQLite tables

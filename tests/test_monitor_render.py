@@ -1270,3 +1270,91 @@ def test_compute_row_render_data_returns_host() -> None:
         github_refs={},
     )
     assert result["host"] == "host1.example.com"
+
+
+# ---------------------------------------------------------------------------
+# Note column in build_row_values
+# ---------------------------------------------------------------------------
+
+
+def test_build_row_values_note_column_present() -> None:
+    """note key is present in build_row_values result."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "os_type": "Linux",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "uptime_s": 3600,
+        },
+    }
+    values = build_row_values("host1.example.com", record, last_ok=record)
+    assert "note" in values
+    assert values["note"] == "-"
+
+
+def test_build_row_values_note_from_notes_data() -> None:
+    """note column shows value from notes_data when present."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "os_type": "Linux",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "uptime_s": 3600,
+        },
+    }
+    notes_data = {"host1.example.com": "investigating power issue"}
+    values = build_row_values("host1.example.com", record, last_ok=record, notes_data=notes_data)
+    assert values["note"] == "investigating power issue"
+
+
+def test_build_row_values_note_column_in_unknown_row() -> None:
+    """note column is present in UNK rows (record=None)."""
+    values = build_row_values("host1.example.com", None)
+    assert "note" in values
+    assert values["note"] == "-"
+
+
+def test_build_row_values_note_in_columns_list() -> None:
+    """note column appears in compute_columns_and_widths output."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_talos",
+            "os_type": "Linux",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "uptime_s": 3600,
+        },
+    }
+    hosts = ["host1.example.com"]
+    latest = {hosts[0]: record}
+    latest_ok = {hosts[0]: record}
+    notes_data = {"host1.example.com": "test note for width calculation"}
+    columns, widths = compute_columns_and_widths(
+        hosts=hosts,
+        latest=latest,
+        latest_ok=latest_ok,
+        max_width=0,
+        cap_widths=False,
+        sep_len=2,
+        notes_data=notes_data,
+    )
+    assert "note" in columns
+    assert "note" in widths
+    assert widths["note"] >= len("test note for width calculation")

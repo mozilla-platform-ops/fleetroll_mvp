@@ -119,6 +119,8 @@ class MonitorDisplay:
         db_conn: sqlite3.Connection,
         github_refs: dict[str, dict[str, Any]],
         sha_cache: ShaInfoCache | None = None,
+        notes_data: dict[str, str] | None = None,
+        notes_path: Path | None = None,
     ) -> None:
         self.stdscr = stdscr
         self.hosts = hosts
@@ -130,9 +132,12 @@ class MonitorDisplay:
         self.db_conn = db_conn
         self.github_refs = github_refs
         self.sha_cache = sha_cache
+        self.notes_data: dict[str, str] = notes_data or {}
+        self._notes_path = notes_path
         self._tc_poll_time = 0.0
         self._github_poll_time = 0.0
         self._sha_cache_poll_time = 0.0
+        self._notes_poll_time = 0.0
         self.offset = 0
         self.col_offset = 0
         self.page_step = 1
@@ -316,6 +321,23 @@ class MonitorDisplay:
             self._touch_updated()
         return changed
 
+    def poll_notes_data(self) -> bool:
+        """Check if notes data changed and reload if needed. Returns True if reloaded."""
+        if self._notes_path is None:
+            return False
+        now = time.monotonic()
+        if now - self._notes_poll_time < 10.0:
+            return False
+        self._notes_poll_time = now
+        from ...notes import load_latest_notes
+
+        new_data = load_latest_notes(self._notes_path)
+        if new_data != self.notes_data:
+            self.notes_data = new_data
+            self._touch_updated()
+            return True
+        return False
+
     def update_record(self, record: dict[str, Any]) -> None:
         self.latest[record["host"]] = record
         if record.get("ok"):
@@ -382,6 +404,7 @@ class MonitorDisplay:
             "role",
             "vlt_sha",
             "sha",
+            "note",
             "uptime",
             "pp_last",
             "pp_sha",
@@ -401,6 +424,7 @@ class MonitorDisplay:
             "os": "OS",
             "sha": "OVR_SHA",
             "vlt_sha": "VLT_SHA",
+            "note": "NOTE",
             "tc_quar": "TC_QUAR",
             "tc_act": "TC_ACT",
             "tc_j_sf": "TC_T_DUR",
@@ -434,6 +458,7 @@ class MonitorDisplay:
                 fqdn_suffix=self.fqdn_suffix,
                 sha_cache=self.sha_cache,
                 github_refs=self.github_refs,
+                notes_data=self.notes_data,
             )
             for col in all_columns:
                 widths[col] = max(widths[col], len(values[col]))
@@ -599,6 +624,7 @@ class MonitorDisplay:
                 fqdn_suffix=self.fqdn_suffix,
                 sha_cache=self.sha_cache,
                 github_refs=self.github_refs,
+                notes_data=self.notes_data,
             )
             self.row_renderer.draw_host_row(
                 row, render_data=render_data, columns=columns, widths=widths, color_maps=color_maps

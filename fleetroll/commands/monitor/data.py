@@ -202,6 +202,7 @@ def build_ok_row_values(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    notes_data: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Build string values for an OK monitor row."""
     # Strip common FQDN suffix if provided
@@ -426,6 +427,8 @@ def build_ok_row_values(
     uptime_s = observed.get("uptime_s")
     uptime: str = humanize_duration(uptime_s if isinstance(uptime_s, int) else None)
 
+    note = notes_data.get(host, "-") if notes_data else "-"
+
     # Dict values are strings at runtime (validated by tests), but type checker
     # sees some as potentially Any due to dict.get() returning Any type
     return {  # type: ignore[invalid-return-type]
@@ -448,6 +451,7 @@ def build_ok_row_values(
         "pp_match": pp_match,
         "healthy": healthy,
         "data": data,
+        "note": note,
     }
 
 
@@ -460,12 +464,15 @@ def build_row_values(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    notes_data: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Build string values for a monitor row."""
     # Strip common FQDN suffix if provided
     display_host = host
     if fqdn_suffix and host.endswith(fqdn_suffix):
         display_host = host[: -len(fqdn_suffix)]
+
+    note = notes_data.get(host, "-") if notes_data else "-"
 
     if record is None:
         tc_str = "-"
@@ -493,6 +500,7 @@ def build_row_values(
             "pp_match": "?",
             "healthy": "?",
             "data": f"?/{tc_str}",
+            "note": note,
         }
 
     if not record.get("ok"):
@@ -505,6 +513,7 @@ def build_row_values(
                 fqdn_suffix=fqdn_suffix,
                 sha_cache=sha_cache,
                 github_refs=github_refs,
+                notes_data=notes_data,
             )
             values["status"] = "FAIL"
             values["err"] = err
@@ -535,6 +544,7 @@ def build_row_values(
             "pp_match": "-",
             "healthy": "-",
             "data": f"{audit_str}/{tc_str}",
+            "note": note,
         }
 
     return build_ok_row_values(
@@ -544,6 +554,7 @@ def build_row_values(
         fqdn_suffix=fqdn_suffix,
         sha_cache=sha_cache,
         github_refs=github_refs,
+        notes_data=notes_data,
     )
 
 

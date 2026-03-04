@@ -54,6 +54,7 @@ def compute_columns_and_widths(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    notes_data: dict[str, str] | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     """Compute columns and widths that fit within max_width."""
     columns = [
@@ -62,6 +63,7 @@ def compute_columns_and_widths(
         "role",
         "vlt_sha",
         "sha",
+        "note",
         "uptime",
         "pp_last",
         "pp_exp",
@@ -80,6 +82,7 @@ def compute_columns_and_widths(
         "os": "OS",
         "sha": "OVR_SHA",
         "vlt_sha": "VLT_SHA",
+        "note": "NOTE",
         "tc_quar": "TC_QUAR",
         "tc_act": "TC_ACT",
         "tc_j_sf": "TC_T_DUR",
@@ -97,6 +100,7 @@ def compute_columns_and_widths(
         "os": 1,
         "sha": 30,
         "vlt_sha": 40,
+        "note": 40,
         "tc_quar": 8,
         "tc_act": 12,
         "tc_j_sf": 20,
@@ -122,6 +126,7 @@ def compute_columns_and_widths(
             fqdn_suffix=fqdn_suffix,
             sha_cache=sha_cache,
             github_refs=github_refs,
+            notes_data=notes_data,
         )
         for col in columns:
             widths[col] = max(widths[col], len(values[col]))
@@ -133,6 +138,7 @@ def compute_columns_and_widths(
         return columns, widths
 
     drop_order = [
+        "note",
         "vlt_sha",
         "sha",
         "role",
@@ -180,6 +186,7 @@ def format_monitor_row(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    notes_data: dict[str, str] | None = None,
 ) -> str:
     """Format a single table row for a host."""
     values = build_row_values(
@@ -190,6 +197,7 @@ def format_monitor_row(
         fqdn_suffix=fqdn_suffix,
         sha_cache=sha_cache,
         github_refs=github_refs,
+        notes_data=notes_data,
     )
     parts = [clip_cell(values[col], widths[col]) for col in columns]
     return col_sep.join(parts)
@@ -209,6 +217,7 @@ def render_monitor_lines(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    notes_data: dict[str, str] | None = None,
 ) -> tuple[str, list[str]]:
     """Render monitor header + lines in the provided host order."""
     tc_data = tc_data or {}
@@ -223,6 +232,7 @@ def render_monitor_lines(
         fqdn_suffix=fqdn_suffix,
         sha_cache=sha_cache,
         github_refs=github_refs,
+        notes_data=notes_data,
     )
     labels = {
         "host": "HOST",
@@ -231,6 +241,7 @@ def render_monitor_lines(
         "os": "OS",
         "sha": "OVR_SHA",
         "vlt_sha": "VLT_SHA",
+        "note": "NOTE",
         "tc_quar": "TC_QUAR",
         "tc_act": "TC_ACT",
         "tc_j_sf": "TC_T_DUR",
@@ -260,6 +271,7 @@ def render_monitor_lines(
             fqdn_suffix=fqdn_suffix,
             sha_cache=sha_cache,
             github_refs=github_refs,
+            notes_data=notes_data,
         )
         for host in host_slice
     ]

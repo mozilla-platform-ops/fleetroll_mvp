@@ -6,6 +6,7 @@ from .audit import cmd_host_audit
 from .gh_fetch import cmd_gh_fetch
 from .maintain import cmd_maintain
 from .monitor import cmd_host_monitor
+from .note import cmd_note_add, cmd_show_notes
 from .override import cmd_override_show
 from .set import cmd_host_set
 from .tc_fetch import cmd_tc_fetch
@@ -20,7 +21,9 @@ __all__ = [
     "cmd_host_set_vault",
     "cmd_host_unset",
     "cmd_maintain",
+    "cmd_note_add",
     "cmd_override_show",
+    "cmd_show_notes",
     "cmd_tc_fetch",
     "cmd_vault_show",
 ]

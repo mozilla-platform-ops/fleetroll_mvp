@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...exceptions import FleetRollError
+from ...notes import default_notes_path, load_latest_notes
 from ...utils import (
     ensure_host_or_file,
     is_host_file,
@@ -78,6 +79,10 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         sha_cache = ShaInfoCache(overrides_dir, vault_dir)
         sha_cache.load_all()
 
+        # Load notes data
+        notes_path = default_notes_path()
+        notes_data = load_latest_notes(notes_path)
+
         if args.once:
             # Sort hosts according to --sort option
             sorted_hosts = sorted(
@@ -100,6 +105,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     cap_widths=False,
                     col_sep="  ",
                     sha_cache=sha_cache,
+                    notes_data=notes_data,
                 )
                 print(header)
                 for line in lines:
@@ -131,6 +137,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     sep_len=2,
                     sha_cache=sha_cache,
                     github_refs=github_refs,
+                    notes_data=notes_data,
                 )
                 header, lines = render_monitor_lines(
                     hosts=sorted_hosts,
@@ -142,6 +149,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     col_sep="  ",
                     sha_cache=sha_cache,
                     github_refs=github_refs,
+                    notes_data=notes_data,
                 )
                 print(header)
                 for line in lines:
@@ -169,6 +177,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                             col_sep="  ",
                             github_refs=github_refs,
                             sha_cache=sha_cache,
+                            notes_data=notes_data,
                         )
                     )
             return
@@ -186,6 +195,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 db_conn=db_conn,
                 github_refs=github_refs,
                 sha_cache=sha_cache,
+                notes_data=notes_data,
+                notes_path=notes_path,
             )
             display.draw_screen()
             tailer = AuditLogTailer(
@@ -227,6 +238,9 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     display.draw_screen()
                     redrew = True
                 if display.poll_sha_cache():
+                    display.draw_screen()
+                    redrew = True
+                if display.poll_notes_data():
                     display.draw_screen()
                     redrew = True
 

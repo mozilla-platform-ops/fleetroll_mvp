@@ -47,6 +47,7 @@ class RowRenderer:
         fqdn_suffix: str | None,
         sha_cache,
         github_refs: dict[str, dict[str, Any]],
+        notes_data: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Compute all data needed to render a single host row.
 
@@ -81,6 +82,7 @@ class RowRenderer:
             fqdn_suffix=fqdn_suffix,
             sha_cache=sha_cache,
             github_refs=github_refs,
+            notes_data=notes_data,
         )
         ts_value = resolve_last_ok_ts(latest.get(host), last_ok=latest_ok.get(host))
         tc_ts_value = tc_worker_data.get("ts") if tc_worker_data else None
@@ -225,7 +227,18 @@ class RowRenderer:
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
-            if col_name == "uptime":
+            if col_name == "note":
+                note_val = values.get("note", "-")
+                if (
+                    note_val
+                    and note_val != "-"
+                    and self.colors.color_enabled
+                    and self.colors.curses_mod
+                ):
+                    attr = self.colors.curses_mod.color_pair(5)  # YELLOW
+                else:
+                    attr = 0
+            elif col_name == "uptime":
                 attr = self.colors.uptime_attr(uptime_s)
             else:
                 attr = 0
