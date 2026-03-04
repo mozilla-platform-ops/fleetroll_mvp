@@ -63,7 +63,6 @@ def compute_columns_and_widths(
         "role",
         "vlt_sha",
         "sha",
-        "note",
         "uptime",
         "pp_last",
         "pp_exp",
@@ -74,6 +73,7 @@ def compute_columns_and_widths(
         "tc_quar",
         "data",
         "healthy",
+        "note",
     ]
     labels = {
         "host": "HOST",
@@ -100,7 +100,7 @@ def compute_columns_and_widths(
         "os": 1,
         "sha": 30,
         "vlt_sha": 40,
-        "note": 40,
+        "note": 20,
         "tc_quar": 8,
         "tc_act": 12,
         "tc_j_sf": 20,

@@ -326,7 +326,7 @@ class MonitorDisplay:
         if self._notes_path is None:
             return False
         now = time.monotonic()
-        if now - self._notes_poll_time < 10.0:
+        if now - self._notes_poll_time < 2.0:
             return False
         self._notes_poll_time = now
         from ...notes import load_latest_notes
@@ -404,7 +404,6 @@ class MonitorDisplay:
             "role",
             "vlt_sha",
             "sha",
-            "note",
             "uptime",
             "pp_last",
             "pp_sha",
@@ -415,6 +414,7 @@ class MonitorDisplay:
             "tc_quar",
             "data",
             "healthy",
+            "note",
         ]
 
         labels = {
