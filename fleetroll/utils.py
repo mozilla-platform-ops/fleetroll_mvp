@@ -203,3 +203,10 @@ def ensure_host_or_file(host_arg: str) -> None:
         raise UserError(
             f"HOST_OR_FILE does not look like a hostname or IP and file was not found: {host_arg}"
         )
+
+
+def ensure_fqdn(hostname: str) -> None:
+    """Raise UserError if hostname is not a valid FQDN (requires at least one dot)."""
+    host = hostname.rsplit("@", 1)[-1] if "@" in hostname else hostname
+    if not _HOSTNAME_RE.match(host) or "." not in host:
+        raise UserError(f"Hostname must be a fully-qualified domain name (got {hostname!r})")

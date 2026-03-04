@@ -8,6 +8,7 @@ import pytest
 from fleetroll.exceptions import FleetRollError, UserError
 from fleetroll.utils import (
     default_audit_log_path,
+    ensure_fqdn,
     ensure_host_or_file,
     ensure_parent_dir,
     format_host_preview,
@@ -329,6 +330,28 @@ class TestEnsureHostOrFile:
     def test_list_suffix_requires_existing_file(self, tmp_dir: Path):
         with pytest.raises(UserError, match="Host list file not found"):
             ensure_host_or_file(str(tmp_dir / "missing.list"))
+
+
+class TestEnsureFqdn:
+    """Tests for ensure_fqdn function."""
+
+    def test_valid_fqdn_passes(self):
+        ensure_fqdn("host1.example.com")
+
+    def test_single_label_raises(self):
+        with pytest.raises(UserError, match="fully-qualified"):
+            ensure_fqdn("hostname")
+
+    def test_empty_raises(self):
+        with pytest.raises(UserError, match="fully-qualified"):
+            ensure_fqdn("")
+
+    def test_invalid_chars_raises(self):
+        with pytest.raises(UserError, match="fully-qualified"):
+            ensure_fqdn("host name.example.com")
+
+    def test_multi_label_passes(self):
+        ensure_fqdn("web-01.prod.example.com")
 
 
 class TestInferActor:

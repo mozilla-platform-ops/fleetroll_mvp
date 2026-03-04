@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ..notes import append_note, append_note_clear, default_notes_path, iter_notes
-from ..utils import infer_actor
+from ..utils import ensure_fqdn, infer_actor
 
 
 def cmd_note_add(
@@ -25,6 +25,7 @@ def cmd_note_add(
         notes_file: Path to notes file (default: data/notes.jsonl)
         json_output: If True, emit JSON output
     """
+    ensure_fqdn(hostname)
     path = Path(notes_file) if notes_file else default_notes_path()
     actor = infer_actor()
     record = append_note(path, host=hostname, note=note_text, actor=actor)
@@ -49,6 +50,7 @@ def cmd_note_clear(
         notes_file: Path to notes file (default: data/notes.jsonl)
         json_output: If True, emit JSON output
     """
+    ensure_fqdn(hostname)
     path = Path(notes_file) if notes_file else default_notes_path()
     actor = infer_actor()
     record = append_note_clear(path, host=hostname, actor=actor, reason=reason)

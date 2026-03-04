@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fleetroll.commands.note import cmd_note_add, cmd_note_clear, cmd_show_notes
+from fleetroll.exceptions import UserError
 from fleetroll.notes import append_note, append_note_clear, load_latest_notes
 
 
@@ -37,6 +39,12 @@ class TestCmdNoteAdd:
         cmd_note_add("host2.example.com", "my note", notes_file=str(path))
         result = load_latest_notes(path)
         assert result.get("host2.example.com") == "my note"
+
+    def test_rejects_non_fqdn(self, tmp_dir: Path) -> None:
+        """cmd_note_add raises UserError for a non-FQDN hostname."""
+        path = tmp_dir / "notes.jsonl"
+        with pytest.raises(UserError, match="fully-qualified"):
+            cmd_note_add("hostname", "a note", notes_file=str(path))
 
     def test_multiple_adds_accumulate(self, tmp_dir: Path) -> None:
         """cmd_note_add appends multiple notes correctly."""
@@ -169,6 +177,12 @@ class TestCmdNoteClear:
         cmd_note_clear("host1.example.com", notes_file=str(path))
         result = load_latest_notes(path)
         assert "host1.example.com" not in result
+
+    def test_rejects_non_fqdn(self, tmp_dir: Path) -> None:
+        """cmd_note_clear raises UserError for a non-FQDN hostname."""
+        path = tmp_dir / "notes.jsonl"
+        with pytest.raises(UserError, match="fully-qualified"):
+            cmd_note_clear("hostname", notes_file=str(path))
 
     def test_clear_with_reason(self, tmp_dir: Path, capsys) -> None:
         """cmd_note_clear includes reason in JSON record when provided."""
