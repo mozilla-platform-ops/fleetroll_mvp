@@ -38,6 +38,38 @@ def default_notes_path() -> Path:
     return home / AUDIT_DIR_NAME / NOTES_FILE_NAME
 
 
+def append_note_clear(
+    path: Path,
+    *,
+    host: str,
+    actor: str | None = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Append a note-clear tombstone record and return it.
+
+    Args:
+        path: Path to the notes JSONL file
+        host: Hostname whose notes are being cleared
+        actor: Actor performing the clear (inferred if None)
+        reason: Optional reason for clearing notes
+
+    Returns:
+        The record dict that was appended
+    """
+    if actor is None:
+        actor = infer_actor()
+    record: dict[str, Any] = {
+        "action": "host.note_clear",
+        "actor": actor,
+        "host": host,
+        "ts": utc_now_iso(),
+    }
+    if reason is not None:
+        record["reason"] = reason
+    append_jsonl(path, record)
+    return record
+
+
 def append_note(path: Path, *, host: str, note: str, actor: str | None = None) -> dict[str, Any]:
     """Append a note record to the notes file and return it.
 
@@ -74,7 +106,7 @@ def iter_notes(path: Path, *, host: str | None = None) -> Iterable[dict[str, Any
         Note record dicts
     """
     for record in iter_audit_records(path):
-        if record.get("action") != "host.note_add":
+        if record.get("action") not in ("host.note_add", "host.note_clear"):
             continue
         if host is not None and record.get("host") != host:
             continue
@@ -97,8 +129,14 @@ def load_latest_notes(path: Path) -> dict[str, str]:
     latest_text: dict[str, str] = {}
     for record in iter_notes(path):
         host = record.get("host")
+        if not host:
+            continue
+        if record.get("action") == "host.note_clear":
+            counts[host] = 0
+            latest_text.pop(host, None)
+            continue
         note_text = record.get("note")
-        if not host or not note_text:
+        if not note_text:
             continue
         counts[host] = counts.get(host, 0) + 1
         latest_text[host] = note_text

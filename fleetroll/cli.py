@@ -29,6 +29,7 @@ from .commands import (
     cmd_host_unset,
     cmd_maintain,
     cmd_note_add,
+    cmd_note_clear,
     cmd_override_show,
     cmd_show_notes,
     cmd_tc_fetch,
@@ -602,6 +603,28 @@ def note_add(hostname: str, note_text: str, notes_file: str | None, json_output:
     cmd_note_add(hostname, note_text, notes_file=notes_file, json_output=json_output)
 
 
+@cli.command("note-clear")
+@click.argument("hostname")
+@click.option(
+    "--reason",
+    help="Optional reason for clearing notes.",
+)
+@click.option(
+    "--notes-file",
+    type=click.Path(),
+    help="Path to notes JSONL file (default: data/notes.jsonl).",
+)
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Emit machine-readable JSON to stdout.",
+)
+def note_clear(hostname: str, reason: str | None, notes_file: str | None, json_output: bool):
+    """Clear notes for a host (appends a tombstone record)."""
+    cmd_note_clear(hostname, reason=reason, notes_file=notes_file, json_output=json_output)
+
+
 @cli.command("show-notes")
 @click.argument("hostname")
 @click.option(
@@ -621,9 +644,26 @@ def note_add(hostname: str, note_text: str, notes_file: str | None, json_output:
     is_flag=True,
     help="Emit machine-readable JSON to stdout.",
 )
-def show_notes(hostname: str, limit: int | None, notes_file: str | None, json_output: bool):
+@click.option(
+    "--include-cleared",
+    is_flag=True,
+    help="Show all records including clear tombstones.",
+)
+def show_notes(
+    hostname: str,
+    limit: int | None,
+    notes_file: str | None,
+    json_output: bool,
+    include_cleared: bool,
+):
     """Show notes for a host."""
-    cmd_show_notes(hostname, limit=limit, notes_file=notes_file, json_output=json_output)
+    cmd_show_notes(
+        hostname,
+        limit=limit,
+        notes_file=notes_file,
+        json_output=json_output,
+        include_cleared=include_cleared,
+    )
 
 
 def main():

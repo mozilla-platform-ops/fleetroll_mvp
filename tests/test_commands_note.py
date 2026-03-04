@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fleetroll.commands.note import cmd_note_add, cmd_show_notes
-from fleetroll.notes import append_note, load_latest_notes
+from fleetroll.commands.note import cmd_note_add, cmd_note_clear, cmd_show_notes
+from fleetroll.notes import append_note, append_note_clear, load_latest_notes
 
 
 class TestCmdNoteAdd:
@@ -107,3 +107,75 @@ class TestCmdShowNotes:
         out = capsys.readouterr().out
         assert "alice" in out
         assert "operator note" in out
+
+    def test_show_after_clear_returns_no_notes(self, tmp_dir: Path, capsys) -> None:
+        """cmd_show_notes returns 'No notes' after a clear tombstone with no new notes."""
+        path = tmp_dir / "notes.jsonl"
+        append_note(path, host="h1.example.com", note="a note", actor="u")
+        append_note_clear(path, host="h1.example.com", actor="u")
+        cmd_show_notes("h1.example.com", notes_file=str(path))
+        out = capsys.readouterr().out
+        assert "No notes" in out
+
+    def test_show_after_clear_then_new_note_only_shows_post_clear(
+        self, tmp_dir: Path, capsys
+    ) -> None:
+        """cmd_show_notes only shows notes added after the last clear."""
+        path = tmp_dir / "notes.jsonl"
+        append_note(path, host="h1.example.com", note="old note", actor="u")
+        append_note_clear(path, host="h1.example.com", actor="u")
+        append_note(path, host="h1.example.com", note="new note", actor="u")
+        cmd_show_notes("h1.example.com", notes_file=str(path))
+        out = capsys.readouterr().out
+        assert "new note" in out
+        assert "old note" not in out
+
+    def test_include_cleared_shows_all_records(self, tmp_dir: Path, capsys) -> None:
+        """cmd_show_notes with include_cleared=True shows all records including tombstones."""
+        path = tmp_dir / "notes.jsonl"
+        append_note(path, host="h1.example.com", note="old note", actor="u")
+        append_note_clear(path, host="h1.example.com", actor="u")
+        append_note(path, host="h1.example.com", note="new note", actor="u")
+        cmd_show_notes("h1.example.com", notes_file=str(path), include_cleared=True)
+        out = capsys.readouterr().out
+        assert "old note" in out
+        assert "[CLEARED]" in out
+        assert "new note" in out
+
+
+class TestCmdNoteClear:
+    """Tests for cmd_note_clear command."""
+
+    def test_prints_confirmation(self, tmp_dir: Path, capsys) -> None:
+        """cmd_note_clear prints human-readable confirmation."""
+        path = tmp_dir / "notes.jsonl"
+        cmd_note_clear("host1.example.com", notes_file=str(path))
+        out = capsys.readouterr().out
+        assert "Notes cleared for host1.example.com" in out
+
+    def test_json_output(self, tmp_dir: Path, capsys) -> None:
+        """cmd_note_clear with json_output=True emits a JSON record."""
+        path = tmp_dir / "notes.jsonl"
+        cmd_note_clear("host1.example.com", notes_file=str(path), json_output=True)
+        out = capsys.readouterr().out
+        record = json.loads(out)
+        assert record["action"] == "host.note_clear"
+        assert record["host"] == "host1.example.com"
+
+    def test_record_written_to_file(self, tmp_dir: Path) -> None:
+        """cmd_note_clear writes a tombstone record to the notes file."""
+        path = tmp_dir / "notes.jsonl"
+        append_note(path, host="host1.example.com", note="a note", actor="u")
+        cmd_note_clear("host1.example.com", notes_file=str(path))
+        result = load_latest_notes(path)
+        assert "host1.example.com" not in result
+
+    def test_clear_with_reason(self, tmp_dir: Path, capsys) -> None:
+        """cmd_note_clear includes reason in JSON record when provided."""
+        path = tmp_dir / "notes.jsonl"
+        cmd_note_clear(
+            "host1.example.com", reason="resolved", notes_file=str(path), json_output=True
+        )
+        out = capsys.readouterr().out
+        record = json.loads(out)
+        assert record["reason"] == "resolved"
