@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import fcntl
+import contextlib
 import os
-import pty
 import shutil
-import struct
 import subprocess
 import tempfile
-import termios
 import time
 import uuid
 from pathlib import Path
@@ -67,11 +64,18 @@ class TmuxSession:
         # Use an isolated socket so this server's global options don't
         # bleed into the developer's main tmux server.
         self._socket = os.path.join(tempfile.gettempdir(), f"{self.name}.sock")
+        # Write a tmux config that forces the correct window size.
+        # On headless CI, tmux ignores new-session -x/-y and falls back to
+        # 80x24.  Setting default-size in a config file loaded via -f makes
+        # detached sessions use the requested dimensions.
+        self._conf = os.path.join(tempfile.gettempdir(), f"{self.name}.conf")
+        with open(self._conf, "w") as f:
+            f.write(f"set-option -g default-size {self.cols}x{self.rows}\n")
         self._started = False
 
     def _tmux(self, *args: str) -> list[str]:
         """Return a tmux command list targeting this session's isolated server."""
-        return ["tmux", "-S", self._socket, *args]
+        return ["tmux", "-S", self._socket, "-f", self._conf, *args]
 
     # ------------------------------------------------------------------
     # Context manager
@@ -108,23 +112,11 @@ class TmuxSession:
             tmux_cmd += ["-e", f"{key}={value}"]
         tmux_cmd.append(self.cmd)
 
-        # On headless CI there is no controlling terminal, so tmux may
-        # ignore the -x/-y flags and fall back to 80x24.  Create a PTY
-        # with the desired size and pass it as stdin so tmux sees a real
-        # terminal with the correct dimensions.
-        master_fd, slave_fd = pty.openpty()
-        try:
-            winsize = struct.pack("HHHH", self.rows, self.cols, 0, 0)
-            fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
-            subprocess.run(
-                tmux_cmd,
-                stdin=slave_fd,
-                check=True,
-                capture_output=True,
-            )
-        finally:
-            os.close(slave_fd)
-            os.close(master_fd)
+        subprocess.run(
+            tmux_cmd,
+            check=True,
+            capture_output=True,
+        )
         self._started = True
 
     def kill(self) -> None:
@@ -137,6 +129,9 @@ class TmuxSession:
             capture_output=True,
         )
         self._started = False
+        # Clean up the temporary config file.
+        with contextlib.suppress(OSError):
+            os.unlink(self._conf)
 
     def is_alive(self) -> bool:
         """Return True if the tmux session still exists."""
