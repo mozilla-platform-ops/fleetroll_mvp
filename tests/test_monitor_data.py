@@ -20,9 +20,19 @@ def temp_db():
         db_path.unlink(missing_ok=True)
 
 
-def test_load_tc_worker_data_from_db_basic(temp_db) -> None:
-    """Test loading TC worker data from SQLite."""
+@pytest.fixture
+def db_conn(temp_db):
+    """Open a database connection and close it after the test."""
     conn = get_connection(temp_db)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def test_load_tc_worker_data_from_db_basic(db_conn) -> None:
+    """Test loading TC worker data from SQLite."""
+    conn = db_conn
 
     # Insert test data
     records = [
@@ -67,9 +77,9 @@ def test_load_tc_worker_data_from_db_basic(temp_db) -> None:
     assert result["host2"]["state"] == "stopped"
 
 
-def test_load_tc_worker_data_from_db_empty(temp_db) -> None:
+def test_load_tc_worker_data_from_db_empty(db_conn) -> None:
     """Test loading TC worker data with no records."""
-    conn = get_connection(temp_db)
+    conn = db_conn
 
     hosts = ["host1.example.com"]
     result = load_tc_worker_data_from_db(conn, hosts=hosts)
@@ -77,9 +87,9 @@ def test_load_tc_worker_data_from_db_empty(temp_db) -> None:
     assert result == {}
 
 
-def test_load_tc_worker_data_from_db_latest_only(temp_db) -> None:
+def test_load_tc_worker_data_from_db_latest_only(db_conn) -> None:
     """Test that only latest records are returned."""
-    conn = get_connection(temp_db)
+    conn = db_conn
 
     # Insert older record
     old_record = {
