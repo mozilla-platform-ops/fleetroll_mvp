@@ -110,7 +110,9 @@ class TmuxSession:
         # update-environment filter (HOME is not in the default list).
         for key, value in self.env.items():
             tmux_cmd += ["-e", f"{key}={value}"]
-        tmux_cmd.append(self.cmd)
+        # Set pty size via stty before launching the app so curses reads the
+        # correct dimensions from TIOCGWINSZ regardless of tmux client state.
+        tmux_cmd.append(f"stty cols {self.cols} rows {self.rows} 2>/dev/null; exec {self.cmd}")
 
         subprocess.run(
             tmux_cmd,
