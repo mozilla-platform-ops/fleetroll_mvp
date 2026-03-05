@@ -106,6 +106,18 @@ class TmuxSession:
         # Force the window to the requested size after creation.
         # tmux may ignore -x/-y in new-session when no terminal is attached
         # (e.g. on CI), falling back to the default 80x24.
+        # Use force-width/force-height window options to override tmux's
+        # size negotiation regardless of connected clients.
+        subprocess.run(
+            ["tmux", "set-window-option", "-t", self.name, "force-width", str(self.cols)],
+            check=False,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["tmux", "set-window-option", "-t", self.name, "force-height", str(self.rows)],
+            check=False,
+            capture_output=True,
+        )
         subprocess.run(
             [
                 "tmux",
