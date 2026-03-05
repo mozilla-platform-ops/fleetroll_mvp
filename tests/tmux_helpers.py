@@ -377,6 +377,11 @@ def tmux_session(
             pytest.fail(
                 f"TUI did not render within timeout (session alive={alive}). Screen:\n{output}"
             )
+        # On headless CI, the initial session size may be 80 cols despite the
+        # -x flag.  Resize now that curses is initialized so the SIGWINCH is
+        # delivered to a running app, then wait for the re-render to settle.
+        sess.resize(sess.cols, sess.rows)
+        sess.wait_for("HOST", timeout=5.0)
         yield sess
     finally:
         sess.kill()
