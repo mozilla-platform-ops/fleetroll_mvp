@@ -21,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: uv sync --group lint
@@ -46,7 +46,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: uv sync --group lint
@@ -55,12 +55,64 @@ jobs:
         run: uv run ty check fleetroll/
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Test - Full Suite with Coverage (Python 3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install tmux
+        run: sudo apt-get install -y tmux
+
+      - name: Verify test prerequisites
+        run: |
+          missing=()
+          command -v tmux >/dev/null 2>&1 || missing+=("tmux")
+          command -v docker >/dev/null 2>&1 || missing+=("docker")
+          docker info >/dev/null 2>&1 || missing+=("docker-daemon")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "ERROR: Missing prerequisites (would cause coverage gaps): ${missing[*]}"
+            exit 1
+          fi
+          echo "OK: tmux $(tmux -V), docker $(docker --version)"
+
+      - name: Install dependencies
+        run: uv sync --group test
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov=fleetroll --cov-report=xml --cov-report=html --cov-report=term
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: |
+            htmlcov/
+            coverage.xml
+
+  test-compat:
+    name: Test - Unit Only (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v6
 
@@ -77,47 +129,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --group test
 
-      - name: Run tests with coverage
-        run: uv run pytest --ignore=tests/integration/ --cov=fleetroll --cov-report=xml --cov-report=term
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        if: matrix.python-version == '3.11'
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v7
-        if: matrix.python-version == '3.11'
-        with:
-          name: coverage-report
-          path: |
-            htmlcov/
-            coverage.xml
-
-  integration-test:
-    name: Integration Tests (Docker E2E)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: uv sync --group test
-
-      - name: Run integration tests
-        run: uv run pytest tests/integration/ -v
+      - name: Run unit tests
+        run: uv run pytest --ignore=tests/integration/ --ignore=tests/tui/
 
   security:
     name: Security Scan
@@ -133,7 +146,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: uv sync --group audit
