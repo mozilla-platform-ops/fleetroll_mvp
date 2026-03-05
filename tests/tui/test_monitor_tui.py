@@ -14,7 +14,11 @@ pytestmark = [skip_no_tmux, pytest.mark.tui]
 
 def _session_env(home_dir: Any) -> dict[str, str]:
     """Build the env dict for a TUI tmux session."""
-    return {"HOME": str(home_dir), "PATH": os.environ.get("PATH", "")}
+    return {
+        "HOME": str(home_dir),
+        "PATH": os.environ.get("PATH", ""),
+        "TERM": os.environ.get("TERM", "xterm-256color"),
+    }
 
 
 # ---------------------------------------------------------------------------

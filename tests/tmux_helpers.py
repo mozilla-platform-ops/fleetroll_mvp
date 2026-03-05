@@ -403,9 +403,12 @@ def tmux_session(
 
     # Build env: start from current environment so PATH etc. are inherited,
     # then override HOME so fleetroll finds the test DB.
+    # TERM must be set — without it curses falls back to 80x24 regardless
+    # of the actual pty size reported by TIOCGWINSZ.
     session_env = {
         "HOME": str(home_dir),
         "PATH": os.environ.get("PATH", ""),
+        "TERM": os.environ.get("TERM", "xterm-256color"),
     }
 
     cmd = f"{_UV_PATH} run fleetroll host-monitor {hosts_file}"
