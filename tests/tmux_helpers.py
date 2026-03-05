@@ -118,6 +118,14 @@ class TmuxSession:
             capture_output=True,
         )
         self._started = True
+        # window-size manual cannot be set in a config file (crashes server),
+        # but must be set after creation to prevent tmux resizing the pty
+        # down when there are no attached clients (window-size latest default).
+        subprocess.run(
+            self._tmux("set", "-g", "window-size", "manual"),
+            check=False,
+            capture_output=True,
+        )
 
     def kill(self) -> None:
         """Kill the tmux server for this session, ignoring errors if already gone."""
