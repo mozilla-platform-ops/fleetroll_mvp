@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
+import pty
 import shutil
+import struct
 import subprocess
 import tempfile
+import termios
 import time
 import uuid
 from pathlib import Path
@@ -104,36 +108,24 @@ class TmuxSession:
             tmux_cmd += ["-e", f"{key}={value}"]
         tmux_cmd.append(self.cmd)
 
-        subprocess.run(
-            tmux_cmd,
-            check=True,
-            capture_output=True,
-        )
+        # On headless CI there is no controlling terminal, so tmux may
+        # ignore the -x/-y flags and fall back to 80x24.  Create a PTY
+        # with the desired size and pass it as stdin so tmux sees a real
+        # terminal with the correct dimensions.
+        master_fd, slave_fd = pty.openpty()
+        try:
+            winsize = struct.pack("HHHH", self.rows, self.cols, 0, 0)
+            fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
+            subprocess.run(
+                tmux_cmd,
+                stdin=slave_fd,
+                check=True,
+                capture_output=True,
+            )
+        finally:
+            os.close(slave_fd)
+            os.close(master_fd)
         self._started = True
-        # Force the window to the requested size after creation.
-        # tmux may ignore -x/-y in new-session when no terminal is attached
-        # (e.g. on CI), falling back to the default 80x24.
-        # window-size is a server-global option; safe to set with -g here
-        # because this session uses an isolated socket (-S), so it won't
-        # affect the developer's main tmux server.
-        subprocess.run(
-            self._tmux("set-option", "-g", "window-size", "manual"),
-            check=False,
-            capture_output=True,
-        )
-        subprocess.run(
-            self._tmux(
-                "resize-window",
-                "-t",
-                self.name,
-                "-x",
-                str(self.cols),
-                "-y",
-                str(self.rows),
-            ),
-            check=False,
-            capture_output=True,
-        )
 
     def kill(self) -> None:
         """Kill the tmux server for this session, ignoring errors if already gone."""
@@ -377,11 +369,6 @@ def tmux_session(
             pytest.fail(
                 f"TUI did not render within timeout (session alive={alive}). Screen:\n{output}"
             )
-        # On headless CI, the initial session size may be 80 cols despite the
-        # -x flag.  Resize now that curses is initialized so the SIGWINCH is
-        # delivered to a running app, then wait for the re-render to settle.
-        sess.resize(sess.cols, sess.rows)
-        sess.wait_for("HOST", timeout=5.0)
         yield sess
     finally:
         sess.kill()
