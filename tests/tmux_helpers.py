@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -59,7 +60,14 @@ class TmuxSession:
         self.env = env or {}
         self.cwd = cwd or _PROJECT_ROOT
         self.name = f"fleetroll-test-{uuid.uuid4().hex[:8]}"
+        # Use an isolated socket so this server's global options don't
+        # bleed into the developer's main tmux server.
+        self._socket = os.path.join(tempfile.gettempdir(), f"{self.name}.sock")
         self._started = False
+
+    def _tmux(self, *args: str) -> list[str]:
+        """Return a tmux command list targeting this session's isolated server."""
+        return ["tmux", "-S", self._socket, *args]
 
     # ------------------------------------------------------------------
     # Context manager
@@ -78,8 +86,7 @@ class TmuxSession:
 
     def start(self) -> None:
         """Start the tmux session in detached mode."""
-        tmux_cmd = [
-            "tmux",
+        tmux_cmd = self._tmux(
             "new-session",
             "-d",
             "-s",
@@ -90,7 +97,7 @@ class TmuxSession:
             str(self.rows),
             "-c",
             str(self.cwd),
-        ]
+        )
         # Pass extra env vars explicitly via -e so they bypass tmux's
         # update-environment filter (HOME is not in the default list).
         for key, value in self.env.items():
@@ -106,16 +113,16 @@ class TmuxSession:
         # Force the window to the requested size after creation.
         # tmux may ignore -x/-y in new-session when no terminal is attached
         # (e.g. on CI), falling back to the default 80x24.
-        # Set window-size to manual so tmux doesn't auto-resize based on
-        # (absent) clients, then resize-window will actually stick.
+        # window-size is a server-global option; safe to set with -g here
+        # because this session uses an isolated socket (-S), so it won't
+        # affect the developer's main tmux server.
         subprocess.run(
-            ["tmux", "set-option", "-t", self.name, "window-size", "manual"],
+            self._tmux("set-option", "-g", "window-size", "manual"),
             check=False,
             capture_output=True,
         )
         subprocess.run(
-            [
-                "tmux",
+            self._tmux(
                 "resize-window",
                 "-t",
                 self.name,
@@ -123,17 +130,17 @@ class TmuxSession:
                 str(self.cols),
                 "-y",
                 str(self.rows),
-            ],
+            ),
             check=False,
             capture_output=True,
         )
 
     def kill(self) -> None:
-        """Kill the tmux session, ignoring errors if already gone."""
+        """Kill the tmux server for this session, ignoring errors if already gone."""
         if not self._started:
             return
         subprocess.run(
-            ["tmux", "kill-session", "-t", self.name],
+            self._tmux("kill-server"),
             check=False,
             capture_output=True,
         )
@@ -142,7 +149,7 @@ class TmuxSession:
     def is_alive(self) -> bool:
         """Return True if the tmux session still exists."""
         result = subprocess.run(
-            ["tmux", "has-session", "-t", self.name],
+            self._tmux("has-session", "-t", self.name),
             check=False,
             capture_output=True,
         )
@@ -163,7 +170,7 @@ class TmuxSession:
         Returns:
             Screen text as a single string, or "" on failure.
         """
-        cmd = ["tmux", "capture-pane", "-t", self.name, "-p"]
+        cmd = self._tmux("capture-pane", "-t", self.name, "-p")
         if with_escapes:
             cmd.append("-e")
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -180,7 +187,7 @@ class TmuxSession:
         """
         for key in keys:
             subprocess.run(
-                ["tmux", "send-keys", "-t", self.name, key, ""],
+                self._tmux("send-keys", "-t", self.name, key, ""),
                 check=True,
                 capture_output=True,
             )
@@ -193,8 +200,7 @@ class TmuxSession:
             rows: New row count.
         """
         subprocess.run(
-            [
-                "tmux",
+            self._tmux(
                 "resize-window",
                 "-t",
                 self.name,
@@ -202,7 +208,7 @@ class TmuxSession:
                 str(cols),
                 "-y",
                 str(rows),
-            ],
+            ),
             check=True,
             capture_output=True,
         )
