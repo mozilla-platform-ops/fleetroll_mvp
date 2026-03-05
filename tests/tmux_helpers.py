@@ -152,63 +152,6 @@ class TmuxSession:
         )
         return result.returncode == 0
 
-    def diagnostics(self) -> str:
-        """Return tmux diagnostic info (version, window size, TERM, etc.)."""
-        parts: list[str] = []
-        for label, cmd in [
-            ("version", self._tmux("-V")),
-            (
-                "window_size",
-                self._tmux(
-                    "display-message",
-                    "-t",
-                    self.name,
-                    "-p",
-                    "#{window_width}x#{window_height}",
-                ),
-            ),
-            (
-                "pane_size",
-                self._tmux(
-                    "display-message",
-                    "-t",
-                    self.name,
-                    "-p",
-                    "pane=#{pane_width}x#{pane_height}",
-                ),
-            ),
-            (
-                "TERM",
-                self._tmux(
-                    "display-message",
-                    "-t",
-                    self.name,
-                    "-p",
-                    "TERM=#{TERM}",
-                ),
-            ),
-            (
-                "default-size",
-                self._tmux(
-                    "show-options",
-                    "-g",
-                    "default-size",
-                ),
-            ),
-            (
-                "window-size",
-                self._tmux(
-                    "show-options",
-                    "-g",
-                    "window-size",
-                ),
-            ),
-            ("clients", self._tmux("list-clients")),
-        ]:
-            r = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            parts.append(f"{label}: {r.stdout.strip() or r.stderr.strip()}")
-        return "\n".join(parts)
-
     # ------------------------------------------------------------------
     # Interaction
     # ------------------------------------------------------------------

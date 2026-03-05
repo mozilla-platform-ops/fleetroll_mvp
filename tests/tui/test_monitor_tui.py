@@ -38,10 +38,7 @@ class TestMonitorLayout:
         """Key column labels appear in the rendered header."""
         screen = tmux_session.capture()
         for col in ("OS", "ROLE", "OVR_SHA"):
-            assert col in screen, (
-                f"Column '{col}' not found in screen.\n"
-                f"--- tmux diagnostics ---\n{tmux_session.diagnostics()}"
-            )
+            assert col in screen, f"Column '{col}' not found in screen"
 
     def test_host_rows_rendered(self, tmux_session: TmuxSession) -> None:
         """At least one seeded host name appears in the output."""
