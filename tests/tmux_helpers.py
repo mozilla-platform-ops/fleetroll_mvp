@@ -103,6 +103,23 @@ class TmuxSession:
             capture_output=True,
         )
         self._started = True
+        # Force the window to the requested size after creation.
+        # tmux may ignore -x/-y in new-session when no terminal is attached
+        # (e.g. on CI), falling back to the default 80x24.
+        subprocess.run(
+            [
+                "tmux",
+                "resize-window",
+                "-t",
+                self.name,
+                "-x",
+                str(self.cols),
+                "-y",
+                str(self.rows),
+            ],
+            check=False,
+            capture_output=True,
+        )
 
     def kill(self) -> None:
         """Kill the tmux session, ignoring errors if already gone."""
