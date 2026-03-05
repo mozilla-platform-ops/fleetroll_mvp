@@ -335,7 +335,7 @@ def tmux_session(
     }
 
     cmd = f"{_UV_PATH} run fleetroll host-monitor {hosts_file}"
-    sess = TmuxSession(cmd=cmd, cols=160, rows=40, env=session_env)
+    sess = TmuxSession(cmd=cmd, cols=300, rows=40, env=session_env)
     sess.start()
 
     try:

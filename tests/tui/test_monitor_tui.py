@@ -217,7 +217,7 @@ class TestQuit:
         hosts_file = tmux_monitor_env["hosts_file"]
         cmd = f"{_UV_PATH} run fleetroll host-monitor {hosts_file}"
         with TmuxSession(
-            cmd=cmd, cols=160, rows=40, env=_session_env(home_dir), cwd=_PROJECT_ROOT
+            cmd=cmd, cols=300, rows=40, env=_session_env(home_dir), cwd=_PROJECT_ROOT
         ) as sess:
             assert sess.wait_for("HOST", timeout=15.0), "TUI did not render"
             sess.send_keys("q")
