@@ -35,6 +35,7 @@ from ..ssh import (
     remote_read_vault_script,
     remote_windows_audit_script,
     run_ssh,
+    windows_ssh_host,
 )
 from ..utils import (
     default_audit_log_path,
@@ -284,8 +285,10 @@ def audit_single_host_with_retry(
 
     if is_windows_host(host):
         remote_cmd = remote_windows_audit_script()
+        ssh_host = windows_ssh_host(host)
     else:
         remote_cmd = remote_audit_script(include_content=include_content)
+        ssh_host = host
 
     logger.debug("Auditing host: %s", host)
 
@@ -308,7 +311,7 @@ def audit_single_host_with_retry(
         if attempt > 0:
             logger.debug("Retry attempt %d/%d for %s", attempt + 1, max_retries, host)
 
-        rc, out, err = run_ssh(host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout)
+        rc, out, err = run_ssh(ssh_host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout)
 
         # Check if retryable (connection errors)
         is_connection_error = rc != 0 and (
@@ -347,7 +350,7 @@ def audit_single_host_with_retry(
                     if not has_content_file(vault_sha, vault_dir):
                         vault_cmd = remote_read_vault_script()
                         v_rc, v_out, v_err = run_ssh(
-                            host,
+                            ssh_host,
                             vault_cmd,
                             ssh_options=ssh_opts,
                             timeout_s=args.timeout,

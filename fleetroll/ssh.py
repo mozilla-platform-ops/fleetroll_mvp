@@ -119,6 +119,16 @@ Write-Output "PP_STATE_JSON=$b64"
     return script.strip("\n")
 
 
+def windows_ssh_host(hostname: str) -> str:
+    """Return SSH destination for a Windows host with default user.
+
+    Prepends 'administrator@' if no user@ is already specified.
+    """
+    if "@" in hostname:
+        return hostname
+    return f"administrator@{hostname}"
+
+
 def remote_windows_audit_script() -> str:
     """Generate remote PowerShell command for auditing a Windows host.
 

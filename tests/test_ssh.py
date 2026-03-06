@@ -13,6 +13,7 @@ from fleetroll.ssh import (
     remote_set_script,
     remote_unset_script,
     remote_windows_audit_script,
+    windows_ssh_host,
 )
 
 
@@ -424,6 +425,30 @@ class TestIsWindowsHost:
     def test_wintest_short(self):
         """Short hostname with 'wintest' is Windows."""
         assert is_windows_host("mywintest") is True
+
+
+class TestWindowsSshHost:
+    """Tests for windows_ssh_host function."""
+
+    def test_prepends_administrator_for_bare_hostname(self):
+        """Bare hostname gets administrator@ prepended."""
+        result = windows_ssh_host("t-nuc12-005.wintest2.releng.mdc1.mozilla.com")
+        assert result == "administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com"
+
+    def test_preserves_explicit_user_prefix(self):
+        """Hostname already containing user@ is returned unchanged."""
+        result = windows_ssh_host("administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com")
+        assert result == "administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com"
+
+    def test_preserves_other_user_prefix(self):
+        """Any explicit user@ prefix is preserved as-is."""
+        result = windows_ssh_host("someuser@t-nuc12-005.wintest2.releng.mdc1.mozilla.com")
+        assert result == "someuser@t-nuc12-005.wintest2.releng.mdc1.mozilla.com"
+
+    def test_short_hostname(self):
+        """Short hostname without domain also gets administrator@ prepended."""
+        result = windows_ssh_host("wintest-host")
+        assert result == "administrator@wintest-host"
 
 
 class TestRemoteWindowsAuditScript:
