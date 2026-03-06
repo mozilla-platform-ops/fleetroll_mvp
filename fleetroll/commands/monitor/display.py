@@ -22,6 +22,7 @@ from .data import (
     humanize_duration,
     load_github_refs_from_db,
     load_tc_worker_data_from_db,
+    load_windows_pools_from_db,
     strip_fqdn,
 )
 from .header_renderer import HeaderInfo, HeaderRenderer
@@ -136,8 +137,10 @@ class MonitorDisplay:
         self._notes_path = notes_path
         self._tc_poll_time = 0.0
         self._github_poll_time = 0.0
+        self._windows_pools_poll_time = 0.0
         self._sha_cache_poll_time = 0.0
         self._notes_poll_time = 0.0
+        self.windows_pools: dict[str, dict[str, Any]] = load_windows_pools_from_db(self.db_conn)
         self.offset = 0
         self.col_offset = 0
         self.page_step = 1
@@ -292,6 +295,20 @@ class MonitorDisplay:
         new_data = load_github_refs_from_db(self.db_conn)
         if new_data != self.github_refs:
             self.github_refs = new_data
+            self._touch_updated()
+            return True
+        return False
+
+    def poll_windows_pools_data(self) -> bool:
+        """Check if Windows pool hashes changed and reload if needed. Returns True if reloaded."""
+        now = time.monotonic()
+        if now - self._windows_pools_poll_time < 5.0:
+            return False
+        self._windows_pools_poll_time = now
+        self.db_conn.commit()
+        new_data = load_windows_pools_from_db(self.db_conn)
+        if new_data != self.windows_pools:
+            self.windows_pools = new_data
             self._touch_updated()
             return True
         return False
@@ -458,6 +475,7 @@ class MonitorDisplay:
                 fqdn_suffix=self.fqdn_suffix,
                 sha_cache=self.sha_cache,
                 github_refs=self.github_refs,
+                windows_pools=self.windows_pools,
                 notes_data=self.notes_data,
             )
             for col in all_columns:
@@ -514,6 +532,7 @@ class MonitorDisplay:
             fqdn_suffix=self.fqdn_suffix,
             sha_cache=self.sha_cache,
             github_refs=self.github_refs,
+            windows_pools=self.windows_pools,
         )
         sha_value = values.get("sha", "")
         return sha_value not in ("-", "?", "")
@@ -537,6 +556,7 @@ class MonitorDisplay:
             fqdn_suffix=self.fqdn_suffix,
             sha_cache=self.sha_cache,
             github_refs=self.github_refs,
+            windows_pools=self.windows_pools,
         )
         return values["os"]
 
@@ -624,6 +644,7 @@ class MonitorDisplay:
                 fqdn_suffix=self.fqdn_suffix,
                 sha_cache=self.sha_cache,
                 github_refs=self.github_refs,
+                windows_pools=self.windows_pools,
                 notes_data=self.notes_data,
             )
             self.row_renderer.draw_host_row(

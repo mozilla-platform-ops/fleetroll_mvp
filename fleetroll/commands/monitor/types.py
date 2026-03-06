@@ -23,6 +23,7 @@ class DataContext:
         github_refs: GitHub reference data (branches, commits) by repository
         sha_cache: Optional cache for SHA to human-readable info mappings
         fqdn_suffix: Optional common FQDN suffix to strip from hostnames
+        windows_pools: Windows pool hash data by pool name
     """
 
     latest: dict[str, dict[str, Any]]
@@ -31,6 +32,7 @@ class DataContext:
     github_refs: dict[str, dict[str, Any]]
     sha_cache: ShaInfoCache | None
     fqdn_suffix: str | None
+    windows_pools: dict[str, dict[str, Any]] | None = None
 
 
 FLEETROLL_MASCOT = [

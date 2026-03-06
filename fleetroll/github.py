@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 import sqlite3
 from pathlib import Path
 
 import requests
+import yaml
 
 from .commands.monitor.cache import parse_override_file
 from .constants import (
@@ -150,6 +152,52 @@ def fetch_branch_shas(owner: str, repo: str) -> list[dict[str, str]]:
         return []
 
 
+WINDOWS_POOLS_YML_PATH = "provisioners/windows/MDC1Windows/pools.yml"
+WINDOWS_POOLS_REPO_OWNER = "mozilla-platform-ops"
+WINDOWS_POOLS_REPO = "worker-images"
+
+
+def fetch_windows_pool_hashes() -> dict[str, str]:
+    """Fetch Windows pool hash mappings from pools.yml in worker-images repo.
+
+    Returns:
+        Dict mapping pool_name -> hash string, or {} on error
+    """
+    url = (
+        f"https://api.github.com/repos/{WINDOWS_POOLS_REPO_OWNER}"
+        f"/{WINDOWS_POOLS_REPO}/contents/{WINDOWS_POOLS_YML_PATH}"
+    )
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "fleetroll",
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        content_b64 = data.get("content", "")
+        raw = base64.b64decode(content_b64).decode("utf-8")
+        pools_data = yaml.safe_load(raw)
+
+        result: dict[str, str] = {}
+        if isinstance(pools_data, list):
+            for pool in pools_data:
+                name = pool.get("name")
+                hash_val = pool.get("hash")
+                if name and hash_val:
+                    result[name] = hash_val
+        return result
+
+    except requests.RequestException:
+        logger.exception("Failed to fetch Windows pools.yml")
+        return {}
+    except Exception:
+        logger.exception("Failed to parse Windows pools.yml")
+        return {}
+
+
 def should_fetch(db_conn: sqlite3.Connection) -> bool:
     """Check if we should fetch GitHub refs based on throttle interval.
 
@@ -190,7 +238,7 @@ def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> Non
     """
     import click
 
-    from .db import get_connection, get_db_path, init_db, insert_github_ref
+    from .db import get_connection, get_db_path, init_db, insert_github_ref, insert_windows_pool
 
     # Determine paths
     home = Path.home()
@@ -275,6 +323,27 @@ def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> Non
             if not quiet:
                 click.echo(f" {matched}/{len(branches)} branch(es) found")
 
+        # Fetch and store Windows pool hashes
+        if not quiet:
+            click.echo("Fetching Windows pool hashes from pools.yml...", nl=False)
+        pool_hashes = fetch_windows_pool_hashes()
+        pools_written = 0
+        if pool_hashes:
+            for pool_name, hash_val in pool_hashes.items():
+                record = {
+                    "type": "windows_pool",
+                    "ts": ts,
+                    "pool_name": pool_name,
+                    "hash": hash_val,
+                }
+                insert_windows_pool(db_conn, record)
+                pools_written += 1
+        if not quiet:
+            if pool_hashes:
+                click.echo(f" {pools_written} pool(s) found")
+            else:
+                click.echo(" FAILED (no data)")
+
         # Commit all inserts
         db_conn.commit()
 
@@ -282,13 +351,18 @@ def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> Non
         if quiet:
             if errors:
                 status = click.style("⚠ WARNING", fg="yellow")
-                msg = f"{status} Wrote {branches_found}/{total_branches_requested} branch refs ({len(errors)} errors)"
+                msg = (
+                    f"{status} Wrote {branches_found}/{total_branches_requested} branch refs,"
+                    f" {pools_written} pool hashes ({len(errors)} errors)"
+                )
             else:
                 status = click.style("✓ SUCCESS", fg="green")
-                msg = f"{status} Wrote {branches_found} branch refs"
+                msg = f"{status} Wrote {branches_found} branch refs, {pools_written} pool hashes"
             click.echo(msg)
         else:
-            click.echo(f"Wrote {branches_found} branch ref(s) to database")
+            click.echo(
+                f"Wrote {branches_found} branch ref(s) and {pools_written} pool hash(es) to database"
+            )
             if errors:
                 click.echo(f"Encountered {len(errors)} error(s):")
                 for error in errors[:5]:  # Show first 5 errors

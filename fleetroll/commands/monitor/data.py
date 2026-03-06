@@ -222,6 +222,7 @@ def build_ok_row_values(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Build string values for an OK monitor row."""
@@ -369,12 +370,34 @@ def build_ok_row_values(
         if pp_match == "Y" and tc_act_s is not None and tc_act_s < 3600:
             healthy = "Y"
 
-    # Windows hosts don't run Puppet; suppress Linux-only fields
+    # Windows hosts don't run Puppet the same way; suppress pp_last,
+    # but try to compute PP_EXP/PP_MATCH from windows_pools hash data.
     if os_type == "W":
         pp_last = "-"
-        pp_exp = "-"
-        pp_match = "-"
-        healthy = "-"
+        if windows_pools and role and role not in ("-", "?", "missing"):
+            for pool_name, pool_data in windows_pools.items():
+                if pool_name.replace("-", "") == role:
+                    pool_hash = pool_data.get("hash", "")
+                    if pool_hash:
+                        pp_exp = pool_hash[:7]
+                    if puppet_git_sha and pool_hash:
+                        if puppet_git_sha.startswith(pool_hash) or pool_hash.startswith(
+                            puppet_git_sha[:7]
+                        ):
+                            pp_match = "Y" if puppet_success is True else "N"
+                        else:
+                            pp_match = "N"
+                    break
+        else:
+            pp_exp = "-"
+            pp_match = "-"
+        # Recompute healthy for Windows based on pp_match
+        if pp_match != "-":
+            healthy = "N"
+            if pp_match == "Y" and tc_act_s is not None and tc_act_s < 3600:
+                healthy = "Y"
+        else:
+            healthy = "-"
 
     # Add TaskCluster fields
     tc_quar = "-"
@@ -491,6 +514,7 @@ def build_row_values(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Build string values for a monitor row."""
@@ -540,6 +564,7 @@ def build_row_values(
                 fqdn_suffix=fqdn_suffix,
                 sha_cache=sha_cache,
                 github_refs=github_refs,
+                windows_pools=windows_pools,
                 notes_data=notes_data,
             )
             values["status"] = "FAIL"
@@ -581,6 +606,7 @@ def build_row_values(
         fqdn_suffix=fqdn_suffix,
         sha_cache=sha_cache,
         github_refs=github_refs,
+        windows_pools=windows_pools,
         notes_data=notes_data,
     )
 
@@ -643,6 +669,22 @@ def load_github_refs_from_db(
     from ...db import get_latest_github_refs
 
     return get_latest_github_refs(conn)
+
+
+def load_windows_pools_from_db(
+    conn: sqlite3.Connection,
+) -> dict[str, dict[str, Any]]:
+    """Load latest Windows pool hash data from SQLite.
+
+    Args:
+        conn: Database connection
+
+    Returns:
+        Dict mapping pool_name to most recent pool record
+    """
+    from ...db import get_latest_windows_pools
+
+    return get_latest_windows_pools(conn)
 
 
 def tail_audit_log(

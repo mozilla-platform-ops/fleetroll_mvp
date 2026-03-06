@@ -82,6 +82,17 @@ def init_db(db_path: Path) -> None:
             )
         """)
 
+        # Windows pool hashes table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS windows_pools (
+                pool_name TEXT NOT NULL,
+                ts TEXT NOT NULL,
+                hash TEXT NOT NULL,
+                data JSON NOT NULL,
+                PRIMARY KEY (pool_name, ts)
+            )
+        """)
+
         conn.commit()
     finally:
         conn.close()
@@ -280,6 +291,78 @@ def insert_github_ref(
         """,
         (owner, repo, branch, owner, repo, branch, retention_limit),
     )
+
+
+def insert_windows_pool(
+    conn: sqlite3.Connection,
+    record: dict[str, Any],
+    *,
+    retention_limit: int = DB_RETENTION_LIMIT,
+) -> None:
+    """Insert Windows pool hash record with simple retention.
+
+    Keeps latest N records per pool_name.
+
+    Args:
+        conn: Database connection
+        record: Pool record (must have pool_name, ts, hash fields)
+        retention_limit: Number of recent records to keep per pool
+    """
+    pool_name = record["pool_name"]
+    ts = record["ts"]
+    hash_val = record["hash"]
+    data_json = json.dumps(record)
+
+    conn.execute(
+        """
+        INSERT INTO windows_pools (pool_name, ts, hash, data)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (pool_name, ts) DO UPDATE SET hash=?, data=?
+        """,
+        (pool_name, ts, hash_val, data_json, hash_val, data_json),
+    )
+
+    conn.execute(
+        """
+        DELETE FROM windows_pools
+        WHERE pool_name = ?
+          AND rowid NOT IN (
+              SELECT rowid FROM windows_pools
+              WHERE pool_name = ?
+              ORDER BY ts DESC, rowid DESC
+              LIMIT ?
+          )
+        """,
+        (pool_name, pool_name, retention_limit),
+    )
+
+
+def get_latest_windows_pools(
+    conn: sqlite3.Connection,
+) -> dict[str, dict[str, Any]]:
+    """Get latest Windows pool hash data for all pools.
+
+    Returns:
+        Dict mapping pool_name to most recent pool record
+    """
+    result: dict[str, dict[str, Any]] = {}
+
+    rows = conn.execute("""
+        SELECT pool_name, data
+        FROM windows_pools
+        WHERE (pool_name, ts) IN (
+            SELECT pool_name, MAX(ts)
+            FROM windows_pools
+            GROUP BY pool_name
+        )
+    """).fetchall()
+
+    for row in rows:
+        pool_name = row["pool_name"]
+        data = json.loads(row["data"])
+        result[pool_name] = data
+
+    return result
 
 
 def get_latest_host_observations(

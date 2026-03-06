@@ -47,6 +47,7 @@ class RowRenderer:
         fqdn_suffix: str | None,
         sha_cache,
         github_refs: dict[str, dict[str, Any]],
+        windows_pools: dict[str, dict[str, Any]] | None = None,
         notes_data: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Compute all data needed to render a single host row.
@@ -82,6 +83,7 @@ class RowRenderer:
             fqdn_suffix=fqdn_suffix,
             sha_cache=sha_cache,
             github_refs=github_refs,
+            windows_pools=windows_pools,
             notes_data=notes_data,
         )
         ts_value = resolve_last_ok_ts(latest.get(host), last_ok=latest_ok.get(host))

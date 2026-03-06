@@ -54,6 +54,7 @@ def compute_columns_and_widths(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     """Compute columns and widths that fit within max_width."""
@@ -126,6 +127,7 @@ def compute_columns_and_widths(
             fqdn_suffix=fqdn_suffix,
             sha_cache=sha_cache,
             github_refs=github_refs,
+            windows_pools=windows_pools,
             notes_data=notes_data,
         )
         for col in columns:
@@ -186,6 +188,7 @@ def format_monitor_row(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
 ) -> str:
     """Format a single table row for a host."""
@@ -197,6 +200,7 @@ def format_monitor_row(
         fqdn_suffix=fqdn_suffix,
         sha_cache=sha_cache,
         github_refs=github_refs,
+        windows_pools=windows_pools,
         notes_data=notes_data,
     )
     parts = [clip_cell(values[col], widths[col]) for col in columns]
@@ -217,6 +221,7 @@ def render_monitor_lines(
     fqdn_suffix: str | None = None,
     sha_cache: ShaInfoCache | None = None,
     github_refs: dict[str, dict[str, Any]] | None = None,
+    windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
 ) -> tuple[str, list[str]]:
     """Render monitor header + lines in the provided host order."""
@@ -232,6 +237,7 @@ def render_monitor_lines(
         fqdn_suffix=fqdn_suffix,
         sha_cache=sha_cache,
         github_refs=github_refs,
+        windows_pools=windows_pools,
         notes_data=notes_data,
     )
     labels = {
@@ -271,6 +277,7 @@ def render_monitor_lines(
             fqdn_suffix=fqdn_suffix,
             sha_cache=sha_cache,
             github_refs=github_refs,
+            windows_pools=windows_pools,
             notes_data=notes_data,
         )
         for host in host_slice
