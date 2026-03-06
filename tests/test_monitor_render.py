@@ -535,6 +535,15 @@ def test_detect_common_fqdn_suffix_long():
     assert detect_common_fqdn_suffix(hosts) == ".test.releng.mdc1.mozilla.com"
 
 
+def test_detect_common_fqdn_suffix_partial():
+    """Hosts share a common base but differ in one subdomain level."""
+    hosts = [
+        "host1.test.releng.mdc1.mozilla.com",
+        "host2.wintest2.releng.mdc1.mozilla.com",
+    ]
+    assert detect_common_fqdn_suffix(hosts) == ".releng.mdc1.mozilla.com"
+
+
 def test_humanize_age_recent():
     """Recent timestamps (less than 1 minute)."""
     now = datetime.now(UTC)

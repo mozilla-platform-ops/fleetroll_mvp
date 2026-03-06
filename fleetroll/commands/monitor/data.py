@@ -91,23 +91,43 @@ def get_host_sort_key(
 
 
 def detect_common_fqdn_suffix(hosts: list[str]) -> str | None:
-    """Detect common FQDN suffix across all hosts.
+    """Detect the longest common FQDN suffix across all hosts.
 
-    Returns the common suffix (e.g., '.test.releng.mdc1.mozilla.com') if all hosts
-    share the same suffix, or None if hosts have different suffixes or no FQDN.
+    Returns the longest common suffix (e.g., '.releng.mdc1.mozilla.com') shared
+    by all hosts, or None if there is no common suffix or hosts have no FQDN.
+    Hosts with different intermediate subdomains are handled by finding the
+    deepest shared ancestor (e.g., hosts in .test.releng... and .wintest2.releng...
+    share .releng...).
     """
     if not hosts:
         return None
-    suffixes = set()
+
+    all_parts: list[list[str]] = []
     for host in hosts:
-        if "." in host:
-            suffix = host[host.index(".") :]
-            suffixes.add(suffix)
-        else:
+        parts = host.split(".")
+        if len(parts) < 2:
             return None  # No FQDN, can't strip
-    if len(suffixes) == 1:
-        return suffixes.pop()
-    return None  # Multiple suffixes
+        all_parts.append(parts)
+
+    # Find longest common suffix by comparing reversed domain labels,
+    # excluding the first label (the hostname itself).
+    ref_reversed = list(reversed(all_parts[0][1:]))
+    common_len = len(ref_reversed)
+
+    for parts in all_parts[1:]:
+        cand_reversed = list(reversed(parts[1:]))
+        matched = 0
+        for i in range(min(common_len, len(cand_reversed))):
+            if ref_reversed[i] == cand_reversed[i]:
+                matched += 1
+            else:
+                break
+        common_len = matched
+        if common_len == 0:
+            return None
+
+    common_parts = list(reversed(ref_reversed[:common_len]))
+    return "." + ".".join(common_parts)
 
 
 def humanize_age(ts_value: str) -> str:
