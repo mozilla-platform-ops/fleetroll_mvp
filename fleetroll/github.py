@@ -12,6 +12,7 @@ import requests
 import yaml
 
 from .commands.monitor.cache import parse_override_file
+from .config import load_config
 from .constants import (
     AUDIT_DIR_NAME,
     DEFAULT_GITHUB_REPO,
@@ -22,6 +23,16 @@ from .utils import utc_now_iso
 logger = logging.getLogger(__name__)
 
 GITHUB_FETCH_INTERVAL_S = 3600  # 1 hour
+
+
+def _github_headers(token: str | None = None) -> dict[str, str]:
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "fleetroll",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
 def parse_github_repo_url(url: str) -> tuple[str, str] | None:
@@ -107,21 +118,21 @@ def collect_repo_branches(overrides_dir: Path) -> dict[tuple[str, str], set[str]
     return repo_branches
 
 
-def fetch_branch_shas(owner: str, repo: str) -> list[dict[str, str]]:
+def fetch_branch_shas(
+    owner: str, repo: str, *, github_token: str | None = None
+) -> list[dict[str, str]]:
     """Fetch branch refs from GitHub API.
 
     Args:
         owner: GitHub repository owner
         repo: GitHub repository name
+        github_token: Optional GitHub API token for authenticated requests
 
     Returns:
         List of dicts with 'ref' and 'sha' keys, or [] on error
     """
     url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads"
-    headers = {
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "fleetroll",
-    }
+    headers = _github_headers(github_token)
 
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -157,8 +168,11 @@ WINDOWS_POOLS_REPO_OWNER = "mozilla-platform-ops"
 WINDOWS_POOLS_REPO = "worker-images"
 
 
-def fetch_windows_pool_hashes() -> dict[str, str]:
+def fetch_windows_pool_hashes(*, github_token: str | None = None) -> dict[str, str]:
     """Fetch Windows pool hash mappings from pools.yml in worker-images repo.
+
+    Args:
+        github_token: Optional GitHub API token for authenticated requests
 
     Returns:
         Dict mapping pool_name -> hash string, or {} on error
@@ -167,10 +181,7 @@ def fetch_windows_pool_hashes() -> dict[str, str]:
         f"https://api.github.com/repos/{WINDOWS_POOLS_REPO_OWNER}"
         f"/{WINDOWS_POOLS_REPO}/contents/{WINDOWS_POOLS_YML_PATH}"
     )
-    headers = {
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "fleetroll",
-    }
+    headers = _github_headers(github_token)
 
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -240,6 +251,9 @@ def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> Non
 
     from .db import get_connection, get_db_path, init_db, insert_github_ref, insert_windows_pool
 
+    config = load_config()
+    github_token: str | None = config.get("github", {}).get("api_token")
+
     # Determine paths
     home = Path.home()
     fleetroll_dir = home / AUDIT_DIR_NAME
@@ -290,13 +304,18 @@ def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> Non
             if not quiet:
                 click.echo(f"Fetching {owner}/{repo}...", nl=False)
 
-            refs = fetch_branch_shas(owner, repo)
+            refs = fetch_branch_shas(owner, repo, github_token=github_token)
 
             if not refs:
                 error_msg = f"No refs returned for {owner}/{repo}"
                 errors.append(error_msg)
                 if not quiet:
                     click.echo(f" FAILED: {error_msg}")
+                    if not github_token:
+                        click.echo(
+                            "tip: set [github] api_token in ~/.fleetroll/config.toml"
+                            " for higher rate limits"
+                        )
                 continue
 
             # Write branch_ref records for branches we care about
@@ -326,7 +345,7 @@ def do_github_fetch(*, override_delay: bool = False, quiet: bool = False) -> Non
         # Fetch and store Windows pool hashes
         if not quiet:
             click.echo("Fetching Windows pool hashes from pools.yml...", nl=False)
-        pool_hashes = fetch_windows_pool_hashes()
+        pool_hashes = fetch_windows_pool_hashes(github_token=github_token)
         pools_written = 0
         if pool_hashes:
             for pool_name, hash_val in pool_hashes.items():

@@ -5,12 +5,33 @@ from __future__ import annotations
 from unittest.mock import Mock, patch
 
 from fleetroll.github import (
+    _github_headers,
     collect_repo_branches,
     do_github_fetch,
     fetch_branch_shas,
     parse_github_repo_url,
     should_fetch,
 )
+
+
+class TestGithubHeaders:
+    """Tests for _github_headers helper."""
+
+    def test_without_token_returns_two_headers(self):
+        """No token yields Accept and User-Agent only."""
+        headers = _github_headers()
+        assert set(headers.keys()) == {"Accept", "User-Agent"}
+
+    def test_with_token_returns_three_headers(self):
+        """Token adds Authorization header."""
+        headers = _github_headers("ghp_test_token")
+        assert set(headers.keys()) == {"Accept", "User-Agent", "Authorization"}
+        assert headers["Authorization"] == "Bearer ghp_test_token"
+
+    def test_none_token_omits_authorization(self):
+        """Explicit None token does not add Authorization."""
+        headers = _github_headers(None)
+        assert "Authorization" not in headers
 
 
 class TestParseGithubRepoUrl:

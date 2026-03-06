@@ -38,6 +38,7 @@ VAULT_YAMLS_DIR_NAME = "vault_yamls"
 DRY_RUN_PREVIEW_LIMIT = 5
 DEFAULT_GITHUB_REPO = "mozilla-platform-ops/ronin_puppet"
 
+CONFIG_FILE_NAME = "config.toml"
 NOTES_FILE_NAME = "notes.jsonl"
 DATA_DIR_NAME = "data"
 
