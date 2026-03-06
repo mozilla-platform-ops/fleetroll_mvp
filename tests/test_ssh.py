@@ -489,6 +489,7 @@ class TestRemoteWindowsAuditScript:
         assert "VLT_PRESENT=0" in body
         assert "OVERRIDE_PRESENT=0" in body
         assert "PP_STATE_JSON=" in body
+        assert "UPTIME_S=" in body
 
     def test_encoded_command_is_valid_base64(self):
         """The encoded command portion is valid base64 UTF-16LE PowerShell."""

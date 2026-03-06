@@ -115,6 +115,8 @@ Write-Output "ROLE=$($obj.role)"
 Write-Output 'VLT_PRESENT=0'
 Write-Output 'OVERRIDE_PRESENT=0'
 Write-Output "PP_STATE_JSON=$b64"
+$uptimeS = [int]((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalSeconds
+Write-Output "UPTIME_S=$uptimeS"
 """
     return script.strip("\n")
 
