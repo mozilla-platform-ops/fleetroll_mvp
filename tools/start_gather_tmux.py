@@ -140,19 +140,19 @@ def main() -> None:
             PaneSpec(
                 name="gather-canary",
                 commands=[
-                    "watchp -n 3m ./tools/gather-generic.sh configs/host-lists/canary-all.list"
+                    "watchp -n 3m ./tools/gather-generic.sh configs/host-lists/linux/canary-all.list"
                 ],
             ),
             PaneSpec(
                 name="gather-linux",
                 commands=[
-                    "watchp -n 10m ./tools/gather-generic.sh configs/host-lists/all_moonshots.list"
+                    "watchp -n 10m ./tools/gather-generic.sh configs/host-lists/linux/all_moonshots.list"
                 ],
             ),
             PaneSpec(
                 name="gather-mac",
                 commands=[
-                    "watchp -n 15m ./tools/gather-generic.sh configs/host-lists/all_macminis.list"
+                    "watchp -n 15m ./tools/gather-generic.sh configs/host-lists/mac/all.list"
                 ],
             ),
         ],

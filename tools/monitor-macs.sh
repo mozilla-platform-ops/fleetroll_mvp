@@ -2,6 +2,6 @@
 set -e
 set -x
 
-host_list="configs/host-lists/all_macminis.list"
+host_list="configs/host-lists/mac/all.list"
 options=""
 uv run fleetroll host-monitor $host_list "$options" "$@"
