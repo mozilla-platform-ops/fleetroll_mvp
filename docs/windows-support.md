@@ -132,3 +132,85 @@ uv run tools/generate_windows_host_list.py
 ```
 
 The script fetches `pools.yml` via `gh api`, extracts nodes and domain suffixes per pool, and writes the file with pool grouping comments. Known-BAD hosts are included with annotating comments. The file uses the `# fqdn:` directive so `parse_host_list()` auto-expands short names to FQDNs.
+
+## Implementation Details
+
+### Audit Command Flow
+
+Host detection happens in `fleetroll/ssh.py:is_windows_host()`: it strips any `user@` prefix and checks for the `"wintest"` substring, which covers all current Windows hosts (`*.wintest2.releng.mdc1.mozilla.com`).
+
+In `fleetroll/commands/audit.py` (around line 286), each host branches before the SSH call:
+
+```python
+if is_windows_host(host):
+    remote_cmd = remote_windows_audit_script()
+    ssh_host = windows_ssh_host(host)
+else:
+    remote_cmd = remote_audit_script(include_content=include_content)
+    ssh_host = host
+```
+
+`windows_ssh_host()` prepends `administrator@` if no user is already specified. Both paths feed into the same `run_ssh()` + `process_audit_result()` pipeline.
+
+### SSH Approach
+
+The PowerShell script body (`windows_audit_script_body()`) is encoded as UTF-16LE, then base64-encoded, and invoked via:
+
+```
+powershell -EncodedCommand <base64-blob>
+```
+
+This avoids all SSH/shell quoting issues. Windows OpenSSH defaults to PowerShell as the shell, so no wrapper is needed. See `fleetroll/ssh.py:remote_windows_audit_script()`.
+
+### Data Collected
+
+The collect script at `C:\management_scripts\fleetroll_mvp_collect.ps1` generates `C:\management_scripts\ronin_puppet_run.json` (path constants in `fleetroll/constants.py`: `WIN_COLLECT_SCRIPT_PATH`, `WIN_METADATA_JSON_PATH`).
+
+The remote audit script (`windows_audit_script_body()`) in `fleetroll/ssh.py`:
+
+1. Runs the collect script if `ronin_puppet_run.json` does not yet exist.
+2. Reads the JSON file, base64-encodes it (UTF-8), and emits key=value lines:
+
+```
+OS_TYPE=Windows
+ROLE_PRESENT=1
+ROLE=<role from JSON>
+VLT_PRESENT=0
+OVERRIDE_PRESENT=0
+PP_STATE_JSON=<base64-encoded JSON content>
+```
+
+Vault and override detection are always `0` for Windows hosts — these concepts don't apply.
+
+### Output Normalization
+
+`_normalize_na()` in `fleetroll/audit.py` converts Windows JSON `"NA"` string values (used for fields like `success`, `exit_code`, `git_dirty`, etc.) to Python `None` for standard null handling downstream:
+
+```python
+def _normalize_na(value: Any) -> Any:
+    if value == "NA":
+        return None
+    return value
+```
+
+This is called for every field extracted from `PP_STATE_JSON` in `process_audit_result()`.
+
+### Monitor Display
+
+In `fleetroll/commands/monitor/data.py:build_ok_row_values()`:
+
+- OS type `"Windows"` maps to the single-character abbreviation `"W"`.
+- Puppet columns (`pp_last`, `pp_exp`, `pp_match`, `healthy`) are suppressed with `"-"` for Windows hosts (Windows does not run Puppet the same way):
+
+```python
+if os_type == "W":
+    pp_last = "-"
+    pp_exp = "-"
+    pp_match = "-"
+    healthy = "-"
+```
+
+In `fleetroll/commands/monitor/types.py`:
+
+- `cycle_os_filter()` cycles: `None → "L" → "M" → "W" → None`
+- `os_filter_label()` maps `"W"` → `"Windows"` for the status bar label
