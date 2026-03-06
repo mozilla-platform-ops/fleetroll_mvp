@@ -133,7 +133,7 @@ def main() -> None:
 
     launcher = TmuxLauncher(
         session_name="fleetroll_gather",
-        num_panes=4,
+        num_panes=5,
         root=os.path.expanduser("~/git/fleetroll_mvp"),
         default_shell="zsh",
         panes=[
@@ -146,13 +146,19 @@ def main() -> None:
             PaneSpec(
                 name="gather-linux",
                 commands=[
-                    "watchp -n 10m ./tools/gather-generic.sh configs/host-lists/linux/all_moonshots.list"
+                    "watchp -n 10m ./tools/gather-generic.sh configs/host-lists/linux/all.list"
                 ],
             ),
             PaneSpec(
                 name="gather-mac",
                 commands=[
                     "watchp -n 15m ./tools/gather-generic.sh configs/host-lists/mac/all.list"
+                ],
+            ),
+            PaneSpec(
+                name="gather-windows",
+                commands=[
+                    "watchp -n 15m ./tools/gather-generic.sh configs/host-lists/windows/all.list"
                 ],
             ),
         ],
