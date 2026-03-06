@@ -237,6 +237,9 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 if display.poll_github_data():
                     display.draw_screen()
                     redrew = True
+                if display.poll_windows_pools_data():
+                    display.draw_screen()
+                    redrew = True
                 if display.poll_sha_cache():
                     display.draw_screen()
                     redrew = True

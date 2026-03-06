@@ -153,8 +153,11 @@ def fetch_branch_shas(
         return results
 
     except requests.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 404:
+        status = e.response.status_code if e.response is not None else None
+        if status == 404:
             logger.warning("Repo not found: %s/%s (skipping)", owner, repo)
+        elif status == 403:
+            logger.warning("Access denied to %s/%s (403) — private repo or rate limit", owner, repo)
         else:
             logger.exception("Failed to fetch branches for %s/%s", owner, repo)
         return []
@@ -192,15 +195,28 @@ def fetch_windows_pool_hashes(*, github_token: str | None = None) -> dict[str, s
         raw = base64.b64decode(content_b64).decode("utf-8")
         pools_data = yaml.safe_load(raw)
 
+        if isinstance(pools_data, dict):
+            pools_list = pools_data.get("pools", [])
+        elif isinstance(pools_data, list):
+            pools_list = pools_data
+        else:
+            pools_list = []
+
         result: dict[str, str] = {}
-        if isinstance(pools_data, list):
-            for pool in pools_data:
-                name = pool.get("name")
-                hash_val = pool.get("hash")
-                if name and hash_val:
-                    result[name] = hash_val
+        for pool in pools_list:
+            name = pool.get("name")
+            hash_val = pool.get("hash")
+            if name and hash_val:
+                result[name] = hash_val
         return result
 
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response is not None else None
+        if status == 403:
+            logger.warning("Access denied to Windows pools.yml (403) — private repo or rate limit")
+        else:
+            logger.exception("Failed to fetch Windows pools.yml")
+        return {}
     except requests.RequestException:
         logger.exception("Failed to fetch Windows pools.yml")
         return {}

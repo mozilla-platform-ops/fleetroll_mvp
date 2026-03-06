@@ -330,6 +330,92 @@ class TestFetchBranchShas:
         assert result[0] == {"ref": "master", "sha": "abc123"}
 
 
+class TestFetchWindowsPoolHashes:
+    """Tests for fetch_windows_pool_hashes function."""
+
+    @patch("fleetroll.github.requests.get")
+    def test_dict_with_pools_key(self, mock_get):
+        """Real pools.yml format: dict with 'pools' list."""
+        import base64
+
+        import yaml
+        from fleetroll.github import fetch_windows_pool_hashes
+
+        pools_yaml = yaml.dump(
+            {
+                "pools": [
+                    {"name": "win11-64-24h2-hw", "hash": "9effb8f"},
+                    {"name": "win11-64-24h2-hw-ref", "hash": "9af2bb8"},
+                ],
+                "defaults": {},
+            }
+        )
+        mock_response = Mock()
+        mock_response.raise_for_status = Mock()
+        mock_response.json.return_value = {
+            "content": base64.b64encode(pools_yaml.encode()).decode()
+        }
+        mock_get.return_value = mock_response
+
+        result = fetch_windows_pool_hashes()
+
+        assert result == {
+            "win11-64-24h2-hw": "9effb8f",
+            "win11-64-24h2-hw-ref": "9af2bb8",
+        }
+
+    @patch("fleetroll.github.requests.get")
+    def test_bare_list_fallback(self, mock_get):
+        """Bare list format is also accepted."""
+        import base64
+
+        import yaml
+        from fleetroll.github import fetch_windows_pool_hashes
+
+        pools_yaml = yaml.dump(
+            [
+                {"name": "win11-64-24h2-hw", "hash": "9effb8f"},
+            ]
+        )
+        mock_response = Mock()
+        mock_response.raise_for_status = Mock()
+        mock_response.json.return_value = {
+            "content": base64.b64encode(pools_yaml.encode()).decode()
+        }
+        mock_get.return_value = mock_response
+
+        result = fetch_windows_pool_hashes()
+
+        assert result == {"win11-64-24h2-hw": "9effb8f"}
+
+    @patch("fleetroll.github.requests.get")
+    def test_skips_entries_without_hash(self, mock_get):
+        """Pools missing 'hash' field are skipped."""
+        import base64
+
+        import yaml
+        from fleetroll.github import fetch_windows_pool_hashes
+
+        pools_yaml = yaml.dump(
+            {
+                "pools": [
+                    {"name": "win11-64-24h2-hw", "hash": "9effb8f"},
+                    {"name": "win11-no-hash"},
+                ],
+            }
+        )
+        mock_response = Mock()
+        mock_response.raise_for_status = Mock()
+        mock_response.json.return_value = {
+            "content": base64.b64encode(pools_yaml.encode()).decode()
+        }
+        mock_get.return_value = mock_response
+
+        result = fetch_windows_pool_hashes()
+
+        assert result == {"win11-64-24h2-hw": "9effb8f"}
+
+
 class TestDoGithubFetch:
     """Tests for do_github_fetch orchestration function."""
 
