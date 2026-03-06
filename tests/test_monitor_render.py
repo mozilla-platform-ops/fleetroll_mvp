@@ -983,12 +983,13 @@ def test_os_column_in_columns_list():
 
 
 def test_cycle_os_filter():
-    """Test OS filter cycling: None -> L -> M -> None."""
+    """Test OS filter cycling: None -> L -> M -> W -> None."""
     from fleetroll.commands.monitor.types import cycle_os_filter
 
     assert cycle_os_filter(None) == "L"
     assert cycle_os_filter("L") == "M"
-    assert cycle_os_filter("M") is None
+    assert cycle_os_filter("M") == "W"
+    assert cycle_os_filter("W") is None
 
 
 def test_os_filter_label():
@@ -997,6 +998,7 @@ def test_os_filter_label():
 
     assert os_filter_label("L") == "Linux"
     assert os_filter_label("M") == "macOS"
+    assert os_filter_label("W") == "Windows"
     assert os_filter_label(None) is None
 
 
