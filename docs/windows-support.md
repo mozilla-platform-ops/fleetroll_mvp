@@ -112,8 +112,6 @@ pools:
     puppet_version: "8.10.0"
 ```
 
-TODO: Store the script we use to generate the hostlist for this so we can later incorporate into the host list generator (mvp-1u6).
-
 ### Windows Host SSH Access
 
 Use the win_audit key out of 1password and ssh adminstrator@. It will be powershell shell, so you should be able to invoke the script by the path.
@@ -124,3 +122,13 @@ Use the win_audit key out of 1password and ssh adminstrator@. It will be powersh
 Hosts netboot/PXE boot and then install their OS. After that, on first boot they do a puppet apply / converge.
 
 They regularly check if the pool hash value is changed here: https://github.com/mozilla-platform-ops/worker-images/blob/main/provisioners/windows/MDC1Windows/pools.yml If it does the workers will reimage themselves.
+
+## Host List
+
+The host list is stored at `configs/host-lists/windows/all.list` and generated from `pools.yml`. To regenerate from the latest pools:
+
+```bash
+uv run tools/generate_windows_host_list.py
+```
+
+The script fetches `pools.yml` via `gh api`, extracts nodes and domain suffixes per pool, and writes the file with pool grouping comments. Known-BAD hosts are included with annotating comments. The file uses the `# fqdn:` directive so `parse_host_list()` auto-expands short names to FQDNs.
