@@ -1360,3 +1360,28 @@ def test_build_row_values_note_in_columns_list() -> None:
     assert "note" in columns
     assert "note" in widths
     assert widths["note"] >= len("test note for width calculation")
+
+
+def test_windows_host_puppet_fields_suppressed():
+    """Windows hosts show '-' for PP_LAST, PP_EXP, and HEALTHY."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": False,
+            "os_type": "Windows",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "puppet_last_run_epoch": 1737496800,
+            "puppet_success": True,
+            "puppet_git_sha": "test_git_sha_win1",
+            "uptime_s": 3600,
+        },
+    }
+    values = build_row_values("win-host1", record, last_ok=record)
+    assert values["pp_last"] == "-"
+    assert values["pp_exp"] == "-"
+    assert values["pp_match"] == "-"
+    assert values["healthy"] == "-"
