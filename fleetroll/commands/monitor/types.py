@@ -58,7 +58,7 @@ def compute_header_layout(left: str, right: str, usable_width: int) -> int:
 
 
 def cycle_os_filter(current: str | None) -> str | None:
-    """Cycle OS filter: None -> 'L' -> 'M' -> None.
+    """Cycle OS filter: None -> 'L' -> 'M' -> 'W' -> None.
 
     Args:
         current: Current OS filter value
@@ -70,6 +70,8 @@ def cycle_os_filter(current: str | None) -> str | None:
         return "L"
     if current == "L":
         return "M"
+    if current == "M":
+        return "W"
     return None
 
 
@@ -77,7 +79,7 @@ def os_filter_label(os_filter: str | None) -> str | None:
     """Return human-readable label for OS filter, or None if no filter.
 
     Args:
-        os_filter: OS filter value ("L", "M", or None)
+        os_filter: OS filter value ("L", "M", "W", or None)
 
     Returns:
         Human-readable label or None
@@ -86,6 +88,8 @@ def os_filter_label(os_filter: str | None) -> str | None:
         return "Linux"
     if os_filter == "M":
         return "macOS"
+    if os_filter == "W":
+        return "Windows"
     return None
 
 

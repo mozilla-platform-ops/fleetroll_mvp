@@ -8,9 +8,12 @@ from fleetroll.cli_types import HostAuditArgs
 from fleetroll.constants import CONTENT_SENTINEL
 from fleetroll.ssh import (
     build_ssh_options,
+    is_windows_host,
     remote_audit_script,
     remote_set_script,
     remote_unset_script,
+    remote_windows_audit_script,
+    windows_ssh_host,
 )
 
 
@@ -394,6 +397,110 @@ class TestOsXScriptGeneration:
         )
         assert "uname -s" in script
         assert "Darwin" in script
+
+
+class TestIsWindowsHost:
+    """Tests for is_windows_host function."""
+
+    def test_wintest_hostname_is_windows(self):
+        """Hostname containing 'wintest' is identified as Windows."""
+        assert is_windows_host("t-nuc12-005.wintest2.releng.mdc1.mozilla.com") is True
+
+    def test_wintest_with_user_prefix(self):
+        """user@host form strips user prefix before matching."""
+        assert is_windows_host("administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com") is True
+
+    def test_linux_host_not_windows(self):
+        """Linux hostname is not identified as Windows."""
+        assert is_windows_host("host1.test.releng.mdc1.mozilla.com") is False
+
+    def test_macos_host_not_windows(self):
+        """macOS hostname is not identified as Windows."""
+        assert is_windows_host("t-mac-r8-001.test.releng.mdc1.mozilla.com") is False
+
+    def test_plain_hostname_not_windows(self):
+        """Plain hostname without wintest is not Windows."""
+        assert is_windows_host("example.com") is False
+
+    def test_wintest_short(self):
+        """Short hostname with 'wintest' is Windows."""
+        assert is_windows_host("mywintest") is True
+
+
+class TestWindowsSshHost:
+    """Tests for windows_ssh_host function."""
+
+    def test_prepends_administrator_for_bare_hostname(self):
+        """Bare hostname gets administrator@ prepended."""
+        result = windows_ssh_host("t-nuc12-005.wintest2.releng.mdc1.mozilla.com")
+        assert result == "administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com"
+
+    def test_preserves_explicit_user_prefix(self):
+        """Hostname already containing user@ is returned unchanged."""
+        result = windows_ssh_host("administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com")
+        assert result == "administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com"
+
+    def test_preserves_other_user_prefix(self):
+        """Any explicit user@ prefix is preserved as-is."""
+        result = windows_ssh_host("someuser@t-nuc12-005.wintest2.releng.mdc1.mozilla.com")
+        assert result == "someuser@t-nuc12-005.wintest2.releng.mdc1.mozilla.com"
+
+    def test_short_hostname(self):
+        """Short hostname without domain also gets administrator@ prepended."""
+        result = windows_ssh_host("wintest-host")
+        assert result == "administrator@wintest-host"
+
+
+class TestRemoteWindowsAuditScript:
+    """Tests for remote_windows_audit_script function."""
+
+    def test_returns_encoded_command(self):
+        """Script uses -EncodedCommand flag."""
+        script = remote_windows_audit_script()
+        assert script.startswith("powershell -EncodedCommand ")
+
+    def test_body_contains_json_path(self):
+        """Script body references the Windows JSON metadata path."""
+        from fleetroll.ssh import windows_audit_script_body
+
+        body = windows_audit_script_body()
+        assert r"C:\management_scripts\ronin_puppet_run.json" in body
+
+    def test_body_contains_collect_script(self):
+        """Script body references the Windows collect script."""
+        from fleetroll.ssh import windows_audit_script_body
+
+        body = windows_audit_script_body()
+        assert r"C:\management_scripts\fleetroll_mvp_collect.ps1" in body
+
+    def test_body_outputs_os_type_windows(self):
+        """Script body outputs OS_TYPE=Windows."""
+        from fleetroll.ssh import windows_audit_script_body
+
+        body = windows_audit_script_body()
+        assert "OS_TYPE=Windows" in body
+
+    def test_body_outputs_required_keys(self):
+        """Script body outputs all required key=value lines."""
+        from fleetroll.ssh import windows_audit_script_body
+
+        body = windows_audit_script_body()
+        assert "ROLE_PRESENT=1" in body
+        assert "VLT_PRESENT=0" in body
+        assert "OVERRIDE_PRESENT=0" in body
+        assert "PP_STATE_JSON=" in body
+
+    def test_encoded_command_is_valid_base64(self):
+        """The encoded command portion is valid base64 UTF-16LE PowerShell."""
+        import base64
+
+        from fleetroll.ssh import windows_audit_script_body
+
+        script = remote_windows_audit_script()
+        encoded_part = script.split("powershell -EncodedCommand ", 1)[1]
+        # Should decode to the script body (UTF-16LE encoding)
+        decoded = base64.b64decode(encoded_part).decode("utf-16-le")
+        assert decoded == windows_audit_script_body()
 
 
 class TestAuditScriptJsonCollection:

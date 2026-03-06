@@ -349,6 +349,13 @@ def build_ok_row_values(
         if pp_match == "Y" and tc_act_s is not None and tc_act_s < 3600:
             healthy = "Y"
 
+    # Windows hosts don't run Puppet; suppress Linux-only fields
+    if os_type == "W":
+        pp_last = "-"
+        pp_exp = "-"
+        pp_match = "-"
+        healthy = "-"
+
     # Add TaskCluster fields
     tc_quar = "-"
     tc_act = "-"

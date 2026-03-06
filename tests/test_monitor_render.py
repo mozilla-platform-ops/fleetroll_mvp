@@ -983,12 +983,13 @@ def test_os_column_in_columns_list():
 
 
 def test_cycle_os_filter():
-    """Test OS filter cycling: None -> L -> M -> None."""
+    """Test OS filter cycling: None -> L -> M -> W -> None."""
     from fleetroll.commands.monitor.types import cycle_os_filter
 
     assert cycle_os_filter(None) == "L"
     assert cycle_os_filter("L") == "M"
-    assert cycle_os_filter("M") is None
+    assert cycle_os_filter("M") == "W"
+    assert cycle_os_filter("W") is None
 
 
 def test_os_filter_label():
@@ -997,6 +998,7 @@ def test_os_filter_label():
 
     assert os_filter_label("L") == "Linux"
     assert os_filter_label("M") == "macOS"
+    assert os_filter_label("W") == "Windows"
     assert os_filter_label(None) is None
 
 
@@ -1358,3 +1360,28 @@ def test_build_row_values_note_in_columns_list() -> None:
     assert "note" in columns
     assert "note" in widths
     assert widths["note"] >= len("test note for width calculation")
+
+
+def test_windows_host_puppet_fields_suppressed():
+    """Windows hosts show '-' for PP_LAST, PP_EXP, and HEALTHY."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": False,
+            "os_type": "Windows",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "puppet_last_run_epoch": 1737496800,
+            "puppet_success": True,
+            "puppet_git_sha": "test_git_sha_win1",
+            "uptime_s": 3600,
+        },
+    }
+    values = build_row_values("win-host1", record, last_ok=record)
+    assert values["pp_last"] == "-"
+    assert values["pp_exp"] == "-"
+    assert values["pp_match"] == "-"
+    assert values["healthy"] == "-"

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from fleetroll.audit import (
+    _normalize_na,
     append_jsonl,
     iter_audit_records,
     process_audit_result,
@@ -812,6 +813,66 @@ PP_STATE_JSON=not_valid_base64!!!
         assert result["observed"]["puppet_state_ts"] is None
         assert result["observed"]["puppet_git_sha"] is None
         assert result["observed"]["puppet_success"] is None
+
+    def test_windows_na_values_normalized_to_none(
+        self, tmp_dir: Path, mock_args_audit: HostAuditArgs, db_conn
+    ):
+        """Windows JSON with 'NA' string values are normalized to None."""
+
+        audit_log = tmp_dir / "audit.jsonl"
+        mock_args_audit.audit_log = str(audit_log)
+
+        json_line = _make_pp_state_json_line(
+            git_sha="NA",
+            git_repo="NA",
+            git_branch="NA",
+            override_sha="NA",
+            vault_sha="NA",
+        )
+        out = f"""OS_TYPE=Windows
+ROLE_PRESENT=1
+ROLE=gecko_t_win11_2009
+OVERRIDE_PRESENT=0
+VLT_PRESENT=0
+{json_line}
+"""
+        result = process_audit_result(
+            "t-nuc12-005.wintest2.releng.mdc1.mozilla.com",
+            rc=0,
+            out=out,
+            err="",
+            db_conn=db_conn,
+            actor="test-actor",
+        )
+        obs = result["observed"]
+        assert obs["os_type"] == "Windows"
+        assert obs["puppet_git_sha"] is None
+        assert obs["puppet_git_repo"] is None
+        assert obs["puppet_git_branch"] is None
+        assert obs["puppet_override_sha_applied"] is None
+        assert obs["puppet_vault_sha_applied"] is None
+
+
+class TestNormalizeNa:
+    """Tests for _normalize_na helper."""
+
+    def test_na_string_returns_none(self):
+        assert _normalize_na("NA") is None
+
+    def test_non_na_string_unchanged(self):
+        assert _normalize_na("main") == "main"
+
+    def test_none_unchanged(self):
+        assert _normalize_na(None) is None
+
+    def test_empty_string_unchanged(self):
+        assert _normalize_na("") == ""
+
+    def test_int_unchanged(self):
+        assert _normalize_na(42) == 42
+
+    def test_false_unchanged(self):
+        assert _normalize_na(False) is False
 
     def test_json_state_invalid_json_graceful(
         self, tmp_dir: Path, mock_args_audit: HostAuditArgs, db_conn

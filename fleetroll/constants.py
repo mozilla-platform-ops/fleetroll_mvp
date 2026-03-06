@@ -19,6 +19,10 @@ OSX_DEFAULT_GROUP = "wheel"
 # OSX_PUPPET_DONE_PATH: not used on OS X yet
 OSX_PUPPET_LAST_RUN_PATH = "TBD"
 
+# Windows paths
+WIN_METADATA_JSON_PATH = r"C:\management_scripts\ronin_puppet_run.json"
+WIN_COLLECT_SCRIPT_PATH = r"C:\management_scripts\fleetroll_mvp_collect.ps1"
+
 # Internal constants
 CONTENT_SENTINEL = "__FLEETROLL_OVERRIDE_CONTENT__"
 BACKUP_TIME_FORMAT = "%Y%m%dT%H%M%SZ"

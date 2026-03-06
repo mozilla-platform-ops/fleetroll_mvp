@@ -30,9 +30,12 @@ from ..constants import (
 from ..exceptions import CommandFailureError
 from ..ssh import (
     build_ssh_options,
+    is_windows_host,
     remote_audit_script,
     remote_read_vault_script,
+    remote_windows_audit_script,
     run_ssh,
+    windows_ssh_host,
 )
 from ..utils import (
     default_audit_log_path,
@@ -162,7 +165,7 @@ def execute_audits_parallel(
     *,
     args: HostAuditArgs,
     ssh_opts: list[str],
-    remote_cmd: str,
+    include_content: bool,
     db_path: Path,
     actor: str,
     retry_budget: dict[str, float],
@@ -179,7 +182,7 @@ def execute_audits_parallel(
         hosts: List of hostnames to audit
         args: Audit command arguments
         ssh_opts: SSH options list
-        remote_cmd: Remote audit script command
+        include_content: Whether to include override file content in audit
         db_path: Path to SQLite database file
         actor: Username performing the audit
         retry_budget: Dictionary with deadline for retries
@@ -205,7 +208,7 @@ def execute_audits_parallel(
                 host,
                 args=args,
                 ssh_opts=ssh_opts,
-                remote_cmd=remote_cmd,
+                include_content=include_content,
                 db_path=db_path,
                 actor=actor,
                 retry_budget=retry_budget,
@@ -263,7 +266,7 @@ def audit_single_host_with_retry(
     *,
     args: HostAuditArgs,
     ssh_opts: list[str],
-    remote_cmd: str,
+    include_content: bool,
     db_path: Path,
     actor: str,
     retry_budget: dict[str, Any],
@@ -279,6 +282,13 @@ def audit_single_host_with_retry(
     """
     max_retries = AUDIT_MAX_RETRIES
     retry_delay = AUDIT_RETRY_DELAY_S  # Exponential backoff base
+
+    if is_windows_host(host):
+        remote_cmd = remote_windows_audit_script()
+        ssh_host = windows_ssh_host(host)
+    else:
+        remote_cmd = remote_audit_script(include_content=include_content)
+        ssh_host = host
 
     logger.debug("Auditing host: %s", host)
 
@@ -301,7 +311,7 @@ def audit_single_host_with_retry(
         if attempt > 0:
             logger.debug("Retry attempt %d/%d for %s", attempt + 1, max_retries, host)
 
-        rc, out, err = run_ssh(host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout)
+        rc, out, err = run_ssh(ssh_host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout)
 
         # Check if retryable (connection errors)
         is_connection_error = rc != 0 and (
@@ -340,7 +350,7 @@ def audit_single_host_with_retry(
                     if not has_content_file(vault_sha, vault_dir):
                         vault_cmd = remote_read_vault_script()
                         v_rc, v_out, v_err = run_ssh(
-                            host,
+                            ssh_host,
                             vault_cmd,
                             ssh_options=ssh_opts,
                             timeout_s=args.timeout,
@@ -483,7 +493,7 @@ def cmd_host_audit_batch(hosts: list[str], args: HostAuditArgs) -> dict[str, Any
     db_path = get_db_path()
     init_db(db_path)
 
-    remote_cmd = remote_audit_script(include_content=not args.no_content)
+    include_content = not args.no_content
     lock = threading.Lock()
     log_lock = threading.Lock()
     retry_budget = {"deadline": time.time() + args.batch_timeout}
@@ -493,7 +503,7 @@ def cmd_host_audit_batch(hosts: list[str], args: HostAuditArgs) -> dict[str, Any
         hosts,
         args=args,
         ssh_opts=ssh_opts,
-        remote_cmd=remote_cmd,
+        include_content=include_content,
         db_path=db_path,
         actor=actor,
         retry_budget=retry_budget,

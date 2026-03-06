@@ -14,7 +14,7 @@ import click
 
 from ..constants import ROLE_TO_TASKCLUSTER
 from ..exceptions import FleetRollError
-from ..taskcluster import fetch_workers, load_tc_credentials
+from ..taskcluster import fetch_worker_type_names, fetch_workers, load_tc_credentials
 from ..utils import (
     format_elapsed_time,
     is_host_file,
@@ -164,6 +164,28 @@ def map_roles_to_worker_types(
     return role_to_worker_type, dict(worker_type_to_hosts), unmapped_roles
 
 
+def build_windows_role_mapping(
+    provisioner: str,
+    credentials: Any,
+) -> dict[str, tuple[str, str]]:
+    """Build a role->worker_type mapping for Windows pools by querying TC.
+
+    Fetches all worker type names for the provisioner, filters to those
+    starting with "win", and derives the role key by removing dashes.
+
+    Args:
+        provisioner: The provisioner ID (e.g., "releng-hardware")
+        credentials: TaskCluster credentials
+
+    Returns:
+        Dict mapping role string (dashes removed) to (provisioner, pool_name)
+    """
+    pool_names = fetch_worker_type_names(provisioner, credentials)
+    return {
+        pool.replace("-", ""): (provisioner, pool) for pool in pool_names if pool.startswith("win")
+    }
+
+
 def match_workers_to_hosts(
     hosts: list[str],
     *,
@@ -290,9 +312,18 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         # Build role to hosts mapping
         role_to_hosts = build_role_to_hosts_mapping(host_to_role)
 
+        # Extend role lookup with dynamically-fetched Windows pool mapping if needed
+        role_lookup = ROLE_TO_TASKCLUSTER
+        windows_roles = [r for r in role_to_hosts if r.startswith("win") and "_" not in r]
+        if windows_roles:
+            if not quiet:
+                click.echo("Fetching Windows worker pool names from TaskCluster...")
+            windows_mapping = build_windows_role_mapping("releng-hardware", credentials)
+            role_lookup = {**ROLE_TO_TASKCLUSTER, **windows_mapping}
+
         # Map roles to workerTypes
         role_to_worker_type, worker_type_to_hosts, unmapped_roles = map_roles_to_worker_types(
-            role_to_hosts, ROLE_TO_TASKCLUSTER
+            role_to_hosts, role_lookup
         )
 
         # Display warnings for unmapped roles

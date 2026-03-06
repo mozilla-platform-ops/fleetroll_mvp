@@ -136,6 +136,13 @@ def has_content_file(sha256: str, target_dir: Path) -> bool:
     return False
 
 
+def _normalize_na(value: Any) -> Any:
+    """Convert 'NA' string values to None (used to normalize Windows JSON fields)."""
+    if value == "NA":
+        return None
+    return value
+
+
 def process_audit_result(
     host: str,
     *,
@@ -192,18 +199,18 @@ def process_audit_result(
             pp_state_json = base64.b64decode(pp_state_json_b64).decode("utf-8")
             pp_state = json.loads(pp_state_json)
 
-            # Extract fields from JSON
-            puppet_state_ts = pp_state.get("ts")
-            puppet_git_sha = pp_state.get("git_sha")
-            puppet_git_repo = pp_state.get("git_repo")
-            puppet_git_branch = pp_state.get("git_branch")
-            puppet_override_sha_applied = pp_state.get("override_sha")
-            puppet_vault_sha_applied = pp_state.get("vault_sha")
-            puppet_role = pp_state.get("role")
-            puppet_exit_code = pp_state.get("exit_code")
-            puppet_duration_s = pp_state.get("duration_s")
-            puppet_success = pp_state.get("success")
-            puppet_git_dirty = pp_state.get("git_dirty")
+            # Extract fields from JSON; normalize "NA" strings to None
+            puppet_state_ts = _normalize_na(pp_state.get("ts"))
+            puppet_git_sha = _normalize_na(pp_state.get("git_sha"))
+            puppet_git_repo = _normalize_na(pp_state.get("git_repo"))
+            puppet_git_branch = _normalize_na(pp_state.get("git_branch"))
+            puppet_override_sha_applied = _normalize_na(pp_state.get("override_sha"))
+            puppet_vault_sha_applied = _normalize_na(pp_state.get("vault_sha"))
+            puppet_role = _normalize_na(pp_state.get("role"))
+            puppet_exit_code = _normalize_na(pp_state.get("exit_code"))
+            puppet_duration_s = _normalize_na(pp_state.get("duration_s"))
+            puppet_success = _normalize_na(pp_state.get("success"))
+            puppet_git_dirty = _normalize_na(pp_state.get("git_dirty"))
 
             # Convert timestamp to epoch
             if puppet_state_ts:

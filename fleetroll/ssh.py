@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import shlex
 import subprocess
 import time
 from typing import TYPE_CHECKING
 
-from .constants import CONTENT_SENTINEL, SSH_TIMEOUT_EXIT_CODE
+from .constants import (
+    CONTENT_SENTINEL,
+    SSH_TIMEOUT_EXIT_CODE,
+    WIN_COLLECT_SCRIPT_PATH,
+    WIN_METADATA_JSON_PATH,
+)
 from .exceptions import FleetRollError
 
 if TYPE_CHECKING:
@@ -77,6 +83,61 @@ def build_ssh_options(args: HasSshOptions) -> list[str]:
             # Each --ssh-option can include multiple tokens, e.g. "-J bastion" or "-p 2222"
             opts += shlex.split(item)
     return opts
+
+
+def is_windows_host(hostname: str) -> bool:
+    """Return True if hostname identifies a Windows host.
+
+    Matches 'wintest' substring in hostname (strips user@ prefix first).
+    Covers all current Windows hosts (*.wintest2.releng.mdc1.mozilla.com).
+    """
+    host = hostname.split("@", 1)[-1] if "@" in hostname else hostname
+    return "wintest" in host
+
+
+def windows_audit_script_body() -> str:
+    """Return the remote PowerShell script body for auditing a Windows host."""
+    json_path = WIN_METADATA_JSON_PATH
+    collect_path = WIN_COLLECT_SCRIPT_PATH
+    script = f"""
+$jsonPath = '{json_path}'
+$collectScript = '{collect_path}'
+if (-not (Test-Path $jsonPath)) {{
+    & $collectScript
+}}
+$jsonContent = Get-Content -Raw $jsonPath
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonContent)
+$b64 = [Convert]::ToBase64String($bytes)
+$obj = $jsonContent | ConvertFrom-Json
+Write-Output 'OS_TYPE=Windows'
+Write-Output 'ROLE_PRESENT=1'
+Write-Output "ROLE=$($obj.role)"
+Write-Output 'VLT_PRESENT=0'
+Write-Output 'OVERRIDE_PRESENT=0'
+Write-Output "PP_STATE_JSON=$b64"
+"""
+    return script.strip("\n")
+
+
+def windows_ssh_host(hostname: str) -> str:
+    """Return SSH destination for a Windows host with default user.
+
+    Prepends 'administrator@' if no user@ is already specified.
+    """
+    if "@" in hostname:
+        return hostname
+    return f"administrator@{hostname}"
+
+
+def remote_windows_audit_script() -> str:
+    """Generate remote PowerShell command for auditing a Windows host.
+
+    Uses -EncodedCommand (UTF-16LE base64) to avoid SSH quoting issues.
+    Windows OpenSSH defaults to PowerShell, so no shell wrapper is needed.
+    """
+    body = windows_audit_script_body()
+    encoded = base64.b64encode(body.encode("utf-16-le")).decode("ascii")
+    return f"powershell -EncodedCommand {encoded}"
 
 
 def audit_script_body(*, include_content: bool) -> str:
