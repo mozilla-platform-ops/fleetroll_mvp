@@ -12,5 +12,5 @@ cd "$SCRIPT_DIR"
 
 # TODO: how to generate for linux? gdocs api? gdocs export that's processed locally?
 
-# TODO: generate all.list
-#  - all.list should contain all hosts, including windows, mac, and linux
+# generate base (mega) all.list
+./generate_all_host_list.py
