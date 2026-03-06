@@ -212,3 +212,55 @@ def fetch_workers(
         raise FleetRollError(f"Failed to fetch workers from GraphQL API: {e}")
     except Exception as e:
         raise FleetRollError(f"Failed to fetch workers from TaskCluster API: {e}")
+
+
+def fetch_worker_type_names(
+    provisioner: str,
+    _credentials: TaskClusterCredentials,
+) -> list[str]:
+    """Fetch all worker type names for a provisioner via the TC queue REST API.
+
+    Args:
+        provisioner: The provisioner ID (e.g., "releng-hardware")
+        _credentials: TaskCluster credentials (reserved for future auth use)
+
+    Returns:
+        List of worker type name strings
+
+    Raises:
+        FleetRollError: If the API request fails
+    """
+    base_url = "https://firefox-ci-tc.services.mozilla.com"
+    url = f"{base_url}/api/queue/v1/provisioners/{provisioner}/worker-types"
+    headers = {"Accept": "application/json"}
+
+    worker_types = []
+    continuation_token = None
+
+    try:
+        while True:
+            params: dict[str, str] = {}
+            if continuation_token:
+                params["continuationToken"] = continuation_token
+
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+
+            if response.status_code != 200:
+                raise FleetRollError(
+                    f"TC queue API returned {response.status_code} for {url}: {response.text}"
+                )
+
+            data = response.json()
+            for entry in data.get("workerTypes", []):
+                name = entry.get("workerType")
+                if name:
+                    worker_types.append(name)
+
+            continuation_token = data.get("continuationToken")
+            if not continuation_token:
+                break
+
+        return worker_types
+
+    except requests.exceptions.RequestException as e:
+        raise FleetRollError(f"Failed to fetch worker types from TC queue API: {e}")
