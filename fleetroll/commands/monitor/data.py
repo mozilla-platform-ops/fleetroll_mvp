@@ -384,7 +384,9 @@ def build_ok_row_values(
                         if puppet_git_sha.startswith(pool_hash) or pool_hash.startswith(
                             puppet_git_sha[:7]
                         ):
-                            pp_match = "Y" if puppet_success is True else "N"
+                            # puppet_success is always None for Windows (not reported);
+                            # treat None as unknown (not a failure), only block on False
+                            pp_match = "N" if puppet_success is False else "Y"
                         else:
                             pp_match = "N"
                     break

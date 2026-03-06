@@ -1371,6 +1371,46 @@ def test_build_row_values_note_in_columns_list() -> None:
     assert widths["note"] >= len("test note for width calculation")
 
 
+def test_windows_pp_match_with_pool_data():
+    """Windows PP_MATCH uses SHA comparison; puppet_success=None counts as Y."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "win116424h2hwref",
+            "os_type": "Windows",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "override_meta": {},
+            "puppet_success": None,  # Windows never reports this
+            "puppet_git_sha": "test_win_pool_sha_match_value_abcxyz",
+            "uptime_s": 3600,
+        },
+    }
+    windows_pools = {
+        "win11-64-24h2-hw-ref": {"hash": "test_win", "pool_name": "win11-64-24h2-hw-ref"},
+    }
+
+    # SHA matches, puppet_success=None -> PP_MATCH=Y
+    values = build_row_values("t-nuc12-014", record, last_ok=record, windows_pools=windows_pools)
+    assert values["pp_exp"] == "test_wi"
+    assert values["pp_match"] == "Y"
+
+    # SHA mismatch -> PP_MATCH=N
+    mismatch = dict(record["observed"], puppet_git_sha="other_fake_sha_no_match_value_xyz")
+    record2 = dict(record, observed=mismatch)
+    values2 = build_row_values("t-nuc12-014", record2, last_ok=record2, windows_pools=windows_pools)
+    assert values2["pp_match"] == "N"
+
+    # puppet_success=False with matching SHA -> PP_MATCH=N
+    failed = dict(record["observed"], puppet_success=False)
+    record3 = dict(record, observed=failed)
+    values3 = build_row_values("t-nuc12-014", record3, last_ok=record3, windows_pools=windows_pools)
+    assert values3["pp_match"] == "N"
+
+
 def test_windows_host_puppet_fields_suppressed():
     """Windows hosts show '-' for PP_LAST, PP_EXP, and HEALTHY."""
     record = {
