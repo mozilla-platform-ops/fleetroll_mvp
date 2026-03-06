@@ -30,7 +30,7 @@ import yaml
 
 REPO = "mozilla-platform-ops/worker-images"
 POOLS_PATH = "provisioners/windows/MDC1Windows/pools.yml"
-OUTPUT_PATH = Path("configs/host-lists/windows/all.list")
+OUTPUT_PATH = Path("configs/host-lists/windows/mdc1.list")
 
 
 def fetch_pools_yaml() -> str:
