@@ -11,15 +11,21 @@ The existing architecture has a clean seam: `db.py` separates scanners from disp
 ```
  Before:  [Each User] → host-audit/tc-fetch/gh-fetch → local SQLite → host-monitor TUI
 
- After:   [Server]    → host-audit/tc-fetch/gh-fetch → server SQLite → REST API + SSE
+ After:   [Server *]  → host-audit/tc-fetch/gh-fetch → PostgreSQL → REST API + SSE
           [Clients]   → host-monitor TUI → HTTP/SSE → server
           [Clients]   → set-override/set-vault → SSH directly (unchanged)
+
+          * All pods serve the API; only the elected leader runs scanning.
+            Leader election via PostgreSQL advisory lock (pg_try_advisory_lock).
 ```
 
 ### Server (read-only scanning + API)
 - **Framework**: FastAPI + uvicorn + sse-starlette
-- **Storage**: SQLite on the server (same schema, same `db.py`)
-- **Scanning**: Background async tasks running host-audit, tc-fetch, gh-fetch on intervals
+- **Storage**: PostgreSQL (server); local mode retains SQLite via `db.py`
+- **Deployment**: Container on K8s, multiple replicas for HA
+- **Scanning**: Background async tasks (host-audit, tc-fetch, gh-fetch); only the leader pod scans
+- **Leader election**: PostgreSQL advisory lock — lock holder scans, others retry on an interval; pod death releases the lock immediately
+- **Host list**: `configs/host-lists/all.list` baked into the image; redeploy to update
 - **API**: REST for snapshots/queries, SSE for real-time observation streaming
 - **Auth**: Simple bearer token (internal tool, small team)
 - **SSH key**: Read-only — server only scans, never writes to hosts
@@ -51,7 +57,11 @@ GET  /api/v1/status                        # Server health + scan status
 |----------|--------|-----------|
 | Real-time | SSE (not WebSocket) | Unidirectional, simpler, auto-reconnect, proxy-friendly |
 | Auth | Bearer token | Internal tool, sufficient for now |
-| DB | Keep SQLite on server | Already works, WAL handles concurrent access |
+| Server DB | PostgreSQL | Required for K8s HA; SQLite WAL + network PV is unreliable |
+| Local DB | SQLite (unchanged) | `db.py` / `LocalProvider` unchanged; local mode still works |
+| Leader election | PostgreSQL advisory lock | No K8s RBAC needed; lock released immediately on pod death |
+| Deployment | K8s, multiple replicas | All pods serve API; only leader scans |
+| Host list | Baked into image | `configs/host-lists/all.list`; redeploy to update (acceptable for now) |
 | HTTP client | httpx | Async, SSE support, modern |
 | Write ops | Client-side SSH (unchanged) | Server SSH key stays read-only; can centralize later |
 | Notes | Server-managed | Notes are shared state, makes sense on server |
@@ -92,11 +102,6 @@ GET  /api/v1/status                        # Server health + scan status
 ### Phase 4: Polish + Deployment
 - Token auth middleware
 - Server health checks / monitoring
-- Deployment config (systemd unit or similar)
+- K8s manifests (Deployment, Service, ConfigMap for host list, Secret for token + DB creds)
 - Keep local mode as fallback
 - (Future: consider centralizing write ops if desired)
-
-## Open Questions
-- Server deployment: bare metal, container, systemd?
-- Should the server manage host lists, or do clients still specify them?
-- Do we want multiple server instances (HA) or is single instance fine?
