@@ -54,7 +54,7 @@ https://github.com/mozilla-platform-ops/fleetroll_mvp
 # new features
   - sqlite db (was append-only jsonl, got large)
   - notes (persisted in git, jsonl)
-    `fleetroll note-add` for now, ability to do in TUI soon?
+    - `fleetroll note-add` for now, ability to do in TUI soon?
   - windows support
 
 ---
@@ -78,7 +78,7 @@ either via evolution or full rewrite... TBD
   - started decomposing spec into beads tasks with Claude
   - once fully decomposed, tell Claude to grab the next bead and plan it's implementation
   	- `/model opusplan` in Claude
-  	- iterate until happy, then have it execute.
+  	- iterate until happy with plan, then have it implement.
   	- verify tests pass, pre-commit passes. commit, then close the bead.
   	- repeat until program is complete.
   - focused on my initial need (being able to set override files and monitor hosts) then grew (set vault files, more info, more integrations, etc)
