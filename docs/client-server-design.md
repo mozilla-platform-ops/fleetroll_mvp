@@ -35,6 +35,7 @@ The existing architecture has a clean seam: `db.py` separates scanners from disp
 - **RemoteProvider**: Uses httpx for REST + SSE streaming
 - **TUI**: Unchanged rendering; just swap data source via `--server` flag
 - **Write ops**: Clients SSH directly (unchanged) — keeps write SSH keys with operators
+- **Vault content inspection**: Client-side only — operator SSHes directly to the host using their privileged key; the server never holds vault file content
 
 ### Key API Endpoints
 ```
@@ -46,7 +47,9 @@ GET  /api/v1/windows-pools                 # Latest Windows pool data
 GET  /api/v1/notes?hosts=...               # Operator notes
 GET  /api/v1/sha-info/{sha_prefix}         # Override/vault SHA metadata
 GET  /api/v1/overrides/{sha_prefix}        # Override file content
-GET  /api/v1/vaults/{sha_prefix}           # Vault file content
+# NOTE: No vault content endpoint. The server stores only vault SHA256 (not
+# content). Vault files contain sensitive secrets; content inspection is a
+# client-side operation using the operator's privileged SSH key.
 POST /api/v1/notes                         # Add operator note
 DELETE /api/v1/notes/{hostname}            # Clear notes for host
 GET  /api/v1/status                        # Server health + scan status
@@ -64,6 +67,7 @@ GET  /api/v1/status                        # Server health + scan status
 | Host list | Baked into image | `configs/host-lists/all.list`; redeploy to update (acceptable for now) |
 | HTTP client | httpx | Async, SSE support, modern |
 | Write ops | Client-side SSH (unchanged) | Server SSH key stays read-only; can centralize later |
+| Vault content | Client-side only, never stored on server | Vault files contain sensitive secrets; SHA256 is sufficient for the TUI; content inspection uses operator's privileged SSH key |
 | Notes | Server-managed | Notes are shared state, makes sense on server |
 
 ## Incremental Migration (4 Phases)
