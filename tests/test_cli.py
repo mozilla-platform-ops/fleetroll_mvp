@@ -83,6 +83,23 @@ class TestCliHelp:
         # Path options removed - OS detection automatic
         assert "--no-content" in result.output
         assert "--wrap" in result.output
+        assert "--windows" in result.output
+
+    def test_debug_host_script_windows(self, runner: CliRunner):
+        """debug-host-script --windows prints PowerShell script body."""
+        result = runner.invoke(cli, ["debug-host-script", "--windows"])
+        assert result.exit_code == 0
+        assert (
+            "powershell" in result.output.lower()
+            or "EncodedCommand" in result.output
+            or "$jsonPath" in result.output
+        )
+
+    def test_debug_host_script_windows_wrap(self, runner: CliRunner):
+        """debug-host-script --windows --wrap prints encoded PowerShell command."""
+        result = runner.invoke(cli, ["debug-host-script", "--windows", "--wrap"])
+        assert result.exit_code == 0
+        assert "powershell -EncodedCommand" in result.output
 
     def test_show_vault_help(self, runner: CliRunner):
         """show-vault --help shows command options."""

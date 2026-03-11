@@ -36,7 +36,7 @@ from .commands import (
     cmd_vault_show,
 )
 from .exceptions import CommandFailureError, FleetRollError, UserError
-from .ssh import audit_script_body
+from .ssh import audit_script_body, remote_windows_audit_script, windows_audit_script_body
 
 # Module logger
 logger = logging.getLogger("fleetroll")
@@ -261,18 +261,30 @@ def vault_show(sha_prefix: str, audit_log: str | None):
 @click.option(
     "--wrap",
     is_flag=True,
-    help="Wrap output as a 'sh -c' command (ssh-ready).",
+    help="Wrap output as a 'sh -c' command (ssh-ready); for --windows, outputs encoded PowerShell command.",
+)
+@click.option(
+    "--windows",
+    is_flag=True,
+    help="Show the Windows PowerShell audit script instead of the Unix shell script.",
 )
 def debug_host_script(
     no_content: bool,
     wrap: bool,
+    windows: bool,
 ):
     """Print the remote host audit script used by host-audit."""
-    body = audit_script_body(include_content=not no_content)
-    if wrap:
-        print("sh -c " + shlex.quote(body))
+    if windows:
+        if wrap:
+            print(remote_windows_audit_script())
+        else:
+            print(windows_audit_script_body())
     else:
-        print(body)
+        body = audit_script_body(include_content=not no_content)
+        if wrap:
+            print("sh -c " + shlex.quote(body))
+        else:
+            print(body)
 
 
 @cli.command("host-set-override")
