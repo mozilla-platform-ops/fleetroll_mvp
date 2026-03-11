@@ -13,9 +13,9 @@ Review of `docs/client-server-design.md` — 2026-03-11
 
 ## Issues and Gaps
 
-### 1. Phase 1 is marked complete but isn't implemented
+### 1. Phase 1 is marked complete but isn't implemented ✅ fixed
 
-The doc says Phase 1 is done ("✅") and lists specific files modified, but `data_provider.py` doesn't exist and there are zero references to `DataProvider`, `LocalProvider`, or `RemoteProvider` anywhere in the codebase. Either remove the checkmark and the "Files modified" section, or note it as "designed, not yet implemented."
+The doc said Phase 1 was done ("✅") and listed specific files modified, but `data_provider.py` didn't exist and there were zero references to `DataProvider`, `LocalProvider`, or `RemoteProvider` anywhere in the codebase. Fixed by removing the checkmark, converting past tense to future tense, and renaming "Files modified" to "Files to create/modify".
 
 ### 2. Missing: Content-addressed file storage
 
@@ -103,7 +103,7 @@ No mention of how the server and remote provider will be tested:
 
 ## Suggested Additions
 
-1. **Remove or correct Phase 1 completion status**
+1. ~~**Remove or correct Phase 1 completion status**~~ (fixed)
 2. **Add a "Snapshot Response Shape" section** — even rough JSON
 3. **Add a "Server Configuration" section** — SSH keys, scan intervals, concurrency, API credentials
 4. **Add a "Storage" section** — where override/vault content files live on the server, PostgreSQL schema notes

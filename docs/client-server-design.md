@@ -72,13 +72,13 @@ GET  /api/v1/status                        # Server health + scan status
 
 ## Incremental Migration (4 Phases)
 
-### Phase 1: DataProvider Abstraction (pure refactor, no server) ✅
-- Created `DataProvider` protocol in `fleetroll/data_provider.py`
-- Implemented `LocalProvider` wrapping existing `db.py` functions
-- Refactored `MonitorDisplay` and `entry.py` to use `DataProvider`
+### Phase 1: DataProvider Abstraction (pure refactor, no server)
+- Create `DataProvider` protocol in `fleetroll/data_provider.py`
+- Implement `LocalProvider` wrapping existing `db.py` functions
+- Refactor `MonitorDisplay` and `entry.py` to use `DataProvider`
 - All existing behavior unchanged; existing tests still pass
 
-**Files modified:**
+**Files to create/modify:**
 - `fleetroll/data_provider.py` — new file: protocol + LocalProvider
 - `fleetroll/commands/monitor/entry.py` — use LocalProvider, provider selection
 - `fleetroll/commands/monitor/display.py` — accept DataProvider instead of db conn
