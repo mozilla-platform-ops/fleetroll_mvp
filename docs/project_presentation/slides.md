@@ -21,14 +21,14 @@ https://github.com/mozilla-platform-ops/fleetroll_mvp
 
 # host actions
 
-- set vault
-- set override
+- set vault.yml file (`fleetroll host-set-vault`): Mac/Linux source for puppet/hiera secrets
+- set/unset override file (`fleetroll host-set-override`): allows setting a host to use a branch persistently
 
 ---
 
 # data collection
 
-  - host data (`host-audit`)
+  - host data (`fleetroll host-audit`)
     - uses SSH. bash for mac and linux and powershell for windows.
       - `fleetroll debug-host-script (--windows)`
   	- gathers info like role, puppet run metadata, uptime, vault, and override info
@@ -54,7 +54,8 @@ https://github.com/mozilla-platform-ops/fleetroll_mvp
 # new features
   - sqlite db (was append-only jsonl, got large)
   - notes (persisted in git, jsonl)
-  - windows
+    `fleetroll note-add` for now, ability to do in TUI soon?
+  - windows support
 
 ---
 
