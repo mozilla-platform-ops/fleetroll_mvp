@@ -194,16 +194,32 @@ def _compare_string(col_value: str, op: str, filter_value: str) -> bool:
     return fn(cv, fv) if fn is not None else False
 
 
+def _match_data_column(row: dict[str, str], cond: FilterCondition) -> bool:
+    """Match a condition against the composite DATA column."""
+    col_secs = _get_data_seconds(row)
+    if col_secs is None:
+        return False
+    flt_secs = parse_duration(cond.value)
+    if flt_secs is not None:
+        return _compare_numeric(col_secs, cond.op, flt_secs)
+    return _compare_string(row.get("data", ""), cond.op, cond.value)
+
+
+def _match_pipe_values(row: dict[str, str], cond: FilterCondition) -> bool:
+    """Handle | separated value list for = and != (e.g. os=M|L)."""
+    parts = [p for p in cond.value.split("|") if p]
+    if cond.op == "=":
+        return any(row_matches_condition(row, FilterCondition(cond.column, "=", p)) for p in parts)
+    return all(row_matches_condition(row, FilterCondition(cond.column, "!=", p)) for p in parts)
+
+
 def row_matches_condition(row: dict[str, str], cond: FilterCondition) -> bool:
     """Return True if the row matches the filter condition."""
+    if "|" in cond.value and cond.op in ("=", "!="):
+        return _match_pipe_values(row, cond)
+
     if cond.column == "data":
-        col_secs = _get_data_seconds(row)
-        if col_secs is None:
-            return False
-        flt_secs = parse_duration(cond.value)
-        if flt_secs is not None:
-            return _compare_numeric(col_secs, cond.op, flt_secs)
-        return _compare_string(row.get("data", ""), cond.op, cond.value)
+        return _match_data_column(row, cond)
 
     col_value = row.get(cond.column, "")
     if cond.column in TIME_COLUMNS:
@@ -375,5 +391,12 @@ def tokenize_for_highlight(text: str) -> list[tuple[int, int, str]]:
                 )
                 val_start = tok_start + op_pos_in_tok + len(op_found)
                 if val_start < pos:
-                    spans.append((val_start, pos, "value"))
+                    cur = val_start
+                    for vi, vpart in enumerate(token[op_pos_in_tok + len(op_found) :].split("|")):
+                        if vi > 0:
+                            spans.append((cur, cur + 1, "op"))  # the | separator
+                            cur += 1
+                        if vpart:
+                            spans.append((cur, cur + len(vpart), "value"))
+                        cur += len(vpart)
     return spans

@@ -525,3 +525,54 @@ def test_highlight_spans_cover_full_text():
     # Reconstruct text from spans and verify no gaps
     reconstructed = "".join(text[s:e] for s, e, _ in spans)
     assert reconstructed == text
+
+
+# ---------------------------------------------------------------------------
+# Pipe-separated value lists (os=M|L)
+# ---------------------------------------------------------------------------
+
+
+def test_pipe_eq_matches_any():
+    row = _row(os="M")
+    cond = FilterCondition(column="os", op="=", value="M|L")
+    assert row_matches_condition(row, cond)
+
+
+def test_pipe_eq_matches_second():
+    row = _row(os="L")
+    cond = FilterCondition(column="os", op="=", value="M|L")
+    assert row_matches_condition(row, cond)
+
+
+def test_pipe_eq_excludes_non_match():
+    row = _row(os="W")
+    cond = FilterCondition(column="os", op="=", value="M|L")
+    assert not row_matches_condition(row, cond)
+
+
+def test_pipe_neq_excludes_all_listed():
+    row = _row(os="M")
+    cond = FilterCondition(column="os", op="!=", value="M|L")
+    assert not row_matches_condition(row, cond)
+
+
+def test_pipe_neq_passes_unlisted():
+    row = _row(os="W")
+    cond = FilterCondition(column="os", op="!=", value="M|L")
+    assert row_matches_condition(row, cond)
+
+
+def test_highlight_pipe_value_list():
+    result = _types("os=M|L")
+    assert ("os", "column_ok") in result
+    assert ("=", "op") in result
+    assert ("M", "value") in result
+    assert ("|", "op") in result
+    assert ("L", "value") in result
+
+
+def test_highlight_pipe_spans_cover_full_text():
+    text = "os=M|L"
+    spans = tokenize_for_highlight(text)
+    reconstructed = "".join(text[s:e] for s, e, _ in spans)
+    assert reconstructed == text
