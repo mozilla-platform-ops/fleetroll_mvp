@@ -18,6 +18,7 @@ KNOWN_COLUMNS = frozenset(
         "role",
         "vlt_sha",
         "sha",
+        "ovr_sha",  # alias for "sha" (display label "OVR_SHA")
         "uptime",
         "pp_last",
         "pp_sha",
@@ -31,6 +32,11 @@ KNOWN_COLUMNS = frozenset(
         "note",
     }
 )
+
+# Column aliases: display-label names → internal column key
+COLUMN_ALIASES: dict[str, str] = {
+    "ovr_sha": "sha",  # display label "OVR_SHA" → internal column "sha"
+}
 
 # Operator tokens, longest-match first to avoid partial matches
 _OPERATORS = (">=", "<=", "!=", ">", "<", "=", "~")
@@ -91,6 +97,7 @@ def parse_query(text: str) -> Query:
                     continue
                 pieces = part.split(":")
                 col = pieces[0].lower()
+                col = COLUMN_ALIASES.get(col, col)
                 direction = "asc"
                 if len(pieces) > 1 and pieces[1].lower() in ("asc", "desc"):
                     direction = pieces[1].lower()
@@ -113,6 +120,7 @@ def parse_query(text: str) -> Query:
             if op_found is None:
                 continue  # skip malformed token
             col = token[:op_pos].lower()
+            col = COLUMN_ALIASES.get(col, col)
             val = token[op_pos + len(op_found) :]
             if col and val:
                 conditions.append(FilterCondition(column=col, op=op_found, value=val))
