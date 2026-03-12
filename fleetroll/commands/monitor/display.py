@@ -594,15 +594,21 @@ class MonitorDisplay:
             "data": "DATA",
         }
 
-        # Add sort indicator to active column
-        sort_field_to_column = {
-            "host": "host",
-            "role": "role",
-            "ovr_sha": "sha",
-        }
-        active_column = sort_field_to_column.get(self.sort_field)
+        # Add sort indicator (↑/↓) to active column
+        if self._query.has_sort():
+            first_key = self._query.sort_keys[0]
+            active_column = first_key.column if first_key.column in labels else None
+            sort_indicator = " ↓" if first_key.direction == "desc" else " ↑"
+        else:
+            sort_field_to_column = {
+                "host": "host",
+                "role": "role",
+                "ovr_sha": "sha",
+            }
+            active_column = sort_field_to_column.get(self.sort_field)
+            sort_indicator = " ↑"  # default sort is always ascending
         if active_column and active_column in labels:
-            labels[active_column] = labels[active_column] + " *"
+            labels[active_column] = labels[active_column] + sort_indicator
 
         widths = {col: len(labels[col]) for col in all_columns}
         for host in sorted_hosts:

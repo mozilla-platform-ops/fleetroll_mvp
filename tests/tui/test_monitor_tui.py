@@ -109,9 +109,9 @@ class TestKeyboardNavigation:
         assert tmux_session.wait_for("HOST", timeout=3.0)
 
     def test_sort_cycle_with_s(self, tmux_session: TmuxSession) -> None:
-        """Pressing s cycles sort order; sort indicator (*) appears on a column."""
+        """Pressing s cycles sort order; sort indicator (↑) appears on a column."""
         tmux_session.send_keys("s")
-        assert tmux_session.wait_for("*", timeout=3.0), "Sort indicator not found"
+        assert tmux_session.wait_for("↑", timeout=3.0), "Sort indicator not found"
 
 
 # ---------------------------------------------------------------------------

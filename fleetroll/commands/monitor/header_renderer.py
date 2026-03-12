@@ -13,6 +13,17 @@ if TYPE_CHECKING:
 from .formatting import clip_cell, render_row_cells
 from .types import os_filter_label
 
+_SORT_INDICATORS = (" ↑", " ↓", " *")
+
+
+def _find_sort_indicator(text: str) -> tuple[int, int] | None:
+    """Return (position, length) of the sort indicator in text, or None."""
+    for ind in _SORT_INDICATORS:
+        pos = text.find(ind)
+        if pos >= 0:
+            return pos, len(ind)
+    return None
+
 
 @dataclass
 class HeaderInfo:
@@ -97,15 +108,16 @@ class HeaderRenderer:
                     self.safe_addstr(header_row, col, " | ", 0)
                     col += 3
                 # Check if this part contains the sort indicator (strip padding first)
-                if " *" in part:
-                    # Find position of " *" and split there
-                    asterisk_pos = part.find(" *")
-                    base_part = part[:asterisk_pos]
-                    padding = part[asterisk_pos + 2 :]  # Everything after " *"
+                found = _find_sort_indicator(part)
+                if found:
+                    ind_pos, ind_len = found
+                    base_part = part[:ind_pos]
+                    indicator = part[ind_pos : ind_pos + ind_len]
+                    padding = part[ind_pos + ind_len :]
                     self.safe_addstr(header_row, col, base_part, self.colors.attrs.column_attr)
                     col += len(base_part)
-                    self.safe_addstr(header_row, col, " *", asterisk_attr)
-                    col += 2
+                    self.safe_addstr(header_row, col, indicator, asterisk_attr)
+                    col += ind_len
                     if padding:
                         self.safe_addstr(header_row, col, padding, self.colors.attrs.column_attr)
                         col += len(padding)
@@ -113,15 +125,16 @@ class HeaderRenderer:
                     self.safe_addstr(header_row, col, part, self.colors.attrs.column_attr)
                     col += len(part)
         # Single column case
-        elif " *" in header_line:
-            asterisk_pos = header_line.find(" *")
-            base_line = header_line[:asterisk_pos]
-            padding = header_line[asterisk_pos + 2 :]
+        elif _find_sort_indicator(header_line):
+            ind_pos, ind_len = _find_sort_indicator(header_line)  # type: ignore[misc]
+            base_line = header_line[:ind_pos]
+            indicator = header_line[ind_pos : ind_pos + ind_len]
+            padding = header_line[ind_pos + ind_len :]
             self.safe_addstr(header_row, 0, base_line, self.colors.attrs.column_attr)
-            self.safe_addstr(header_row, len(base_line), " *", asterisk_attr)
+            self.safe_addstr(header_row, len(base_line), indicator, asterisk_attr)
             if padding:
                 self.safe_addstr(
-                    header_row, len(base_line) + 2, padding, self.colors.attrs.column_attr
+                    header_row, len(base_line) + ind_len, padding, self.colors.attrs.column_attr
                 )
         else:
             self.safe_addstr(header_row, 0, header_line, self.colors.attrs.column_attr)
