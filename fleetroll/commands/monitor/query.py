@@ -10,6 +10,28 @@ from .data import parse_duration
 # Columns whose values are time durations (for numeric comparison)
 TIME_COLUMNS = frozenset({"pp_last", "tc_act", "uptime", "tc_j_sf"})
 
+# All valid column names (used for validation)
+KNOWN_COLUMNS = frozenset(
+    {
+        "host",
+        "os",
+        "role",
+        "vlt_sha",
+        "sha",
+        "uptime",
+        "pp_last",
+        "pp_sha",
+        "pp_exp",
+        "pp_match",
+        "tc_act",
+        "tc_j_sf",
+        "tc_quar",
+        "data",
+        "healthy",
+        "note",
+    }
+)
+
 # Operator tokens, longest-match first to avoid partial matches
 _OPERATORS = (">=", "<=", "!=", ">", "<", "=", "~")
 
@@ -106,6 +128,24 @@ def parse_query_safe(text: str) -> Query:
         return parse_query(text)
     except Exception:
         return Query()
+
+
+def validate_query(query: Query, text: str) -> str | None:
+    """Return an error message string if the query has issues, or None if valid.
+
+    Checks:
+    - Non-empty text that produced an empty query (syntax unrecognized)
+    - Unknown column names in conditions or sort keys
+    """
+    if text.strip() and query.is_empty():
+        return "query unrecognized — check syntax"
+    for cond in query.conditions:
+        if cond.column not in KNOWN_COLUMNS:
+            return f"unknown column: {cond.column}"
+    for sk in query.sort_keys:
+        if sk.column not in KNOWN_COLUMNS:
+            return f"unknown sort column: {sk.column}"
+    return None
 
 
 def _get_data_seconds(row: dict[str, str]) -> int | None:

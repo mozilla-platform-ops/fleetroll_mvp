@@ -13,6 +13,7 @@ from fleetroll.commands.monitor.query import (
     parse_query,
     parse_query_safe,
     row_matches_condition,
+    validate_query,
 )
 
 # ---------------------------------------------------------------------------
@@ -399,6 +400,48 @@ def test_apply_sort_no_keys_returns_unchanged():
 # ---------------------------------------------------------------------------
 # apply_query (combined)
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# validate_query
+# ---------------------------------------------------------------------------
+
+
+def test_validate_query_valid_returns_none():
+    q = parse_query("pp_last>20h sort:tc_act:desc")
+    assert validate_query(q, "pp_last>20h sort:tc_act:desc") is None
+
+
+def test_validate_query_empty_text_returns_none():
+    assert validate_query(Query(), "") is None
+    assert validate_query(Query(), "   ") is None
+
+
+def test_validate_query_nonempty_text_empty_query():
+    # Unparseable text → query is empty → error
+    q = parse_query_safe("pp_last>")  # no value
+    assert validate_query(q, "pp_last>") is not None
+    assert "syntax" in validate_query(q, "pp_last>").lower()
+
+
+def test_validate_query_unknown_column_condition():
+    q = parse_query("foo>20h")
+    err = validate_query(q, "foo>20h")
+    assert err is not None
+    assert "foo" in err
+
+
+def test_validate_query_unknown_sort_column():
+    q = parse_query("sort:badcol")
+    err = validate_query(q, "sort:badcol")
+    assert err is not None
+    assert "badcol" in err
+
+
+def test_validate_query_known_columns_no_error():
+    for col in ("host", "role", "pp_last", "tc_act", "healthy", "data", "note"):
+        q = parse_query(f"{col}~x")
+        assert validate_query(q, f"{col}~x") is None
 
 
 def test_apply_query_filter_then_sort():

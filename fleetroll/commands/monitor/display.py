@@ -28,7 +28,7 @@ from .data import (
 )
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
-from .query import Query, apply_query, parse_query_safe
+from .query import Query, apply_query, parse_query_safe, validate_query
 from .row_renderer import RowRenderer
 from .types import cycle_os_filter
 
@@ -199,6 +199,10 @@ class MonitorDisplay:
             self.offset = 0
             with contextlib.suppress(curses_error):
                 cm.curs_set(0)
+            err = validate_query(self._query, text)
+            if err:
+                self._status_msg = err
+                self._status_msg_expiry = time.monotonic() + 2.0
             self.draw_screen()
         elif key == 27:  # Escape — discard edits
             self._filter_bar_active = False
