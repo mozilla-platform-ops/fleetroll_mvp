@@ -160,6 +160,8 @@ class MonitorDisplay:
         self._filter_bar_active: bool = False
         self._filter_bar_text: str = ""  # text being edited in the bar
         self._filter_bar_cursor: int = 0  # cursor position within _filter_bar_text
+        self._status_msg: str = ""  # ephemeral status message
+        self._status_msg_expiry: float = 0.0  # monotonic time when message expires
         self.colors = CursesColors(stdscr)
         self.curses_mod = self.colors.curses_mod
         self.header_renderer = HeaderRenderer(safe_addstr=self.safe_addstr, colors=self.colors)
@@ -293,7 +295,11 @@ class MonitorDisplay:
         elif key in (ord("s"), ord("S")):
             # Cycle between host -> role -> ovr_sha sort
             # No-op if /query has an explicit sort clause
-            if not self._query.has_sort():
+            if self._query.has_sort():
+                self._status_msg = "'s' inactive while /query has sort:"
+                self._status_msg_expiry = time.monotonic() + 2.0
+                self.draw_screen()
+            else:
                 if self.sort_field == "host":
                     self.sort_field = "role"
                 elif self.sort_field == "role":
@@ -762,6 +768,21 @@ class MonitorDisplay:
             self.row_renderer.draw_host_row(
                 row, render_data=render_data, columns=columns, widths=widths, color_maps=color_maps
             )
+
+        # Draw ephemeral status message at bottom (red background), unless filter bar is up
+        if not self._filter_bar_active and self._status_msg:
+            if time.monotonic() < self._status_msg_expiry:
+                msg_attr = (
+                    self.curses_mod.color_pair(6) | self.curses_mod.A_REVERSE
+                    if self.colors.color_enabled
+                    else self.curses_mod.A_REVERSE
+                )
+                msg_row = metrics["height"] - 1
+                msg_width = metrics["usable_width"]
+                padded = self._status_msg[:msg_width].ljust(msg_width)
+                self.safe_addstr(msg_row, 0, padded, msg_attr)
+            else:
+                self._status_msg = ""
 
         # Draw filter bar at bottom if active
         if self._filter_bar_active:
