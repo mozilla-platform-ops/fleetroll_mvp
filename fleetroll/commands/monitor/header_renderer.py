@@ -194,13 +194,10 @@ class HeaderRenderer:
                     )
             else:
                 self.safe_addstr(row, start_col, text, 0)
-        # Left side: color "fleetroll X.Y.Z"
+        # Left side: color "fleetroll X.Y.Z" — end at " [" to avoid matching colons in query text
         elif text.startswith("fleetroll"):
-            colon_pos = text.find(":")
-            if colon_pos > 0:
-                fleetroll_with_version = text[:colon_pos]
-            else:
-                fleetroll_with_version = "fleetroll"
+            bracket_pos = text.find(" [")
+            fleetroll_with_version = text[:bracket_pos] if bracket_pos > 0 else "fleetroll"
             self.safe_addstr(row, 0, fleetroll_with_version, self.colors.attrs.fleetroll_attr)
             self.safe_addstr(
                 row, len(fleetroll_with_version), text[len(fleetroll_with_version) :], 0
@@ -237,7 +234,11 @@ class HeaderRenderer:
             ver = get_version("fleetroll")
         except Exception:
             ver = "?"
-        left = f"fleetroll {ver} [? for help] sort={header_info.sort_field}"
+        # Suppress sort= when the /query has its own sort clause
+        if "sort:" in header_info.query_text.lower():
+            left = f"fleetroll {ver} [? for help]"
+        else:
+            left = f"fleetroll {ver} [? for help] sort={header_info.sort_field}"
         if header_info.show_only_overrides:
             left = f"{left}, filter=overrides"
         os_label = os_filter_label(header_info.os_filter)
@@ -301,12 +302,9 @@ class HeaderRenderer:
 
         # Render single-line header on row 0
         if header.startswith("fleetroll"):
-            # Color "fleetroll X.Y.Z" (find first colon to know where version ends)
-            colon_pos = header.find(":")
-            if colon_pos > 0:
-                fleetroll_with_version = header[:colon_pos]
-            else:
-                fleetroll_with_version = "fleetroll"
+            # Color "fleetroll X.Y.Z" — end at " [" to avoid matching colons in query text
+            bracket_pos = header.find(" [")
+            fleetroll_with_version = header[:bracket_pos] if bracket_pos > 0 else "fleetroll"
             self.safe_addstr(0, 0, fleetroll_with_version, self.colors.attrs.fleetroll_attr)
             header_offset = len(fleetroll_with_version)
             # Handle warning section separately if present

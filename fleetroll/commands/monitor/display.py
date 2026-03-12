@@ -159,6 +159,7 @@ class MonitorDisplay:
         self._query: Query = Query()
         self._filter_bar_active: bool = False
         self._filter_bar_text: str = ""  # text being edited in the bar
+        self._filter_bar_cursor: int = 0  # cursor position within _filter_bar_text
         self.colors = CursesColors(stdscr)
         self.curses_mod = self.colors.curses_mod
         self.header_renderer = HeaderRenderer(safe_addstr=self.safe_addstr, colors=self.colors)
@@ -179,34 +180,59 @@ class MonitorDisplay:
         self._query_text = text
         self._query = parse_query_safe(text)
         self._filter_bar_text = text
+        self._filter_bar_cursor = len(text)
 
     def _handle_filter_bar_key(self, key: int) -> bool:
         """Handle keypresses while the filter bar is active. Returns True to exit monitor."""
         if not self.curses_mod:
             return False
-        enter_keys = (self.curses_mod.KEY_ENTER, ord("\n"), ord("\r"))
+        cm = self.curses_mod
+        text = self._filter_bar_text
+        pos = self._filter_bar_cursor
+        enter_keys = (cm.KEY_ENTER, ord("\n"), ord("\r"))
         if key in enter_keys:
-            self._query_text = self._filter_bar_text
-            self._query = parse_query_safe(self._query_text)
+            self._query_text = text
+            self._query = parse_query_safe(text)
             self._filter_bar_active = False
             self.offset = 0
             with contextlib.suppress(curses_error):
-                self.curses_mod.curs_set(0)
+                cm.curs_set(0)
             self.draw_screen()
-        elif key == 27:  # Escape
+        elif key == 27:  # Escape — discard edits
             self._filter_bar_active = False
-            self._filter_bar_text = self._query_text  # restore previous
+            self._filter_bar_text = self._query_text
+            self._filter_bar_cursor = len(self._query_text)
             with contextlib.suppress(curses_error):
-                self.curses_mod.curs_set(0)
+                cm.curs_set(0)
             self.draw_screen()
         elif key == 21:  # Ctrl+U — clear line
             self._filter_bar_text = ""
+            self._filter_bar_cursor = 0
             self.draw_screen()
-        elif key in (self.curses_mod.KEY_BACKSPACE, 127, 8):
-            self._filter_bar_text = self._filter_bar_text[:-1]
+        elif key in (cm.KEY_LEFT,):
+            self._filter_bar_cursor = max(0, pos - 1)
             self.draw_screen()
-        elif 32 <= key < 127:  # printable ASCII
-            self._filter_bar_text += chr(key)
+        elif key in (cm.KEY_RIGHT,):
+            self._filter_bar_cursor = min(len(text), pos + 1)
+            self.draw_screen()
+        elif key in (cm.KEY_HOME, 1):  # Home or Ctrl+A
+            self._filter_bar_cursor = 0
+            self.draw_screen()
+        elif key in (cm.KEY_END, 5):  # End or Ctrl+E
+            self._filter_bar_cursor = len(text)
+            self.draw_screen()
+        elif key in (cm.KEY_BACKSPACE, 127, 8):  # Backspace — delete before cursor
+            if pos > 0:
+                self._filter_bar_text = text[: pos - 1] + text[pos:]
+                self._filter_bar_cursor = pos - 1
+                self.draw_screen()
+        elif key == cm.KEY_DC:  # Delete — delete at cursor
+            if pos < len(text):
+                self._filter_bar_text = text[:pos] + text[pos + 1 :]
+                self.draw_screen()
+        elif 32 <= key < 127:  # printable ASCII — insert at cursor
+            self._filter_bar_text = text[:pos] + chr(key) + text[pos:]
+            self._filter_bar_cursor = pos + 1
             self.draw_screen()
         return False
 
@@ -279,6 +305,7 @@ class MonitorDisplay:
         elif key == ord("/"):
             self._filter_bar_active = True
             self._filter_bar_text = self._query_text  # pre-fill with current
+            self._filter_bar_cursor = len(self._query_text)  # cursor at end
             with contextlib.suppress(curses_error):
                 self.curses_mod.curs_set(1)
             self.draw_screen()
@@ -286,6 +313,7 @@ class MonitorDisplay:
             self._query_text = ""
             self._query = Query()
             self._filter_bar_text = ""
+            self._filter_bar_cursor = 0
             self.offset = 0
             self.draw_screen()
         elif key == ord("o"):
@@ -743,7 +771,7 @@ class MonitorDisplay:
             bar_row = metrics["height"] - 1
             bar_width = metrics["usable_width"]
             self.safe_addstr(bar_row, 0, full_text[:bar_width].ljust(bar_width))
-            cursor_col = min(len(full_text), max(bar_width - 1, 0))
+            cursor_col = min(len(prompt) + self._filter_bar_cursor, max(bar_width - 1, 0))
             with contextlib.suppress(curses_error):
                 self.stdscr.move(bar_row, cursor_col)
 
