@@ -237,13 +237,14 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 # After processing a key, check if there's more input pending
                 # If so, flush it to avoid lag from processing hundreds of scroll events
                 if key != -1:
-                    # Peek to see if there's pending input
-                    stdscr.nodelay(True)
-                    peek = stdscr.getch()
-                    if peek != -1:
-                        # There's pending input - likely rapid scrolling
-                        # Flush the entire input buffer to avoid lag
-                        curses.flushinp()
+                    # When filter bar is active every keystroke matters — never flush.
+                    # Otherwise peek for pending input; if found, flush to avoid lag
+                    # from processing hundreds of buffered scroll events.
+                    if not display.filter_bar_active:
+                        stdscr.nodelay(True)
+                        peek = stdscr.getch()
+                        if peek != -1:
+                            curses.flushinp()
                     display.draw_screen()
                     redrew = True
 

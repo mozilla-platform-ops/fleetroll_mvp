@@ -180,6 +180,10 @@ class MonitorDisplay:
         except curses_error:
             return
 
+    @property
+    def filter_bar_active(self) -> bool:
+        return self._filter_bar_active
+
     def set_query(self, text: str) -> None:
         """Set the active filter query (e.g. from --filter CLI arg)."""
         self._query_text = text
