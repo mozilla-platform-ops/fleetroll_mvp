@@ -10,3 +10,4 @@
 {"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-080.test.releng.mdc1.mozilla.com", "note": "panic during imaging, bad disk", "ts": "2026-03-12T03:07:12+00:00"}
 {"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-077.test.releng.mdc1.mozilla.com", "note": "bad disk, fails during imaging", "ts": "2026-03-12T03:07:12+00:00"}
 {"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-055.test.releng.mdc1.mozilla.com", "note": "bad ilo on cartridge", "ts": "2026-03-12T03:07:13+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-154.test.releng.mdc1.mozilla.com", "note": "problems booting, never gets out of BIOS, replace", "ts": "2026-03-12T19:29:14+00:00"}
