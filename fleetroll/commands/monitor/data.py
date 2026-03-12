@@ -44,7 +44,7 @@ def get_host_sort_key(
 
     Args:
         hostname: Hostname to generate key for
-        sort_field: Sort field ("host", "role", or "ovr_sha")
+        sort_field: Sort field ("host", "role", or "ovr_bch")
         latest: Dictionary of latest records by hostname
         latest_ok: Dictionary of last successful records (fallback for failed audits)
 
@@ -78,7 +78,7 @@ def get_host_sort_key(
 
         return (has_role, role, natural_sort_key(hostname))
 
-    if sort_field == "ovr_sha":
+    if sort_field == "ovr_bch":
         # Extract override SHA from observed data
         sha_full = observed.get("override_sha256") or ""
 

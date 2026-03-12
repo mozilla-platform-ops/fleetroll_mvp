@@ -347,7 +347,7 @@ class MonitorDisplay:
                 if self.sort_field == "host":
                     self.sort_field = "role"
                 elif self.sort_field == "role":
-                    self.sort_field = "ovr_sha"
+                    self.sort_field = "ovr_bch"
                 else:
                     self.sort_field = "host"
                 self.offset = 0  # Reset to first page on sort change
@@ -603,7 +603,7 @@ class MonitorDisplay:
             sort_field_to_column = {
                 "host": "host",
                 "role": "role",
-                "ovr_sha": "sha",
+                "ovr_bch": "sha",
             }
             active_column = sort_field_to_column.get(self.sort_field)
             sort_indicator = " ↑"  # default sort is always ascending

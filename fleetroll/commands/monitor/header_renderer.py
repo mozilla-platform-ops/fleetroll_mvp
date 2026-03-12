@@ -33,7 +33,7 @@ class HeaderInfo:
     to avoid long parameter lists.
 
     Attributes:
-        sort_field: Current sort field ("host", "role", or "ovr_sha")
+        sort_field: Current sort field ("host", "role", or "ovr_bch")
         show_only_overrides: Whether override filter is active
         os_filter: OS filter value (None, "L", or "M")
         fqdn_suffix: Optional common FQDN suffix
