@@ -834,7 +834,17 @@ class MonitorDisplay:
 
         # Draw filter bar at bottom if active
         if self._filter_bar_active:
-            prompt = "Filter: "
+            idx = self._filter_history_idx
+            hist = self._filter_history
+            if not hist:
+                arrow = ""
+            elif idx == -1:
+                arrow = "↑"
+            elif idx == 0:
+                arrow = "↓"
+            else:
+                arrow = "↕"
+            prompt = f"Filter {arrow}: " if arrow else "Filter: "
             text = self._filter_bar_text
             full_text = f"{prompt}{text}"
             bar_row = metrics["height"] - 1
