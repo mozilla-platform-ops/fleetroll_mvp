@@ -101,7 +101,7 @@ Column Guide (press any key to close)
 Keybindings:
   ↑/↓ or j/k  Scroll rows (page by page)
   ←/→ or h/l  Scroll columns (when they don't fit)
-  s           Cycle sort order (host → role → ovr_sha → host)
+  s           Cycle sort order (host → role → ovr_bch → host)
               (no-op when /query has a sort: clause)
   o           Toggle override filter (all hosts ↔ overrides only)
   O           Cycle OS filter (all → Linux → macOS → all)
@@ -114,7 +114,7 @@ HOST      Hostname (FQDN suffix stripped if common)
 ROLE      Puppet role assigned to host
 OS        Host operating system (M=macOS/Darwin, L=Linux, W=Windows)
 VLT_SHA   Vault file SHA256 hash (symlink name in parentheses)
-OVR_SHA   Override file SHA256 hash (branch name in parentheses)
+OVR_BCH   Override branch name (SHA in parentheses)
 NOTE      Most recent operator note for the host (count prefix when multiple)
 UPTIME    Host uptime since last boot
 PP_LAST   Time since last puppet run (FAIL if failed)
