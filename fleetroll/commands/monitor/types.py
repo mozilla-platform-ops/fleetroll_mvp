@@ -102,8 +102,11 @@ Keybindings:
   ↑/↓ or j/k  Scroll rows (page by page)
   ←/→ or h/l  Scroll columns (when they don't fit)
   s           Cycle sort order (host → role → ovr_sha → host)
+              (no-op when /query has a sort: clause)
   o           Toggle override filter (all hosts ↔ overrides only)
   O           Cycle OS filter (all → Linux → macOS → all)
+  /           Open filter bar (query syntax: col>val sort:col:desc)
+  \\          Clear active /query filter
   q           Quit monitor
 
 Columns:

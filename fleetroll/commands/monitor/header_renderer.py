@@ -38,6 +38,7 @@ class HeaderInfo:
     host_source: str
     total_hosts: int
     log_size_warnings: list[str]
+    query_text: str = ""  # active /query string (empty means no query)
 
 
 class HeaderRenderer:
@@ -242,6 +243,8 @@ class HeaderRenderer:
         os_label = os_filter_label(header_info.os_filter)
         if os_label is not None:
             left = f"{left}, os={os_label}"
+        if header_info.query_text:
+            left = f"{left}, /{header_info.query_text}"
         if total_pages > 1:
             # Add page indicator with up/down arrows
             arrows = ""

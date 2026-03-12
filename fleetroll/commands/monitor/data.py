@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 import sqlite3
 import time
 from collections.abc import Iterable
@@ -205,6 +206,48 @@ def humanize_duration(seconds_value: int | None, *, min_unit: str = "s") -> str:
         return f"{hours}h {minutes:02d}m"
     days, hours = divmod(hours, 24)
     return f"{days}d {hours:02d}h"
+
+
+_DURATION_RE = re.compile(r"(\d+)\s*([smhd])", re.IGNORECASE)
+
+
+def parse_duration(s: str) -> int | None:
+    """Parse a duration string to seconds. Returns None if unparseable.
+
+    Accepts filter-style input: "20h", "5m", "1d", "30s", "1h30m"
+    Also accepts humanize_duration output: "2h 30m", "1d 04h"
+    Handles pp_last FAIL suffix: "30m FAIL" -> 1800
+    Handles tc_j_sf in-progress suffix: "5m -" -> 300
+    For "<Xunit" values (DATA column), returns X*unit_seconds - 1.
+    """
+    if not s or s in ("-", "?", "--"):
+        return None
+    # Strip known suffixes before parsing
+    s = s.split(" FAIL")[0].strip()
+    if s.endswith(" -"):
+        s = s[:-2].strip()
+    has_lt = s.startswith("<")
+    if has_lt:
+        s = s[1:]
+    total = 0
+    matched = False
+    for m in _DURATION_RE.finditer(s):
+        matched = True
+        value = int(m.group(1))
+        unit = m.group(2).lower()
+        if unit == "s":
+            total += value
+        elif unit == "m":
+            total += value * 60
+        elif unit == "h":
+            total += value * 3600
+        elif unit == "d":
+            total += value * 86400
+    if not matched:
+        return None
+    if has_lt:
+        total = max(total - 1, 0)
+    return total
 
 
 def format_ts_with_age(ts_value: str) -> str:

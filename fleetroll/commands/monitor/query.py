@@ -1,0 +1,244 @@
+"""Filter and sort query parsing for the monitor display."""
+
+from __future__ import annotations
+
+import operator as _op
+from dataclasses import dataclass, field
+
+from .data import parse_duration
+
+# Columns whose values are time durations (for numeric comparison)
+TIME_COLUMNS = frozenset({"pp_last", "tc_act", "uptime", "tc_j_sf"})
+
+# Operator tokens, longest-match first to avoid partial matches
+_OPERATORS = (">=", "<=", "!=", ">", "<", "=", "~")
+
+
+@dataclass
+class FilterCondition:
+    """A single filter condition: column op value."""
+
+    column: str  # lowercase, e.g. "pp_last"
+    op: str  # one of _OPERATORS
+    value: str  # raw string as typed
+
+
+@dataclass
+class SortKey:
+    """A single sort key with direction."""
+
+    column: str  # lowercase
+    direction: str  # "asc" or "desc"
+
+
+@dataclass
+class Query:
+    """Parsed filter/sort query."""
+
+    conditions: list[FilterCondition] = field(default_factory=list)
+    sort_keys: list[SortKey] = field(default_factory=list)
+
+    def is_empty(self) -> bool:
+        return not self.conditions and not self.sort_keys
+
+    def has_sort(self) -> bool:
+        return bool(self.sort_keys)
+
+
+def parse_query(text: str) -> Query:
+    """Parse a filter/sort query string into a Query object.
+
+    Syntax: COLUMN OP VALUE [COLUMN OP VALUE ...] [sort:COL[:asc|desc][,...]]
+
+    Examples:
+        pp_last>20h
+        healthy=n sort:tc_act:desc
+        role~web sort:pp_last:desc,host
+        pp_last>20h tc_act<2h sort:tc_act:desc,host
+    """
+    conditions: list[FilterCondition] = []
+    sort_keys: list[SortKey] = []
+
+    for token in text.strip().split():
+        if not token:
+            continue
+        if token.lower().startswith("sort:"):
+            sort_spec = token[5:]
+            for part in sort_spec.split(","):
+                if not part:
+                    continue
+                pieces = part.split(":")
+                col = pieces[0].lower()
+                direction = "asc"
+                if len(pieces) > 1 and pieces[1].lower() in ("asc", "desc"):
+                    direction = pieces[1].lower()
+                if col:
+                    sort_keys.append(SortKey(column=col, direction=direction))
+        else:
+            # Find operator by longest-match first
+            op_found = None
+            op_pos = -1
+            for op in _OPERATORS:
+                pos = token.find(op)
+                if pos > 0:  # column must be non-empty (pos > 0, not >= 0)
+                    if (
+                        op_found is None
+                        or pos < op_pos
+                        or (pos == op_pos and len(op) > len(op_found))
+                    ):
+                        op_found = op
+                        op_pos = pos
+            if op_found is None:
+                continue  # skip malformed token
+            col = token[:op_pos].lower()
+            val = token[op_pos + len(op_found) :]
+            if col and val:
+                conditions.append(FilterCondition(column=col, op=op_found, value=val))
+
+    return Query(conditions=conditions, sort_keys=sort_keys)
+
+
+def parse_query_safe(text: str) -> Query:
+    """Parse query string, returning empty Query on any error."""
+    if not text or not text.strip():
+        return Query()
+    try:
+        return parse_query(text)
+    except Exception:
+        return Query()
+
+
+def _get_data_seconds(row: dict[str, str]) -> int | None:
+    """Extract max(audit_secs, tc_secs) from the composite DATA column."""
+    raw = row.get("data", "")
+    if "/" in raw:
+        left, right = raw.split("/", 1)
+        a = parse_duration(left.strip())
+        b = parse_duration(right.strip())
+        vals = [v for v in (a, b) if v is not None]
+        return max(vals) if vals else None
+    return parse_duration(raw)
+
+
+_OP_FNS = {
+    ">": _op.gt,
+    "<": _op.lt,
+    ">=": _op.ge,
+    "<=": _op.le,
+    "=": _op.eq,
+    "!=": _op.ne,
+}
+
+
+def _compare_numeric(col_secs: int, op: str, flt_secs: int) -> bool:
+    fn = _OP_FNS.get(op)
+    return fn(col_secs, flt_secs) if fn is not None else False
+
+
+def _compare_string(col_value: str, op: str, filter_value: str) -> bool:
+    cv = col_value.lower()
+    fv = filter_value.lower()
+    if op == "~":
+        return fv in cv
+    fn = _OP_FNS.get(op)
+    return fn(cv, fv) if fn is not None else False
+
+
+def row_matches_condition(row: dict[str, str], cond: FilterCondition) -> bool:
+    """Return True if the row matches the filter condition."""
+    if cond.column == "data":
+        col_secs = _get_data_seconds(row)
+        if col_secs is None:
+            return False
+        flt_secs = parse_duration(cond.value)
+        if flt_secs is not None:
+            return _compare_numeric(col_secs, cond.op, flt_secs)
+        return _compare_string(row.get("data", ""), cond.op, cond.value)
+
+    col_value = row.get(cond.column, "")
+    if cond.column in TIME_COLUMNS:
+        col_secs = parse_duration(col_value)
+        if col_secs is None:
+            return False
+        flt_secs = parse_duration(cond.value)
+        if flt_secs is not None:
+            return _compare_numeric(col_secs, cond.op, flt_secs)
+
+    return _compare_string(col_value, cond.op, cond.value)
+
+
+def apply_conditions(
+    rows: list[dict[str, str]], conditions: list[FilterCondition]
+) -> list[dict[str, str]]:
+    """Filter rows to those matching all conditions."""
+    if not conditions:
+        return rows
+    return [r for r in rows if all(row_matches_condition(r, c) for c in conditions)]
+
+
+class _Rev:
+    """Reverse-comparison wrapper for strings (enables desc sort in multi-key sort)."""
+
+    __slots__ = ("val",)
+
+    def __init__(self, val: str) -> None:
+        self.val = val
+
+    def __lt__(self, other: _Rev) -> bool:
+        return self.val > other.val
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _Rev):
+            return NotImplemented
+        return self.val == other.val
+
+    def __le__(self, other: _Rev) -> bool:
+        return self.val >= other.val
+
+    def __gt__(self, other: _Rev) -> bool:
+        return self.val < other.val
+
+    def __ge__(self, other: _Rev) -> bool:
+        return self.val <= other.val
+
+    def __hash__(self) -> int:
+        return hash(self.val)
+
+
+def _row_sort_tuple(row: dict[str, str], sort_keys: list[SortKey]) -> tuple:
+    """Build a sort tuple for a row. Unknown values always sort last."""
+    parts: list = []
+    for sk in sort_keys:
+        raw = row.get(sk.column, "")
+        unknown = raw in ("-", "?", "--", "")
+        if sk.column in TIME_COLUMNS or sk.column == "data":
+            if sk.column == "data":
+                secs = _get_data_seconds(row)
+            else:
+                secs = parse_duration(raw)
+            if secs is None:
+                unknown = True
+                secs = 0
+            numeric_val = secs if sk.direction == "asc" else -secs
+            parts.append((1 if unknown else 0, numeric_val))
+        else:
+            str_val = raw.lower()
+            if sk.direction == "asc":
+                parts.append((1 if unknown else 0, str_val))
+            else:
+                parts.append((1 if unknown else 0, _Rev(str_val)))
+    return tuple(parts)
+
+
+def apply_sort(rows: list[dict[str, str]], sort_keys: list[SortKey]) -> list[dict[str, str]]:
+    """Sort rows by the given sort keys."""
+    if not sort_keys:
+        return rows
+    return sorted(rows, key=lambda r: _row_sort_tuple(r, sort_keys))
+
+
+def apply_query(rows: list[dict[str, str]], query: Query) -> list[dict[str, str]]:
+    """Apply filter conditions then sort to a list of row dicts."""
+    rows = apply_conditions(rows, query.conditions)
+    rows = apply_sort(rows, query.sort_keys)
+    return rows

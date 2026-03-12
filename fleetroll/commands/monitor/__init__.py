@@ -27,6 +27,7 @@ from .data import (
     load_latest_records,
     load_tc_worker_data_from_db,
     load_windows_pools_from_db,
+    parse_duration,
     record_matches,
     resolve_last_ok_ts,
     strip_fqdn,
@@ -49,10 +50,15 @@ from .formatting import (
     render_row_cells,
 )
 
+# Re-export from query module
+from .query import Query, apply_query, parse_query, parse_query_safe
+
 __all__ = [
     "AuditLogTailer",
     "MonitorDisplay",
+    "Query",
     "age_seconds",
+    "apply_query",
     "build_ok_row_values",
     "build_row_values",
     "clip_cell",
@@ -68,6 +74,9 @@ __all__ = [
     "load_latest_records",
     "load_tc_worker_data_from_db",
     "load_windows_pools_from_db",
+    "parse_duration",
+    "parse_query",
+    "parse_query_safe",
     "record_matches",
     "render_cell_text",
     "render_monitor_lines",

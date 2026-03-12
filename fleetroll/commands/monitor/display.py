@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import sqlite3
 import time
@@ -27,6 +28,7 @@ from .data import (
 )
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
+from .query import Query, apply_query, parse_query_safe
 from .row_renderer import RowRenderer
 from .types import cycle_os_filter
 
@@ -153,6 +155,10 @@ class MonitorDisplay:
         self.sort_field = "host"  # Current sort field: "host" or "role"
         self.show_only_overrides = False  # Filter to show only hosts with overrides
         self.os_filter: str | None = None  # OS filter: None=all, "L"=Linux, "M"=macOS
+        self._query_text: str = ""  # active applied query string
+        self._query: Query = Query()
+        self._filter_bar_active: bool = False
+        self._filter_bar_text: str = ""  # text being edited in the bar
         self.colors = CursesColors(stdscr)
         self.curses_mod = self.colors.curses_mod
         self.header_renderer = HeaderRenderer(safe_addstr=self.safe_addstr, colors=self.colors)
@@ -167,6 +173,42 @@ class MonitorDisplay:
                 self.stdscr.addstr(row, col, text)
         except curses_error:
             return
+
+    def set_query(self, text: str) -> None:
+        """Set the active filter query (e.g. from --filter CLI arg)."""
+        self._query_text = text
+        self._query = parse_query_safe(text)
+        self._filter_bar_text = text
+
+    def _handle_filter_bar_key(self, key: int) -> bool:
+        """Handle keypresses while the filter bar is active. Returns True to exit monitor."""
+        if not self.curses_mod:
+            return False
+        enter_keys = (self.curses_mod.KEY_ENTER, ord("\n"), ord("\r"))
+        if key in enter_keys:
+            self._query_text = self._filter_bar_text
+            self._query = parse_query_safe(self._query_text)
+            self._filter_bar_active = False
+            self.offset = 0
+            with contextlib.suppress(curses_error):
+                self.curses_mod.curs_set(0)
+            self.draw_screen()
+        elif key == 27:  # Escape
+            self._filter_bar_active = False
+            self._filter_bar_text = self._query_text  # restore previous
+            with contextlib.suppress(curses_error):
+                self.curses_mod.curs_set(0)
+            self.draw_screen()
+        elif key == 21:  # Ctrl+U — clear line
+            self._filter_bar_text = ""
+            self.draw_screen()
+        elif key in (self.curses_mod.KEY_BACKSPACE, 127, 8):
+            self._filter_bar_text = self._filter_bar_text[:-1]
+            self.draw_screen()
+        elif 32 <= key < 127:  # printable ASCII
+            self._filter_bar_text += chr(key)
+            self.draw_screen()
+        return False
 
     def handle_key(self, key: int, *, draw: bool = True) -> bool:
         """Handle a keypress. Returns True if we should exit.
@@ -187,6 +229,10 @@ class MonitorDisplay:
                     self.stdscr.refresh()
             return False  # Don't process the key that closed help
 
+        # Route all keypresses to filter bar when active
+        if self._filter_bar_active:
+            return self._handle_filter_bar_key(key)
+
         if key in (ord("q"), ord("Q")):
             return True
         if not self.curses_mod:
@@ -197,8 +243,7 @@ class MonitorDisplay:
             return False
         if key in (self.curses_mod.KEY_ENTER, ord("\n"), ord("\r")):
             self.draw_screen()
-            return False
-        if key in (self.curses_mod.KEY_UP, ord("k")):
+        elif key in (self.curses_mod.KEY_UP, ord("k")):
             self.offset = max(self.offset - self.page_step, 0)
             self.draw_screen()
         elif key in (self.curses_mod.KEY_DOWN, ord("j")):
@@ -221,13 +266,27 @@ class MonitorDisplay:
             self.draw_screen()
         elif key in (ord("s"), ord("S")):
             # Cycle between host -> role -> ovr_sha sort
-            if self.sort_field == "host":
-                self.sort_field = "role"
-            elif self.sort_field == "role":
-                self.sort_field = "ovr_sha"
-            else:
-                self.sort_field = "host"
-            self.offset = 0  # Reset to first page on sort change
+            # No-op if /query has an explicit sort clause
+            if not self._query.has_sort():
+                if self.sort_field == "host":
+                    self.sort_field = "role"
+                elif self.sort_field == "role":
+                    self.sort_field = "ovr_sha"
+                else:
+                    self.sort_field = "host"
+                self.offset = 0  # Reset to first page on sort change
+                self.draw_screen()
+        elif key == ord("/"):
+            self._filter_bar_active = True
+            self._filter_bar_text = self._query_text  # pre-fill with current
+            with contextlib.suppress(curses_error):
+                self.curses_mod.curs_set(1)
+            self.draw_screen()
+        elif key == ord("\\"):
+            self._query_text = ""
+            self._query = Query()
+            self._filter_bar_text = ""
+            self.offset = 0
             self.draw_screen()
         elif key == ord("o"):
             # Toggle override filter
@@ -571,6 +630,26 @@ class MonitorDisplay:
         if self.os_filter is not None:
             sorted_hosts = [h for h in sorted_hosts if self._get_host_os(h) == self.os_filter]
 
+        # Apply /query filter and sort if active
+        if not self._query.is_empty():
+            row_dicts = []
+            for h in sorted_hosts:
+                values = build_row_values(
+                    h,
+                    self.latest.get(h),
+                    last_ok=self.latest_ok.get(h),
+                    tc_data=self.tc_data.get(strip_fqdn(h)),
+                    fqdn_suffix=self.fqdn_suffix,
+                    sha_cache=self.sha_cache,
+                    github_refs=self.github_refs,
+                    windows_pools=self.windows_pools,
+                    notes_data=self.notes_data,
+                )
+                values["_host"] = h
+                row_dicts.append(values)
+            row_dicts = apply_query(row_dicts, self._query)
+            sorted_hosts = [d["_host"] for d in row_dicts]
+
         # Compute screen metrics with filtered host count
         metrics = self._compute_screen_metrics(host_count=len(sorted_hosts))
 
@@ -585,7 +664,11 @@ class MonitorDisplay:
         # Draw headers
         # Pass filtered count if any filter is active
         filtered_count = (
-            len(sorted_hosts) if (self.show_only_overrides or self.os_filter is not None) else None
+            len(sorted_hosts)
+            if (
+                self.show_only_overrides or self.os_filter is not None or not self._query.is_empty()
+            )
+            else None
         )
         header_info = HeaderInfo(
             sort_field=self.sort_field,
@@ -595,6 +678,7 @@ class MonitorDisplay:
             host_source=self.host_source,
             total_hosts=len(self.hosts),
             log_size_warnings=self.log_size_warnings,
+            query_text=self._query_text,
         )
         header_rows = self.header_renderer.draw_top_header(
             header_info=header_info,
@@ -650,6 +734,18 @@ class MonitorDisplay:
             self.row_renderer.draw_host_row(
                 row, render_data=render_data, columns=columns, widths=widths, color_maps=color_maps
             )
+
+        # Draw filter bar at bottom if active
+        if self._filter_bar_active:
+            prompt = "Filter: "
+            text = self._filter_bar_text
+            full_text = f"{prompt}{text}"
+            bar_row = metrics["height"] - 1
+            bar_width = metrics["usable_width"]
+            self.safe_addstr(bar_row, 0, full_text[:bar_width].ljust(bar_width))
+            cursor_col = min(len(full_text), max(bar_width - 1, 0))
+            with contextlib.suppress(curses_error):
+                self.stdscr.move(bar_row, cursor_col)
 
         # Refresh main screen first, then draw help popup on top
         if self.show_help:

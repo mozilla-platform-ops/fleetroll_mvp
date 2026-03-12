@@ -20,6 +20,7 @@ from ...utils import (
 from .cache import ShaInfoCache
 from .data import (
     AuditLogTailer,
+    build_row_values,
     get_host_sort_key,
     load_github_refs_from_db,
     load_latest_records,
@@ -33,6 +34,7 @@ from .formatting import (
     format_monitor_row,
     render_monitor_lines,
 )
+from .query import apply_query, parse_query_safe
 
 if TYPE_CHECKING:
     from ...cli_types import HostMonitorArgs
@@ -91,6 +93,23 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     h, sort_field=args.sort, latest=latest, latest_ok=latest_ok
                 ),
             )
+
+            if args.filter:
+                query = parse_query_safe(args.filter)
+                if not query.is_empty():
+                    row_dicts = []
+                    for h in sorted_hosts:
+                        values = build_row_values(
+                            h,
+                            latest.get(h),
+                            last_ok=latest_ok.get(h),
+                            tc_data=tc_data.get(strip_fqdn(h)),
+                            sha_cache=sha_cache,
+                        )
+                        values["_host"] = h
+                        row_dicts.append(values)
+                    filtered = apply_query(row_dicts, query)
+                    sorted_hosts = [d["_host"] for d in filtered]
 
             if args.json:
                 payload = {host: latest.get(host) for host in sorted_hosts}
@@ -198,6 +217,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 notes_data=notes_data,
                 notes_path=notes_path,
             )
+            if args.filter:
+                display.set_query(args.filter)
             display.draw_screen()
             tailer = AuditLogTailer(
                 db_conn,

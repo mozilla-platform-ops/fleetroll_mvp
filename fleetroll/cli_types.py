@@ -32,6 +32,7 @@ class HostMonitorArgs:
     json: bool
     once: bool
     sort: str
+    filter: str | None = None
 
 
 @dataclass

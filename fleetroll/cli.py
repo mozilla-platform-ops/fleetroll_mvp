@@ -202,12 +202,19 @@ def host_audit(
     default="host",
     help="Sort order for display (default: host).",
 )
+@click.option(
+    "--filter",
+    "filter_query",
+    default=None,
+    help='Filter/sort query (e.g. "pp_last>20h sort:tc_act:desc").',
+)
 def host_monitor(
     host: str,
     audit_log: str | None,
     json_output: bool,
     once: bool,
     sort: str,
+    filter_query: str | None,
 ):
     """Monitor the latest audit record for a host (follows the audit log)."""
     args = HostMonitorArgs(
@@ -216,6 +223,7 @@ def host_monitor(
         json=json_output,
         once=once,
         sort=sort.lower(),
+        filter=filter_query,
     )
     cmd_host_monitor(args)
 
