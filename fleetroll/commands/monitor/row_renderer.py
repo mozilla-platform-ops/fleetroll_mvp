@@ -94,20 +94,18 @@ class RowRenderer:
             observed = (latest_ok.get(host) or latest.get(host) or {}).get("observed", {})
             uptime_s = observed.get("uptime_s")
 
-        # Calculate TC_ACT in seconds for coloring
+        # Calculate TC_ACT in seconds for coloring (relative to now, so it ages continuously)
         tc_act_s = None
         if tc_worker_data:
             last_date_active = tc_worker_data.get("last_date_active")
-            scan_ts = tc_worker_data.get("ts")
-            if last_date_active and scan_ts:
+            if last_date_active:
                 try:
-                    scan_dt = dt.datetime.fromisoformat(scan_ts)
-                    if scan_dt.tzinfo is None:
-                        scan_dt = scan_dt.replace(tzinfo=dt.UTC)
                     last_active_dt = dt.datetime.fromisoformat(last_date_active)
                     if last_active_dt.tzinfo is None:
                         last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
-                    tc_act_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
+                    tc_act_s = max(
+                        int((dt.datetime.now(dt.UTC) - last_active_dt).total_seconds()), 0
+                    )
                 except (ValueError, AttributeError):
                     pass
 

@@ -1143,43 +1143,52 @@ def _make_renderer() -> RowRenderer:
 
 
 def test_compute_row_render_data_tc_act_s() -> None:
-    """TC_ACT age in seconds is computed from scan_ts - last_date_active."""
+    """TC_ACT age in seconds is computed from now - last_date_active."""
+    import datetime as dt
+
     renderer = _make_renderer()
+    last_active = dt.datetime.now(dt.UTC) - dt.timedelta(hours=2)
     result = renderer.compute_row_render_data(
         "host1.example.com",
         latest={},
         latest_ok={},
         tc_data={
             "host1": {
-                "ts": "2024-01-15T12:00:00+00:00",
-                "last_date_active": "2024-01-15T10:00:00+00:00",
+                "ts": last_active.isoformat(),
+                "last_date_active": last_active.isoformat(),
             }
         },
         fqdn_suffix=None,
         sha_cache=None,
         github_refs={},
     )
-    assert result["tc_act_s"] == 7200  # 2 hours
+    assert result["tc_act_s"] is not None
+    assert abs(result["tc_act_s"] - 7200) < 5  # ~2 hours, allow 5s clock skew
 
 
 def test_compute_row_render_data_tc_act_s_naive_timestamps() -> None:
     """Naive (no-tz) timestamps are treated as UTC."""
+    import datetime as dt
+
     renderer = _make_renderer()
+    last_active = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=30)
+    last_active_naive = last_active.replace(tzinfo=None).isoformat()
     result = renderer.compute_row_render_data(
         "host1",
         latest={},
         latest_ok={},
         tc_data={
             "host1": {
-                "ts": "2024-01-15T12:00:00",
-                "last_date_active": "2024-01-15T11:30:00",
+                "ts": last_active_naive,
+                "last_date_active": last_active_naive,
             }
         },
         fqdn_suffix=None,
         sha_cache=None,
         github_refs={},
     )
-    assert result["tc_act_s"] == 1800  # 30 minutes
+    assert result["tc_act_s"] is not None
+    assert abs(result["tc_act_s"] - 1800) < 5  # ~30 minutes, allow 5s clock skew
 
 
 def test_compute_row_render_data_no_tc_data() -> None:

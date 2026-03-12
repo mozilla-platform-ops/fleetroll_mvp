@@ -348,16 +348,12 @@ def build_ok_row_values(
     tc_act_s = None
     if tc_data:
         last_date_active = tc_data.get("last_date_active")
-        scan_ts = tc_data.get("ts")
-        if last_date_active and scan_ts:
+        if last_date_active:
             try:
-                scan_dt = dt.datetime.fromisoformat(scan_ts)
-                if scan_dt.tzinfo is None:
-                    scan_dt = scan_dt.replace(tzinfo=dt.UTC)
                 last_active_dt = dt.datetime.fromisoformat(last_date_active)
                 if last_active_dt.tzinfo is None:
                     last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
-                tc_act_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
+                tc_act_s = max(int((dt.datetime.now(dt.UTC) - last_active_dt).total_seconds()), 0)
             except (ValueError, AttributeError):
                 pass
 
@@ -429,17 +425,15 @@ def build_ok_row_values(
         # Calculate ages relative to scan time, not current time
         scan_ts = tc_data.get("ts")
 
-        # TC_ACT: Last date active (at scan time)
+        # TC_ACT: Last date active (relative to now, so it ages continuously)
         last_date_active = tc_data.get("last_date_active")
-        if last_date_active and scan_ts:
+        if last_date_active:
             try:
-                scan_dt = dt.datetime.fromisoformat(scan_ts)
-                if scan_dt.tzinfo is None:
-                    scan_dt = scan_dt.replace(tzinfo=dt.UTC)
                 last_active_dt = dt.datetime.fromisoformat(last_date_active)
                 if last_active_dt.tzinfo is None:
                     last_active_dt = last_active_dt.replace(tzinfo=dt.UTC)
-                delta_s = max(int((scan_dt - last_active_dt).total_seconds()), 0)
+                now = dt.datetime.now(dt.UTC)
+                delta_s = max(int((now - last_active_dt).total_seconds()), 0)
                 tc_act = humanize_duration(delta_s)
             except (ValueError, AttributeError):
                 pass
