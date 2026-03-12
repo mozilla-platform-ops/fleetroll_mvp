@@ -580,7 +580,7 @@ class MonitorDisplay:
             "uptime": "UPTIME",
             "role": "ROLE",
             "os": "OS",
-            "sha": "OVR_SHA",
+            "sha": "OVR_BCH",
             "vlt_sha": "VLT_SHA",
             "note": "NOTE",
             "tc_quar": "TC_QUAR",

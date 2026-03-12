@@ -18,7 +18,8 @@ KNOWN_COLUMNS = frozenset(
         "role",
         "vlt_sha",
         "sha",
-        "ovr_sha",  # alias for "sha" (display label "OVR_SHA")
+        "ovr_bch",  # alias for "sha" (display label "OVR_BCH")
+        "ovr_sha",  # legacy alias
         "uptime",
         "pp_last",
         "pp_sha",
@@ -35,7 +36,8 @@ KNOWN_COLUMNS = frozenset(
 
 # Column aliases: display-label names → internal column key
 COLUMN_ALIASES: dict[str, str] = {
-    "ovr_sha": "sha",  # display label "OVR_SHA" → internal column "sha"
+    "ovr_bch": "sha",  # display label "OVR_BCH" → internal column "sha"
+    "ovr_sha": "sha",  # legacy alias
 }
 
 # Operator tokens, longest-match first to avoid partial matches

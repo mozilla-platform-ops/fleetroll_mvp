@@ -303,7 +303,7 @@ def build_ok_row_values(
         if sha_full:
             ovr_info = sha_cache.get_override_info(sha_full)
             if ovr_info != "-":
-                sha = f"{sha} ({ovr_info})"
+                sha = f"{ovr_info} ({sha})"
         if vault_sha_full:
             vlt_info = sha_cache.get_vault_info(vault_sha_full)
             if vlt_info != "-":
