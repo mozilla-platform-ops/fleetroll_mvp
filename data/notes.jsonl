@@ -1,0 +1,12 @@
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-228.test.releng.mdc1.mozilla.com", "note": "NVME disk error during imaging", "ts": "2026-03-12T03:07:11+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-166.test.releng.mdc1.mozilla.com", "note": "nvme failure during install", "ts": "2026-03-12T03:07:11+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-161.test.releng.mdc1.mozilla.com", "note": "failed to converge/can't ssh", "ts": "2026-03-12T03:07:12+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-153.test.releng.mdc1.mozilla.com", "note": "reimaging not working", "ts": "2026-03-12T03:07:12+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-135.test.releng.mdc1.mozilla.com", "note": "bad cartridge, quarantined", "ts": "2026-03-12T03:07:12+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-129.test.releng.mdc1.mozilla.com", "note": "netbooting issues", "ts": "2026-03-12T03:07:12+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-120.test.releng.mdc1.mozilla.com", "note": "netbooting issues", "ts": "2026-03-12T03:07:12+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-117.test.releng.mdc1.mozilla.com", "note": "114 and 117 swapped", "ts": "2026-03-12T03:07:12+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-114.test.releng.mdc1.mozilla.com", "note": "114 and 117 swapped", "ts": "2026-03-12T03:07:12+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-080.test.releng.mdc1.mozilla.com", "note": "panic during imaging, bad disk", "ts": "2026-03-12T03:07:12+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-077.test.releng.mdc1.mozilla.com", "note": "bad disk, fails during imaging", "ts": "2026-03-12T03:07:12+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-055.test.releng.mdc1.mozilla.com", "note": "bad ilo on cartridge", "ts": "2026-03-12T03:07:13+00:00"}
