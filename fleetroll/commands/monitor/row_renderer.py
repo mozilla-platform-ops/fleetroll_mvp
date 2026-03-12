@@ -249,17 +249,30 @@ class RowRenderer:
                 self.safe_addstr(row, col, cell[1:], 0)
                 col += len(cell) - 1
             elif col_name == "sha":
-                # OVR_SHA: Color the 8-char SHA prefix
+                # OVR_BCH: Color branch name (before " ("), sha in parens stays plain.
+                # Falls back to coloring 8-char sha prefix when no branch info.
                 full_value = values.get("sha", "")
-                if full_value not in ("-", "?") and len(full_value) >= 8:
-                    marker_attr = sha_colors.get(values.get("sha", ""), 0)
-                    sha_prefix = cell[:8]
-                    rest = cell[8:]
-                    self.safe_addstr(row, col, sha_prefix, marker_attr)
-                    col += len(sha_prefix)
-                    if rest:
+                if full_value not in ("-", "?"):
+                    marker_attr = sha_colors.get(full_value, 0)
+                    paren_idx = cell.find(" (")
+                    if paren_idx > 0:
+                        branch_part = cell[:paren_idx]
+                        rest = cell[paren_idx:]
+                        self.safe_addstr(row, col, branch_part, marker_attr)
+                        col += len(branch_part)
                         self.safe_addstr(row, col, rest, 0)
                         col += len(rest)
+                    elif len(full_value) >= 8:
+                        sha_prefix = cell[:8]
+                        rest = cell[8:]
+                        self.safe_addstr(row, col, sha_prefix, marker_attr)
+                        col += len(sha_prefix)
+                        if rest:
+                            self.safe_addstr(row, col, rest, 0)
+                            col += len(rest)
+                    else:
+                        self.safe_addstr(row, col, cell, attr)
+                        col += len(cell)
                 else:
                     self.safe_addstr(row, col, cell, attr)
                     col += len(cell)
