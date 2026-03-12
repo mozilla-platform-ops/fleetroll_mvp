@@ -282,3 +282,88 @@ def apply_query(rows: list[dict[str, str]], query: Query) -> list[dict[str, str]
     rows = apply_conditions(rows, query.conditions)
     rows = apply_sort(rows, query.sort_keys)
     return rows
+
+
+def tokenize_for_highlight(text: str) -> list[tuple[int, int, str]]:
+    """Tokenize a query string into (start, end, token_type) spans for highlighting.
+
+    Token types:
+      "column_ok"    — recognized column name (before operator)
+      "column_bad"   — unrecognized column name (before operator)
+      "op"           — comparison operator
+      "value"        — value after operator
+      "sort_kw"      — the "sort:" prefix
+      "sort_col_ok"  — recognized sort column
+      "sort_col_bad" — unrecognized sort column
+      "sort_dir"     — sort direction (asc/desc)
+      "plain"        — separators, incomplete tokens, whitespace
+    """
+    spans: list[tuple[int, int, str]] = []
+    pos = 0
+    while pos < len(text):
+        # Skip whitespace (leave unhighlighted)
+        ws_start = pos
+        while pos < len(text) and text[pos] == " ":
+            pos += 1
+        if pos > ws_start:
+            spans.append((ws_start, pos, "plain"))
+        if pos >= len(text):
+            break
+
+        # Find end of whitespace-delimited token
+        tok_start = pos
+        while pos < len(text) and text[pos] != " ":
+            pos += 1
+        token = text[tok_start:pos]
+
+        if token.lower().startswith("sort:"):
+            spans.append((tok_start, tok_start + 5, "sort_kw"))
+            cur = tok_start + 5
+            rest = token[5:]
+            parts = rest.split(",")
+            for i, part in enumerate(parts):
+                if i > 0:
+                    spans.append((cur, cur + 1, "plain"))  # comma
+                    cur += 1
+                if not part:
+                    continue
+                pieces = part.split(":", 1)
+                col_text = pieces[0]
+                col_type = "sort_col_ok" if col_text.lower() in KNOWN_COLUMNS else "sort_col_bad"
+                spans.append((cur, cur + len(col_text), col_type))
+                cur += len(col_text)
+                if len(pieces) > 1:
+                    spans.append((cur, cur + 1, "plain"))  # colon
+                    cur += 1
+                    dir_text = pieces[1]
+                    dir_type = "sort_dir" if dir_text.lower() in ("asc", "desc") else "plain"
+                    spans.append((cur, cur + len(dir_text), dir_type))
+                    cur += len(dir_text)
+        else:
+            # Find operator by longest-match first
+            op_found = None
+            op_pos_in_tok = -1
+            for op in _OPERATORS:
+                p = token.find(op)
+                if p > 0:
+                    if (
+                        op_found is None
+                        or p < op_pos_in_tok
+                        or (p == op_pos_in_tok and len(op) > len(op_found))
+                    ):
+                        op_found = op
+                        op_pos_in_tok = p
+            if op_found is None:
+                # Incomplete token (still typing) — leave plain
+                spans.append((tok_start, pos, "plain"))
+            else:
+                col_text = token[:op_pos_in_tok]
+                col_type = "column_ok" if col_text.lower() in KNOWN_COLUMNS else "column_bad"
+                spans.append((tok_start, tok_start + op_pos_in_tok, col_type))
+                spans.append(
+                    (tok_start + op_pos_in_tok, tok_start + op_pos_in_tok + len(op_found), "op")
+                )
+                val_start = tok_start + op_pos_in_tok + len(op_found)
+                if val_start < pos:
+                    spans.append((val_start, pos, "value"))
+    return spans

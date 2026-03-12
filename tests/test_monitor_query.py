@@ -13,6 +13,7 @@ from fleetroll.commands.monitor.query import (
     parse_query,
     parse_query_safe,
     row_matches_condition,
+    tokenize_for_highlight,
     validate_query,
 )
 
@@ -456,3 +457,71 @@ def test_apply_query_filter_then_sort():
     hosts = [r["host"] for r in result]
     # tc_act desc: 45m (host-b) > 10m (host-c)
     assert hosts == ["host-b", "host-c"]
+
+
+# ---------------------------------------------------------------------------
+# tokenize_for_highlight
+# ---------------------------------------------------------------------------
+
+
+def _types(text: str) -> list[tuple[str, str]]:
+    """Return (text_chunk, token_type) pairs for a query string."""
+    spans = tokenize_for_highlight(text)
+    return [(text[s:e], t) for s, e, t in spans]
+
+
+def test_highlight_empty():
+    assert tokenize_for_highlight("") == []
+
+
+def test_highlight_simple_condition_valid_column():
+    result = _types("pp_last>20h")
+    assert ("pp_last", "column_ok") in result
+    assert (">", "op") in result
+    assert ("20h", "value") in result
+
+
+def test_highlight_simple_condition_invalid_column():
+    result = _types("bogus>20h")
+    assert ("bogus", "column_bad") in result
+    assert (">", "op") in result
+    assert ("20h", "value") in result
+
+
+def test_highlight_incomplete_token_is_plain():
+    # No operator yet — still typing
+    result = _types("pp_last")
+    assert result == [("pp_last", "plain")]
+
+
+def test_highlight_sort_keyword():
+    result = _types("sort:pp_last:desc")
+    types_only = [t for _, t in result]
+    assert "sort_kw" in types_only
+    assert "sort_col_ok" in types_only
+    assert "sort_dir" in types_only
+
+
+def test_highlight_sort_unknown_column():
+    result = _types("sort:bogus:asc")
+    assert ("bogus", "sort_col_bad") in result
+    assert ("asc", "sort_dir") in result
+
+
+def test_highlight_multi_token():
+    result = _types("pp_last>20h role~web")
+    chunk_types = dict(result)
+    assert chunk_types["pp_last"] == "column_ok"
+    assert chunk_types[">"] == "op"
+    assert chunk_types["20h"] == "value"
+    assert chunk_types["role"] == "column_ok"
+    assert chunk_types["~"] == "op"
+    assert chunk_types["web"] == "value"
+
+
+def test_highlight_spans_cover_full_text():
+    text = "pp_last>20h sort:role:desc"
+    spans = tokenize_for_highlight(text)
+    # Reconstruct text from spans and verify no gaps
+    reconstructed = "".join(text[s:e] for s, e, _ in spans)
+    assert reconstructed == text

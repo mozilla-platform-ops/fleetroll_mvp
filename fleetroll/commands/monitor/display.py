@@ -28,7 +28,7 @@ from .data import (
 )
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
-from .query import Query, apply_query, parse_query_safe, validate_query
+from .query import Query, apply_query, parse_query_safe, tokenize_for_highlight, validate_query
 from .row_renderer import RowRenderer
 from .types import cycle_os_filter
 
@@ -846,10 +846,40 @@ class MonitorDisplay:
                 arrow = "↕"
             prompt = f"Filter {arrow}: " if arrow else "Filter: "
             text = self._filter_bar_text
-            full_text = f"{prompt}{text}"
             bar_row = metrics["height"] - 1
             bar_width = metrics["usable_width"]
-            self.safe_addstr(bar_row, 0, full_text[:bar_width].ljust(bar_width))
+            # Clear the line
+            self.safe_addstr(bar_row, 0, " " * bar_width)
+            # Draw prompt (plain)
+            self.safe_addstr(bar_row, 0, prompt[:bar_width])
+            # Draw syntax-highlighted query text
+            if self.colors.color_enabled and self.curses_mod:
+                cm = self.curses_mod
+                _hl_attrs = {
+                    "column_ok": cm.color_pair(1) | cm.A_BOLD,
+                    "column_bad": cm.color_pair(6) | cm.A_BOLD,
+                    "op": cm.A_BOLD,
+                    "value": cm.color_pair(4),
+                    "sort_kw": cm.color_pair(2) | cm.A_BOLD,
+                    "sort_col_ok": cm.color_pair(1),
+                    "sort_col_bad": cm.color_pair(6),
+                    "sort_dir": cm.color_pair(3),
+                    "plain": 0,
+                }
+                prompt_len = len(prompt)
+                for span_start, span_end, tok_type in tokenize_for_highlight(text):
+                    col = prompt_len + span_start
+                    if col >= bar_width:
+                        break
+                    chunk = text[span_start:span_end]
+                    chunk = chunk[: bar_width - col]
+                    attr = _hl_attrs.get(tok_type, 0)
+                    if attr:
+                        self.safe_addstr(bar_row, col, chunk, attr)
+                    else:
+                        self.safe_addstr(bar_row, col, chunk)
+            else:
+                self.safe_addstr(bar_row, len(prompt), text[: bar_width - len(prompt)])
             cursor_col = min(len(prompt) + self._filter_bar_cursor, max(bar_width - 1, 0))
             with contextlib.suppress(curses_error):
                 self.stdscr.move(bar_row, cursor_col)
