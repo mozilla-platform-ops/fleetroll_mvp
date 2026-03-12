@@ -160,6 +160,9 @@ class MonitorDisplay:
         self._filter_bar_active: bool = False
         self._filter_bar_text: str = ""  # text being edited in the bar
         self._filter_bar_cursor: int = 0  # cursor position within _filter_bar_text
+        self._filter_history: list[str] = []  # committed queries, oldest→newest
+        self._filter_history_idx: int = -1  # -1=fresh input; ≥0=browsing history
+        self._filter_history_saved: str = ""  # text saved when browsing began
         self._status_msg: str = ""  # ephemeral status message
         self._status_msg_expiry: float = 0.0  # monotonic time when message expires
         self.colors = CursesColors(stdscr)
@@ -183,6 +186,8 @@ class MonitorDisplay:
         self._query = parse_query_safe(text)
         self._filter_bar_text = text
         self._filter_bar_cursor = len(text)
+        if text and (not self._filter_history or self._filter_history[-1] != text):
+            self._filter_history.append(text)
 
     def _handle_filter_bar_key(self, key: int) -> bool:
         """Handle keypresses while the filter bar is active. Returns True to exit monitor."""
@@ -193,6 +198,10 @@ class MonitorDisplay:
         pos = self._filter_bar_cursor
         enter_keys = (cm.KEY_ENTER, ord("\n"), ord("\r"))
         if key in enter_keys:
+            if text and (not self._filter_history or self._filter_history[-1] != text):
+                self._filter_history.append(text)
+            self._filter_history_idx = -1
+            self._filter_history_saved = ""
             self._query_text = text
             self._query = parse_query_safe(text)
             self._filter_bar_active = False
@@ -205,6 +214,8 @@ class MonitorDisplay:
                 self._status_msg_expiry = time.monotonic() + 2.0
             self.draw_screen()
         elif key == 27:  # Escape — discard edits
+            self._filter_history_idx = -1
+            self._filter_history_saved = ""
             self._filter_bar_active = False
             self._filter_bar_text = self._query_text
             self._filter_bar_cursor = len(self._query_text)
@@ -212,9 +223,32 @@ class MonitorDisplay:
                 cm.curs_set(0)
             self.draw_screen()
         elif key == 21:  # Ctrl+U — clear line
+            self._filter_history_idx = -1
+            self._filter_history_saved = ""
             self._filter_bar_text = ""
             self._filter_bar_cursor = 0
             self.draw_screen()
+        elif key == cm.KEY_UP:  # history: older entry
+            if self._filter_history:
+                if self._filter_history_idx == -1:
+                    self._filter_history_saved = text
+                    self._filter_history_idx = len(self._filter_history) - 1
+                elif self._filter_history_idx > 0:
+                    self._filter_history_idx -= 1
+                self._filter_bar_text = self._filter_history[self._filter_history_idx]
+                self._filter_bar_cursor = len(self._filter_bar_text)
+                self.draw_screen()
+        elif key == cm.KEY_DOWN:  # history: newer entry
+            if self._filter_history_idx != -1:
+                self._filter_history_idx += 1
+                if self._filter_history_idx >= len(self._filter_history):
+                    self._filter_history_idx = -1
+                    self._filter_bar_text = self._filter_history_saved
+                    self._filter_history_saved = ""
+                else:
+                    self._filter_bar_text = self._filter_history[self._filter_history_idx]
+                self._filter_bar_cursor = len(self._filter_bar_text)
+                self.draw_screen()
         elif key in (cm.KEY_LEFT,):
             self._filter_bar_cursor = max(0, pos - 1)
             self.draw_screen()
@@ -228,15 +262,21 @@ class MonitorDisplay:
             self._filter_bar_cursor = len(text)
             self.draw_screen()
         elif key in (cm.KEY_BACKSPACE, 127, 8):  # Backspace — delete before cursor
+            self._filter_history_idx = -1
+            self._filter_history_saved = ""
             if pos > 0:
                 self._filter_bar_text = text[: pos - 1] + text[pos:]
                 self._filter_bar_cursor = pos - 1
                 self.draw_screen()
         elif key == cm.KEY_DC:  # Delete — delete at cursor
+            self._filter_history_idx = -1
+            self._filter_history_saved = ""
             if pos < len(text):
                 self._filter_bar_text = text[:pos] + text[pos + 1 :]
                 self.draw_screen()
         elif 32 <= key < 127:  # printable ASCII — insert at cursor
+            self._filter_history_idx = -1
+            self._filter_history_saved = ""
             self._filter_bar_text = text[:pos] + chr(key) + text[pos:]
             self._filter_bar_cursor = pos + 1
             self.draw_screen()
@@ -320,6 +360,10 @@ class MonitorDisplay:
                 self.curses_mod.curs_set(1)
             self.draw_screen()
         elif key == ord("\\"):
+            if self._query_text and (
+                not self._filter_history or self._filter_history[-1] != self._query_text
+            ):
+                self._filter_history.append(self._query_text)
             self._query_text = ""
             self._query = Query()
             self._filter_bar_text = ""
