@@ -37,7 +37,7 @@ class TestMonitorLayout:
     def test_column_headers_present(self, tmux_session: TmuxSession) -> None:
         """Key column labels appear in the rendered header."""
         screen = tmux_session.capture()
-        for col in ("OS", "ROLE", "OVR_SHA"):
+        for col in ("OS", "ROLE", "OVR_BCH"):
             assert col in screen, f"Column '{col}' not found in screen"
 
     def test_host_rows_rendered(self, tmux_session: TmuxSession) -> None:

@@ -52,7 +52,7 @@ def test_render_row_cells_alignment() -> None:
         "uptime": "UPTIME",
         "role": "ROLE",
         "os": "OS",
-        "sha": "OVR_SHA",
+        "sha": "OVR_BCH",
         "vlt_sha": "VLT_SHA",
         "tc_quar": "TC_QUAR",
         "tc_act": "TC_ACT",
@@ -99,7 +99,7 @@ def test_build_row_values_sha_format() -> None:
         },
     }
     values = build_row_values("host1", record, last_ok=record)
-    # OVR_SHA should not contain humanhash
+    # OVR_BCH should not contain humanhash
     assert values["sha"] == sha[:8]
     # VLT_SHA should still contain humanhash
     assert values["vlt_sha"].startswith(vlt[:8])
