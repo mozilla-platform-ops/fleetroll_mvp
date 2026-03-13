@@ -91,12 +91,45 @@ def set_override_for_host(
 def format_set_line(result: dict[str, Any]) -> str:
     """Format a single-line status for batch set results."""
     host = result.get("host", "?")
+    if result.get("no_change"):
+        return f"NO_CHANGE {host} override already current"
     if result.get("ok"):
         return f"OK {host} override set"
     error = result.get("error") or result.get("stderr") or "unknown_error"
     rc = result.get("ssh_rc")
     rc_str = f" rc={rc}" if rc is not None else ""
     return f"FAIL {host}{rc_str} {error}"
+
+
+def _build_skip_result(
+    host: str,
+    *,
+    actor: str,
+    content_hash: str,
+    source: str,
+    args: Any,
+    backup_suffix: str,
+) -> dict[str, Any]:
+    """Build a result record for a host where SHA already matches (no change needed)."""
+    return {
+        "ts": utc_now_iso(),
+        "actor": actor,
+        "action": "host.set_override",
+        "host": host,
+        "ok": True,
+        "no_change": True,
+        "ssh_rc": None,
+        "parameters": {
+            "source": source,
+            "sha256": content_hash,
+            "mode": args.mode,
+            "owner": args.owner,
+            "group": args.group,
+            "backup": (not args.no_backup),
+            "backup_suffix": backup_suffix,
+            "reason": args.reason,
+        },
+    }
 
 
 def validate_override_syntax(data: bytes) -> None:
@@ -339,6 +372,37 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
         return
 
     results: list[dict[str, Any]] = []
+
+    # Skip hosts that already have the correct override SHA (unless --force)
+    if not args.force:
+        try:
+            from ..db import get_connection, get_db_path, get_latest_host_observations
+
+            db_conn = get_connection(get_db_path())
+            latest, _ = get_latest_host_observations(db_conn, hosts)
+            db_conn.close()
+            hosts_to_set = []
+            for host in hosts:
+                observed = latest.get(host, {}).get("observed", {})
+                if observed.get("override_sha256", "") == content_hash:
+                    results.append(
+                        _build_skip_result(
+                            host,
+                            actor=actor,
+                            content_hash=content_hash,
+                            source=source,
+                            args=args,
+                            backup_suffix=backup_suffix,
+                        )
+                    )
+                else:
+                    hosts_to_set.append(host)
+            hosts = hosts_to_set
+        except Exception as e:
+            click.echo(
+                f"Warning: could not query host state DB, skipping optimization: {e}", err=True
+            )
+
     log_lock = threading.Lock()
     show_progress = not args.json
     start_time = time.monotonic()
@@ -409,12 +473,12 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
             print(format_set_line(result))
         total = len(results)
         failed = sum(1 for r in results if not r.get("ok"))
+        no_change = sum(1 for r in results if r.get("no_change"))
         successful = total - failed
         duration_s = time.monotonic() - start_time
         print(
-            "\nSummary: total="
-            f"{total} successful={successful} failed={failed} "
-            f"duration={duration_s:.1f}s"
+            f"\nSummary: total={total} successful={successful} "
+            f"no_change={no_change} failed={failed} duration={duration_s:.1f}s"
         )
         print(f"Audit log: {audit_log}")
 

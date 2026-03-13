@@ -70,6 +70,7 @@ class HostSetOverrideArgs:
     no_backup: bool
     reason: str | None
     confirm: bool
+    force: bool
 
 
 @dataclass
@@ -91,6 +92,7 @@ class HostSetVaultArgs:
     no_backup: bool
     reason: str | None
     confirm: bool
+    force: bool
 
 
 @dataclass

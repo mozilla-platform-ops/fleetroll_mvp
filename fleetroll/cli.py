@@ -348,6 +348,11 @@ def debug_host_script(
     is_flag=True,
     help="Apply the changes. Without this flag, a summary is printed and the command exits.",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Push to all hosts even if state data shows the correct SHA is already present.",
+)
 def host_set_override(
     host: str,
     ssh_option: tuple[str, ...],
@@ -364,6 +369,7 @@ def host_set_override(
     no_backup: bool,
     reason: str | None,
     confirm: bool,
+    force: bool,
 ):
     """Set the override file on a host (atomic write).
 
@@ -385,6 +391,7 @@ def host_set_override(
         no_backup=no_backup,
         reason=reason,
         confirm=confirm,
+        force=force,
     )
     cmd_host_set(args)
 
@@ -442,6 +449,11 @@ def host_set_override(
     is_flag=True,
     help="Apply the changes. Without this flag, a summary is printed and the command exits.",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Push to all hosts even if state data shows the correct SHA is already present.",
+)
 def host_set_vault(
     host: str,
     ssh_option: tuple[str, ...],
@@ -458,6 +470,7 @@ def host_set_vault(
     no_backup: bool,
     reason: str | None,
     confirm: bool,
+    force: bool,
 ):
     """Set the vault.yaml file on a host (atomic write)."""
     args = HostSetVaultArgs(
@@ -476,6 +489,7 @@ def host_set_vault(
         no_backup=no_backup,
         reason=reason,
         confirm=confirm,
+        force=force,
     )
     cmd_host_set_vault(args)
 
