@@ -127,8 +127,23 @@ class MonitorDisplay:
     ) -> None:
         self.stdscr = stdscr
         self.hosts = hosts
-        # Show just the filename if it's a path, to save space in the status line
-        self.host_source = Path(host_source).name if "/" in host_source else host_source
+        # Show a meaningful label in the status line:
+        # - paths under configs/host-lists get a relative label (e.g. "linux/all.list")
+        # - other paths show just the basename
+        if "/" in host_source:
+            p = Path(host_source)
+            parts = p.parts
+            try:
+                idx = next(
+                    i
+                    for i in range(len(parts) - 1)
+                    if parts[i] == "configs" and parts[i + 1] == "host-lists"
+                )
+                self.host_source = str(Path(*parts[idx + 2 :]))
+            except StopIteration:
+                self.host_source = p.name
+        else:
+            self.host_source = host_source
         self.latest = latest
         self.latest_ok = latest_ok
         self.tc_data = tc_data
