@@ -27,9 +27,11 @@ KNOWN_COLUMNS = frozenset(
         "pp_match",
         "tc_act",
         "tc_j_sf",
+        "tc_t_dur",  # alias for "tc_j_sf" (display label "TC_T_DUR")
         "tc_quar",
         "data",
         "healthy",
+        "health",  # alias for "healthy"
         "note",
     }
 )
@@ -38,6 +40,8 @@ KNOWN_COLUMNS = frozenset(
 COLUMN_ALIASES: dict[str, str] = {
     "ovr_bch": "sha",  # display label "OVR_BCH" → internal column "sha"
     "ovr_sha": "sha",  # legacy alias
+    "tc_t_dur": "tc_j_sf",  # display label "TC_T_DUR" → internal column "tc_j_sf"
+    "health": "healthy",  # shorthand
 }
 
 # Operator tokens, longest-match first to avoid partial matches
