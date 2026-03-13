@@ -244,10 +244,13 @@ class RowRenderer:
                 attr = 0
             if col_name == "role" and cell.startswith("# "):
                 marker_attr = role_colors.get(values.get("role", ""), 0)
-                self.safe_addstr(row, col, "#", marker_attr)
-                col += 1
-                self.safe_addstr(row, col, cell[1:], 0)
-                col += len(cell) - 1
+                role_text = cell[2:].rstrip()
+                padding = " " * (len(cell) - len(role_text))
+                self.safe_addstr(row, col, role_text, marker_attr)
+                col += len(role_text)
+                if padding:
+                    self.safe_addstr(row, col, padding, 0)
+                    col += len(padding)
             elif col_name == "sha":
                 # OVR_BCH: Color branch name (before " ("), sha in parens stays plain.
                 # Falls back to coloring 8-char sha prefix when no branch info.
