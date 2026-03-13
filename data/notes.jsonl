@@ -16,3 +16,5 @@
 {"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-279.test.releng.mdc1.mozilla.com", "note": "lars, used for gha runners", "ts": "2026-03-12T23:16:10+00:00"}
 {"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-280.test.releng.mdc1.mozilla.com", "note": "lars, used for gha runners", "ts": "2026-03-12T23:16:17+00:00"}
 {"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-097.test.releng.mdc1.mozilla.com", "note": "was failing lots of jobs/quarantined", "ts": "2026-03-13T00:59:03+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-272.test.releng.mdc1.mozilla.com", "note": "jmoss loaner", "ts": "2026-03-13T04:27:22+00:00"}
+{"action": "host.note_add", "actor": "aerickson", "host": "t-linux64-ms-271.test.releng.mdc1.mozilla.com", "note": "jmoss loaner", "ts": "2026-03-13T04:27:42+00:00"}
