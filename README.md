@@ -168,8 +168,12 @@ uv run fleetroll host-monitor configs/host-lists/1804.list --once
 uv run fleetroll host-monitor configs/host-lists/1804.list --once --json
 
 # extract unique roles across all hosts
-uv run fleetroll host-monitor configs/host-lists/1804.list --once --json \
+uv run fleetroll host-monitor configs/host-lists/all.list --once --json \
   | jq -r '[.[].observed.role] | map(select(.)) | unique[]'
+
+# extract unique operating systems across all hosts
+uv run fleetroll host-monitor configs/host-lists/all.list --once --json \
+  | jq -r '.[].observed.os_type' | sort | uniq
 ```
 
 #### Live-Updating Curses Interface
