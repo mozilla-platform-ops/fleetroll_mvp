@@ -96,13 +96,14 @@ STATE_INDICATOR_BG = {"black", "white"}
 # Format: (fg_color_name, 256_color_code, bg_color_name, description)
 EXTENDED_FG_BG_COMBOS = [
     # orange (208)
-    ("orange", 208, "cyan", "orange/cyan"),
-    ("orange", 208, "blue", "orange/blue"),
+    ("orange", 208, "white", "orange/white"),
+    ("orange", 208, "magenta", "orange/magenta"),
     ("orange", 208, "black", "orange/black"),
     # purple (129)
     ("purple", 129, "cyan", "purple/cyan"),
     ("purple", 129, "yellow", "purple/yellow"),
     ("purple", 129, "green", "purple/green"),
+    ("purple", 129, "white", "purple/white"),
     # pink (205)
     ("pink", 205, "cyan", "pink/cyan"),
     ("pink", 205, "blue", "pink/blue"),
@@ -112,9 +113,8 @@ EXTENDED_FG_BG_COMBOS = [
     ("teal", 33, "black", "teal/black"),
     ("teal", 33, "yellow", "teal/yellow"),
     # maroon (160)
-    ("maroon", 160, "cyan", "maroon/cyan"),
+    ("maroon", 160, "white", "maroon/white"),
     ("maroon", 160, "yellow", "maroon/yellow"),
-    ("maroon", 160, "green", "maroon/green"),
     # gold (220)
     ("gold", 220, "black", "gold/black"),
     ("gold", 220, "magenta", "gold/magenta"),
@@ -124,8 +124,8 @@ EXTENDED_FG_BG_COMBOS = [
     ("forest-green", 28, "yellow", "forest-green/yellow"),
     ("forest-green", 28, "white", "forest-green/white"),
     # orange-red (214)
-    ("orange-red", 214, "cyan", "orange-red/cyan"),
-    ("orange-red", 214, "white", "orange-red/white"),
+    ("orange-red", 214, "green", "orange-red/green"),
+    ("orange-red", 214, "magenta", "orange-red/magenta"),
     ("orange-red", 214, "black", "orange-red/black"),
 ]
 
