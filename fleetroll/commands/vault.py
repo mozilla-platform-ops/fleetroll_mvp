@@ -469,10 +469,10 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
         total = len(results)
         failed = sum(1 for r in results if not r.get("ok"))
         no_change = sum(1 for r in results if r.get("no_change"))
-        successful = total - failed
+        changed = total - failed - no_change
         duration_s = time.monotonic() - start_time
         print(
-            f"\nSummary: total={total} successful={successful} "
+            f"\nSummary: total={total} changed={changed} "
             f"no_change={no_change} failed={failed} duration={duration_s:.1f}s"
         )
         print(f"Audit log: {audit_log}")
