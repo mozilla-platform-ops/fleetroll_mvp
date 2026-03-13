@@ -161,6 +161,17 @@ Fleetroll uses a hybrid storage architecture optimized for different data access
 uv run fleetroll host-monitor configs/host-lists/1804.list --once
 ```
 
+##### JSON output
+
+```bash
+# emit one JSON object per host instead of a table
+uv run fleetroll host-monitor configs/host-lists/1804.list --once --json
+
+# extract unique roles across all hosts
+uv run fleetroll host-monitor configs/host-lists/1804.list --once --json \
+  | jq -r '[.[].observed.role] | map(select(.)) | unique[]'
+```
+
 #### Live-Updating Curses Interface
 ```bash
 uv run fleetroll host-monitor configs/host-lists/1804.list
