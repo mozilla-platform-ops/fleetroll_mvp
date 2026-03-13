@@ -62,14 +62,14 @@ FG_BG_COMBOS = [
     ("cyan", "black", "cyan/black"),
     ("green", "black", "green/black"),
     ("yellow", "black", "yellow/black"),
-    ("white", "magenta", "white/magenta"),
-    ("black", "white", "black/white"),
+    ("red", "black", "red/black"),
+    ("magenta", "black", "magenta/black"),
     # ("blue", "yellow", "blue/yellow"),  # c28 UNREADABLE
     ("red", "cyan", "red/cyan"),
-    ("magenta", "yellow", "magenta/yellow"),
+    ("cyan", "magenta", "cyan/magenta"),
     # ("blue", "white", "blue/white"),  # c31 UNREADABLE
     # New combos with red/white backgrounds
-    ("black", "red", "black/red"),
+    ("red", "green", "red/green"),
     ("green", "red", "green/red"),
     ("cyan", "red", "cyan/red"),
     ("magenta", "white", "magenta/white"),
@@ -78,7 +78,80 @@ FG_BG_COMBOS = [
     ("blue", "red", "blue/red"),
     # ("blue", "cyan", "blue/cyan"),  # c34 UNREADABLE
     ("yellow", "red", "yellow/red"),
+    # New fg/bg combinations
+    ("black", "magenta", "black/magenta"),
+    ("white", "black", "white/black"),
+    ("blue", "magenta", "blue/magenta"),
+    ("green", "magenta", "green/magenta"),
+    ("magenta", "green", "magenta/green"),
+    ("blue", "black", "blue/black"),
 ]
+
+# State-indicator fg/bg sets — combos using these are excluded from categorical palettes
+# to avoid confusion with threshold-colored columns (uptime, last_ok, etc.)
+STATE_INDICATOR_FG = {"red", "yellow", "green"}
+STATE_INDICATOR_BG = {"black", "white"}
+
+# Extended fg/bg combos: 256-color foreground on basic background (pairs 52+)
+# Format: (fg_color_name, 256_color_code, bg_color_name, description)
+EXTENDED_FG_BG_COMBOS = [
+    # orange (208)
+    ("orange", 208, "white", "orange/white"),
+    ("orange", 208, "magenta", "orange/magenta"),
+    ("orange", 208, "black", "orange/black"),
+    # purple (129)
+    ("purple", 129, "cyan", "purple/cyan"),
+    ("purple", 129, "yellow", "purple/yellow"),
+    ("purple", 129, "green", "purple/green"),
+    ("purple", 129, "white", "purple/white"),
+    # pink (205)
+    ("pink", 205, "cyan", "pink/cyan"),
+    ("pink", 205, "blue", "pink/blue"),
+    ("pink", 205, "black", "pink/black"),
+    # teal (33)
+    ("teal", 33, "white", "teal/white"),
+    ("teal", 33, "black", "teal/black"),
+    ("teal", 33, "yellow", "teal/yellow"),
+    # maroon (160)
+    ("maroon", 160, "white", "maroon/white"),
+    ("maroon", 160, "yellow", "maroon/yellow"),
+    # gold (220)
+    ("gold", 220, "black", "gold/black"),
+    ("gold", 220, "magenta", "gold/magenta"),
+    ("gold", 220, "red", "gold/red"),
+    # forest-green (28)
+    ("forest-green", 28, "cyan", "forest-green/cyan"),
+    ("forest-green", 28, "yellow", "forest-green/yellow"),
+    ("forest-green", 28, "white", "forest-green/white"),
+    # orange-red (214)
+    ("orange-red", 214, "green", "orange-red/green"),
+    ("orange-red", 214, "magenta", "orange-red/magenta"),
+    ("orange-red", 214, "black", "orange-red/black"),
+]
+
+
+def get_categorical_combos(
+    *,
+    include_extended: bool = True,
+) -> list[tuple[int, str, str, str]]:
+    """Return FG_BG combo indices suitable for categorical columns.
+
+    Excludes combos where fg is a state-indicator color (red/yellow/green)
+    and bg is black or white (would mimic plain state-indicator appearance).
+
+    Returns list of (pair_number, fg, bg, desc) tuples.
+    Pair numbers: 27+ for basic FG_BG_COMBOS, 52+ for extended.
+    """
+    result: list[tuple[int, str, str, str]] = []
+    for i, (fg, bg, desc) in enumerate(FG_BG_COMBOS):
+        if fg in STATE_INDICATOR_FG and bg in STATE_INDICATOR_BG:
+            continue
+        result.append((27 + i, fg, bg, desc))
+    if include_extended:
+        for i, (fg_name, _, bg, desc) in enumerate(EXTENDED_FG_BG_COMBOS):
+            result.append((52 + i, fg_name, bg, desc))
+    return result
+
 
 # ANSI background color codes
 ANSI_BG_COLORS = {

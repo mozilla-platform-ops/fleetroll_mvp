@@ -7,7 +7,13 @@ from curses import error as curses_error
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .colors import EXTENDED_COLORS, FG_BG_COMBOS, build_color_mapping
+from .colors import (
+    EXTENDED_COLORS,
+    EXTENDED_FG_BG_COMBOS,
+    FG_BG_COMBOS,
+    build_color_mapping,
+    get_categorical_combos,
+)
 from .data import build_row_values, strip_fqdn
 
 if TYPE_CHECKING:
@@ -106,6 +112,12 @@ class CursesColors:
                         fg = curses_color_map[fg_name]
                         bg = curses_color_map[bg_name]
                         curses.init_pair(i, fg, bg)
+                # Extended fg/bg combos (pairs 52+) — 256-color fg on basic bg
+                if curses.COLORS >= 256:
+                    for i, (_, fg_code, bg_name, _) in enumerate(EXTENDED_FG_BG_COMBOS, start=52):
+                        if i < curses.COLOR_PAIRS:
+                            bg = curses_color_map[bg_name]
+                            curses.init_pair(i, fg_code, bg)
                 self.color_enabled = True
                 # Detect 256-color support (for future use)
                 if curses.COLORS >= 256:
@@ -218,14 +230,16 @@ class CursesColors:
         palette: list[int],
         base_attr: int = 0,
         seed: int = 0,
+        overflow: bool = True,
     ) -> dict[str, int]:
         """Build a color map for categorical values.
 
-        Uses two tiers (reversed colors removed to avoid terminal-dependent conflicts):
-        1. Basic colors from palette (14 colors)
+        When overflow=True (default), uses two tiers:
+        1. Basic colors from palette
         2. High-contrast fg/bg combinations (19 pairs starting at 27)
 
-        Total capacity: 33 unique colors (sufficient for up to 33 unique values).
+        When overflow=False, uses only the palette (which should already
+        contain all desired combos, e.g. from get_categorical_combos()).
 
         Adjacent seeds (0, 1, 2) are automatically spread out to maximize
         visual distinction between columns.
@@ -235,6 +249,7 @@ class CursesColors:
             palette: List of color_pair() values for basic colors
             base_attr: Base attribute to OR with all colors
             seed: Column index (0, 1, 2...) - automatically spread for distinction
+            overflow: If True, extend capacity with FG_BG_COMBOS overflow tier
 
         Returns:
             Dictionary mapping value to curses attribute
@@ -243,7 +258,7 @@ class CursesColors:
             return {}
 
         palette_size = len(palette)
-        total_capacity = palette_size + len(FG_BG_COMBOS)
+        total_capacity = palette_size + len(FG_BG_COMBOS) if overflow else palette_size
 
         # Use shared color mapping algorithm
         index_mapping = build_color_mapping(
@@ -323,48 +338,25 @@ class CursesColors:
             if role and role not in ("-", "?", "missing"):
                 role_values.add(role)
 
-        # Use 14-color palette: 7 standard + 8 extended (if available)
-        # No reversed colors to avoid terminal-dependent conflicts
-        # Total: 14 base + 19 fg/bg = 33 unique colors
-        sha_palette = [
-            # Standard 7 colors
-            self.curses_mod.color_pair(7),  # blue
-            self.curses_mod.color_pair(8),  # cyan
-            self.curses_mod.color_pair(9),  # green
-            self.curses_mod.color_pair(10),  # magenta
-            self.curses_mod.color_pair(11),  # yellow
-            self.curses_mod.color_pair(6),  # red
-            self.curses_mod.color_pair(15),  # white
-        ]
-        # Add extended colors if 256-color terminal
-        if self.extended_colors:
-            sha_palette.extend(
-                [
-                    self.curses_mod.color_pair(19),  # bright-orange
-                    self.curses_mod.color_pair(20),  # bright-purple
-                    self.curses_mod.color_pair(21),  # hot-pink
-                    self.curses_mod.color_pair(22),  # teal
-                    self.curses_mod.color_pair(23),  # maroon
-                    self.curses_mod.color_pair(24),  # gold
-                    self.curses_mod.color_pair(25),  # forest-green
-                    self.curses_mod.color_pair(26),  # orange-red
-                ]
-            )
-        role_palette = [
-            self.curses_mod.color_pair(12),  # red
-            self.curses_mod.color_pair(13),  # yellow
-            self.curses_mod.color_pair(14),  # magenta
-            self.curses_mod.color_pair(7),  # blue
-            self.curses_mod.color_pair(8),  # cyan
-            self.curses_mod.color_pair(9),  # green
-            self.curses_mod.color_pair(10),  # magenta
-            self.curses_mod.color_pair(11),  # yellow
+        # Build categorical palette from explicit fg/bg combos only (21 basic + 24 extended = 45).
+        # Plain fg colors are excluded to avoid confusion with state-indicator columns.
+        cat_combos = get_categorical_combos(include_extended=self.extended_colors)
+        categorical_palette = [
+            self.curses_mod.color_pair(pair_num) for pair_num, _, _, _ in cat_combos
         ]
 
-        sha_colors = self.build_color_map(sha_values, palette=sha_palette, seed=0)
-        vlt_sha_colors = self.build_color_map(vlt_sha_values, palette=sha_palette, seed=1)
+        sha_colors = self.build_color_map(
+            sha_values, palette=categorical_palette, seed=0, overflow=False
+        )
+        vlt_sha_colors = self.build_color_map(
+            vlt_sha_values, palette=categorical_palette, seed=1, overflow=False
+        )
         role_colors = self.build_color_map(
-            role_values, palette=role_palette, base_attr=self.curses_mod.A_BOLD, seed=2
+            role_values,
+            palette=categorical_palette,
+            base_attr=self.curses_mod.A_BOLD,
+            seed=2,
+            overflow=False,
         )
 
         return {
