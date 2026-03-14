@@ -251,6 +251,28 @@ PUPPET_BRANCH="main"
         # Should only have default repo
         assert result == {("mozilla-platform-ops", "ronin_puppet"): {"master"}}
 
+    def test_commented_out_puppet_repo_not_matched(self, tmp_path):
+        """Should use active PUPPET_REPO, not commented-out one."""
+        overrides_dir = tmp_path / "overrides"
+        overrides_dir.mkdir()
+
+        # Matches real override files where the default repo is commented out
+        # and the active line points to a fork
+        override_content = (
+            '# PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"\n'
+            'PUPPET_REPO="https://github.com/aerickson/ronin_puppet.git"\n'
+            'PUPPET_BRANCH="my-fork-branch"\n'
+        )
+        override_file = overrides_dir / "abc123"
+        override_file.write_text(override_content)
+
+        result = collect_repo_branches(overrides_dir)
+
+        assert ("aerickson", "ronin_puppet") in result
+        assert "my-fork-branch" in result[("aerickson", "ronin_puppet")]
+        # Branch should NOT be attributed to the commented-out repo
+        assert "my-fork-branch" not in result.get(("mozilla-platform-ops", "ronin_puppet"), set())
+
 
 class TestFetchBranchShas:
     """Tests for fetch_branch_shas function."""

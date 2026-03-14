@@ -97,6 +97,21 @@ def test_parse_override_file_not_exists():
     assert result is None
 
 
+def test_parse_override_file_commented_out_repo():
+    """Test that commented-out PUPPET_REPO lines are ignored."""
+    with TemporaryDirectory() as tmpdir:
+        override_file = Path(tmpdir) / "test_override"
+        override_file.write_text(
+            '# PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"\n'
+            'PUPPET_REPO="https://github.com/aerickson/ronin_puppet.git"\n'
+            'PUPPET_BRANCH="my-fork-branch"\n'
+        )
+        result = parse_override_file(override_file)
+        assert result is not None
+        assert result["user"] == "aerickson"
+        assert result["branch"] == "my-fork-branch"
+
+
 def test_find_vault_symlink_exists():
     """Test finding a vault symlink that exists."""
     with TemporaryDirectory() as tmpdir:

@@ -93,7 +93,7 @@ def collect_repo_branches(overrides_dir: Path) -> dict[tuple[str, str], set[str]
             except (OSError, UnicodeDecodeError):
                 continue
 
-            repo_match = re.search(r"PUPPET_REPO=['\"](.+?)['\"]", content)
+            repo_match = re.search(r"^PUPPET_REPO=['\"](.+?)['\"]", content, re.MULTILINE)
             if not repo_match:
                 continue
 

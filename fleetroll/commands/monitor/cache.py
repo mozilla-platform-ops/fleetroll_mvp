@@ -23,8 +23,8 @@ def parse_override_file(path: Path) -> dict[str, str | None] | None:
         return None
 
     # Extract PUPPET_REPO and PUPPET_BRANCH
-    repo_match = re.search(r"PUPPET_REPO=['\"](.+?)['\"]", content)
-    branch_match = re.search(r"PUPPET_BRANCH=['\"](.+?)['\"]", content)
+    repo_match = re.search(r"^PUPPET_REPO=['\"](.+?)['\"]", content, re.MULTILINE)
+    branch_match = re.search(r"^PUPPET_BRANCH=['\"](.+?)['\"]", content, re.MULTILINE)
 
     if not branch_match:
         return None
