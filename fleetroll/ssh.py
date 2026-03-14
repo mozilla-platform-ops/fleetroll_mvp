@@ -394,6 +394,7 @@ def remote_set_script(
     group: str,
     backup: bool,
     backup_suffix: str,
+    force: bool = False,
 ) -> str:
     """Generate remote shell script for setting override file."""
     m = shlex.quote(mode)
@@ -401,6 +402,18 @@ def remote_set_script(
     grp = shlex.quote(group)
     b = "true" if backup else "false"
     suf = shlex.quote(backup_suffix)
+    exists_check = (
+        ""
+        if force
+        else """
+# Fail if override already exists (unless --force)
+if sudo -n test -e "$op" 2>/dev/null; then
+  echo "OVERRIDE_EXISTS=1"
+  echo "ERROR: Override file already exists at $op. Use --force to overwrite or host-unset-override to remove it first."
+  exit 2
+fi
+"""
+    )
     # stdin is the desired file contents
     # Steps:
     # 1) mktemp in same dir (atomic mv)
@@ -421,6 +434,7 @@ if [ "$os_type" = "Darwin" ]; then
 else
   op="/etc/puppet/ronin_settings"
 fi
+{exists_check}
 
 # Resolve owner and group (auto group = wheel on Darwin, root on Linux)
 own={own}

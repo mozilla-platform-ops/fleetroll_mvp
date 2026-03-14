@@ -332,6 +332,120 @@ class TestCmdHostSet:
         assert any("DRY RUN" in str(line) for line in captured)
 
 
+class TestOverrideExistsCheck:
+    """Tests for the override-already-exists guard."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_validation(self, mocker):
+        mocker.patch("fleetroll.commands.set.validate_override_syntax")
+
+    def test_fails_when_override_exists_single_host(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Raises UserError when single host already has override in DB."""
+        content_file = tmp_dir / "content.txt"
+        content_file.write_text("test content")
+        mock_args_set.from_file = str(content_file)
+        mock_args_set.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_set.force = False
+
+        mocker.patch(
+            "fleetroll.commands.set._check_override_exists",
+            return_value=["test.example.com"],
+        )
+        mocker.patch("fleetroll.commands.set.run_ssh", side_effect=AssertionError("should not SSH"))
+
+        with pytest.raises(UserError, match="Override already exists"):
+            cmd_host_set(mock_args_set)
+
+    def test_fails_when_override_exists_batch(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Raises UserError when batch hosts already have override in DB."""
+        content_file = tmp_dir / "content.txt"
+        content_file.write_text("test content")
+        hosts_file = tmp_dir / "hosts.txt"
+        hosts_file.write_text("host1.example.com\nhost2.example.com\n")
+        mock_args_set.host = str(hosts_file)
+        mock_args_set.from_file = str(content_file)
+        mock_args_set.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_set.force = False
+
+        mocker.patch(
+            "fleetroll.commands.set._check_override_exists",
+            return_value=["host1.example.com"],
+        )
+        mocker.patch("fleetroll.commands.set.run_ssh", side_effect=AssertionError("should not SSH"))
+
+        with pytest.raises(UserError, match="Override already exists"):
+            cmd_host_set(mock_args_set)
+
+    def test_force_bypasses_exists_check(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """--force allows overwriting an existing override."""
+        content_file = tmp_dir / "content.txt"
+        content_file.write_text("test content")
+        mock_args_set.from_file = str(content_file)
+        mock_args_set.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_set.json = True
+        mock_args_set.force = True
+
+        mock_check = mocker.patch("fleetroll.commands.set._check_override_exists")
+        mock_run_ssh = mocker.patch("fleetroll.commands.set.run_ssh")
+        mock_run_ssh.return_value = (0, "", "")
+        mocker.patch("builtins.print")
+
+        cmd_host_set(mock_args_set)
+
+        mock_check.assert_not_called()
+        mock_run_ssh.assert_called_once()
+
+    def test_no_db_data_allows_set(self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path):
+        """No DB data (empty override_sha256) allows set to proceed."""
+        content_file = tmp_dir / "content.txt"
+        content_file.write_text("test content")
+        mock_args_set.from_file = str(content_file)
+        mock_args_set.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_set.json = True
+        mock_args_set.force = False
+
+        mocker.patch(
+            "fleetroll.commands.set._check_override_exists",
+            return_value=[],
+        )
+        mock_run_ssh = mocker.patch("fleetroll.commands.set.run_ssh")
+        mock_run_ssh.return_value = (0, "", "")
+        mocker.patch("builtins.print")
+
+        cmd_host_set(mock_args_set)
+
+        mock_run_ssh.assert_called_once()
+
+    def test_db_failure_warns_and_continues(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """DB exception during exists check warns and continues (permissive)."""
+        content_file = tmp_dir / "content.txt"
+        content_file.write_text("test content")
+        mock_args_set.from_file = str(content_file)
+        mock_args_set.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_set.json = True
+        mock_args_set.force = False
+
+        mocker.patch(
+            "fleetroll.commands.set._check_override_exists",
+            side_effect=Exception("DB unavailable"),
+        )
+        mock_run_ssh = mocker.patch("fleetroll.commands.set.run_ssh")
+        mock_run_ssh.return_value = (0, "", "")
+        mocker.patch("builtins.print")
+
+        cmd_host_set(mock_args_set)
+
+        mock_run_ssh.assert_called_once()
+
+
 class TestValidateOverrideSemantics:
     """Tests for semantic validation of override content."""
 

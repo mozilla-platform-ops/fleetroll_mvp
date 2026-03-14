@@ -76,6 +76,7 @@ def mock_args_set(tmp_audit_log: Path) -> HostSetOverrideArgs:
         no_backup=False,
         reason="test reason",
         confirm=True,
+        ignore_state=False,
         force=False,
     )
 
@@ -116,6 +117,7 @@ def mock_args_vault(tmp_audit_log: Path) -> HostSetVaultArgs:
         no_backup=False,
         reason="test reason",
         confirm=True,
+        ignore_state=False,
         force=False,
     )
 

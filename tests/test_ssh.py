@@ -263,6 +263,48 @@ class TestRemoteSetScript:
         assert trap_pos < mktemp_pos, "trap must be set before mktemp"
 
 
+class TestRemoteSetScriptForceFlag:
+    """Tests for remote_set_script force parameter (override-exists guard)."""
+
+    def test_force_false_checks_file_exists(self):
+        """When force=False, script contains the exists guard."""
+        script = remote_set_script(
+            mode="0644",
+            owner="root",
+            group="root",
+            backup=False,
+            backup_suffix="suffix",
+            force=False,
+        )
+        assert "OVERRIDE_EXISTS=1" in script
+        assert "already exists" in script
+        assert "exit 2" in script
+
+    def test_force_true_skips_exists_check(self):
+        """When force=True, script does NOT contain the exists guard."""
+        script = remote_set_script(
+            mode="0644",
+            owner="root",
+            group="root",
+            backup=False,
+            backup_suffix="suffix",
+            force=True,
+        )
+        assert "OVERRIDE_EXISTS=1" not in script
+        assert "exit 2" not in script
+
+    def test_default_force_is_false(self):
+        """Default behavior (no force param) includes exists guard."""
+        script = remote_set_script(
+            mode="0644",
+            owner="root",
+            group="root",
+            backup=False,
+            backup_suffix="suffix",
+        )
+        assert "OVERRIDE_EXISTS=1" in script
+
+
 class TestRemoteUnsetScript:
     """Tests for remote_unset_script function."""
 

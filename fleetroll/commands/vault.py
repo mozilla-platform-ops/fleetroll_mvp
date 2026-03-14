@@ -365,8 +365,8 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
 
     results: list[dict[str, Any]] = []
 
-    # Skip hosts that already have the correct vault SHA (unless --force)
-    if not args.force:
+    # Skip hosts that already have the correct vault SHA (unless --ignore-state)
+    if not args.ignore_state:
         try:
             from ..db import get_connection, get_db_path, get_latest_host_observations
 

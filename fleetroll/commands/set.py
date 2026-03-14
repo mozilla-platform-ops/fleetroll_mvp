@@ -95,8 +95,10 @@ def format_set_line(result: dict[str, Any]) -> str:
         return f"NO_CHANGE {host} override already current"
     if result.get("ok"):
         return f"OK {host} override set"
-    error = result.get("error") or result.get("stderr") or "unknown_error"
     rc = result.get("ssh_rc")
+    if rc == 2:
+        return f"BLOCKED {host} — override already exists (use --force)"
+    error = result.get("error") or result.get("stderr") or "unknown_error"
     rc_str = f" rc={rc}" if rc is not None else ""
     return f"FAIL {host}{rc_str} {error}"
 
@@ -130,6 +132,16 @@ def _build_skip_result(
             "reason": args.reason,
         },
     }
+
+
+def _check_override_exists(hosts: list[str]) -> list[str]:
+    """Return hosts that already have an override file, per the local DB."""
+    from ..db import get_connection, get_db_path, get_latest_host_observations
+
+    db_conn = get_connection(get_db_path())
+    latest, _ = get_latest_host_observations(db_conn, hosts)
+    db_conn.close()
+    return [h for h in hosts if latest.get(h, {}).get("observed", {}).get("override_sha256", "")]
 
 
 def validate_override_syntax(data: bytes) -> None:
@@ -315,6 +327,23 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                     sys.exit(1)
                 raise
 
+        # Dry-run: warn about hosts that already have an override (when --force not set)
+        if not args.force and not args.json:
+            try:
+                existing = _check_override_exists(hosts)
+                if existing:
+                    print(
+                        click.style(
+                            f"\nWARNING: {len(existing)} host(s) already have an override. "
+                            "Use --force to overwrite.",
+                            fg="yellow",
+                        )
+                    )
+                    for h in existing:
+                        print(f"  {h}")
+            except Exception:  # noqa: S110
+                pass
+
         # Only show confirmation message if validation passed (or was skipped)
         if not args.json:
             print(click.style("\nRun again with --confirm to apply changes.", fg="yellow"))
@@ -325,6 +354,21 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
         validate_override_syntax(data)
         validate_override_semantics(data)
 
+    # Client-side pre-flight: block if override exists (unless --force)
+    if not args.force:
+        try:
+            existing = _check_override_exists(hosts)
+            if existing:
+                host_list = "\n  ".join(existing)
+                raise UserError(
+                    f"Override already exists on {len(existing)} host(s):\n  {host_list}\n"
+                    "Use --force to overwrite, or host-unset-override to remove it first."
+                )
+        except UserError:
+            raise
+        except Exception as e:
+            click.echo(f"Warning: could not query host state DB for exists check: {e}", err=True)
+
     backup_suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)
 
     remote_cmd = remote_set_script(
@@ -333,6 +377,7 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
         group=args.group,
         backup=not args.no_backup,
         backup_suffix=backup_suffix,
+        force=args.force,
     )
 
     if not is_batch:
@@ -355,6 +400,13 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                 raise CommandFailureError
             return
 
+        if rc == 2:
+            print(
+                f"[{args.host}] BLOCKED — override already exists. Use --force to overwrite.",
+                file=sys.stderr,
+            )
+            raise CommandFailureError
+
         if rc != 0:
             print(
                 f"[{args.host}] set override FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
@@ -373,8 +425,8 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
 
     results: list[dict[str, Any]] = []
 
-    # Skip hosts that already have the correct override SHA (unless --force)
-    if not args.force:
+    # Skip hosts that already have the correct override SHA (unless --ignore-state)
+    if not args.ignore_state:
         try:
             from ..db import get_connection, get_db_path, get_latest_host_observations
 
