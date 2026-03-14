@@ -95,9 +95,7 @@ def os_filter_label(os_filter: str | None) -> str | None:
     return None
 
 
-COLUMN_GUIDE_TEXT = """\
-Column Guide (press any key to close)
-
+HELP_KEYBINDINGS = """\
 Keybindings:
   ↑/↓ or j/k  Scroll rows (page by page)
   ←/→ or h/l  Scroll columns (when they don't fit)
@@ -107,8 +105,9 @@ Keybindings:
   O           Cycle OS filter (all → Linux → macOS → all)
   /           Open filter bar (query syntax: col>val sort:col:desc)
   \\          Clear active /query filter
-  q           Quit monitor
+  q           Quit monitor"""
 
+HELP_COLUMNS = """\
 Columns:
 HOST      Hostname (FQDN suffix stripped if common)
 ROLE      Puppet role assigned to host
@@ -133,5 +132,15 @@ DATA      Data freshness: audit_age/tc_age
 HEALTHY   Overall host health status
           Y = PP_MATCH and TC worker active (< 1 hour)
           N = not matched or TC worker stale
-          - = no puppet/GitHub data available
+          - = no puppet/GitHub data available"""
+
+COLUMN_GUIDE_TEXT = (
+    """\
+Column Guide (press any key to close)
+
 """
+    + HELP_KEYBINDINGS
+    + "\n\n"
+    + HELP_COLUMNS
+    + "\n"
+)
