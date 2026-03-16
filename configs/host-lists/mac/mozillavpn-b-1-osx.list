@@ -1,0 +1,13 @@
+# #############################################################
+# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.
+# Generated: 2026-03-16 21:02 UTC
+# Source:    mozilla-platform-ops/ronin_puppet inventory.d/macmini-r8.yaml
+# Regenerate: uv run tools/generate_mac_host_list.py
+# #############################################################
+
+# inventory: macmini-r8.yaml
+# puppet_role: mozillavpn_b_1_osx
+
+macmini-r8-362.test.releng.mdc1.mozilla.com
+macmini-r8-373.test.releng.mdc1.mozilla.com
+macmini-r8-374.test.releng.mdc1.mozilla.com

@@ -8,7 +8,7 @@ cd "$SCRIPT_DIR"
 
 ./generate_windows_host_list.py
 
-# TODO: generate mac list (read ronin-puppet mac inventory files)
+./generate_mac_host_list.py
 
 # TODO: how to generate for linux? gdocs api? gdocs export that's processed locally?
 

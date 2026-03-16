@@ -1,0 +1,16 @@
+# #############################################################
+# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.
+# Generated: 2026-03-16 21:02 UTC
+# Source:    mozilla-platform-ops/ronin_puppet inventory.d/macmini-r8.yaml
+# Regenerate: uv run tools/generate_mac_host_list.py
+# #############################################################
+
+# inventory: macmini-r8.yaml
+# puppet_role: gecko_t_osx_1400_r8_staging
+
+macmini-r8-109.test.releng.mdc1.mozilla.com
+macmini-r8-154.test.releng.mdc1.mozilla.com
+macmini-r8-156.test.releng.mdc1.mozilla.com
+macmini-r8-246.test.releng.mdc1.mozilla.com
+macmini-r8-361.test.releng.mdc1.mozilla.com
+macmini-r8-375.test.releng.mdc1.mozilla.com

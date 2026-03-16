@@ -1,0 +1,12 @@
+# #############################################################
+# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.
+# Generated: 2026-03-16 21:02 UTC
+# Source:    mozilla-platform-ops/ronin_puppet inventory.d/macmini-m4.yaml
+# Regenerate: uv run tools/generate_mac_host_list.py
+# #############################################################
+
+# inventory: macmini-m4.yaml
+# puppet_role: enterprise_3_b_osx_arm64
+
+macmini-m4-172.test.releng.mdc1.mozilla.com
+macmini-m4-173.test.releng.mdc1.mozilla.com
