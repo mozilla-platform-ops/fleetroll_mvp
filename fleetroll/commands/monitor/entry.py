@@ -234,14 +234,22 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 # Track if we redrew the screen in this iteration
                 redrew = False
 
-                # After processing a key, check if there's more input pending
-                # If so, flush it to avoid lag from processing hundreds of scroll events
                 if key != -1:
-                    # When filter bar is active every keystroke matters — never flush.
-                    # Otherwise peek for pending input; if found, flush to avoid lag
-                    # from processing hundreds of buffered scroll events.
-                    if not display.filter_bar_active:
-                        stdscr.nodelay(True)
+                    if display.filter_bar_active:
+                        # Drain any remaining buffered keys before redrawing so that
+                        # paste (all chars arrive at once) causes one redraw, not one per char.
+                        # Use timeout(0) so the drain is non-blocking — otherwise each
+                        # getch() in the loop waits up to 200ms making navigation sluggish.
+                        stdscr.timeout(0)
+                        while True:
+                            next_key = stdscr.getch()
+                            if next_key == -1:
+                                break
+                            if display.handle_key(next_key, draw=False):
+                                return
+                        stdscr.timeout(200)
+                    else:
+                        # Flush buffered scroll/repeat events to avoid lag.
                         peek = stdscr.getch()
                         if peek != -1:
                             curses.flushinp()

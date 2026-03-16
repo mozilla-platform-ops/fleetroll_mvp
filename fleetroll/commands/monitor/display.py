@@ -208,7 +208,7 @@ class MonitorDisplay:
         if text and (not self._filter_history or self._filter_history[-1] != text):
             self._filter_history.append(text)
 
-    def _handle_filter_bar_key(self, key: int) -> bool:
+    def _handle_filter_bar_key(self, key: int, *, draw: bool = True) -> bool:
         """Handle keypresses while the filter bar is active. Returns True to exit monitor."""
         if not self.curses_mod:
             return False
@@ -241,12 +241,19 @@ class MonitorDisplay:
             with contextlib.suppress(curses_error):
                 cm.curs_set(0)
             self.draw_screen()
-        elif key == 21:  # Ctrl+U — clear line
+        else:
+            self._mutate_filter_bar(key, cm, text, pos)
+            if draw:
+                self.draw_screen()
+        return False
+
+    def _mutate_filter_bar(self, key: int, cm: object, text: str, pos: int) -> None:
+        """Apply state mutations for filter bar editing keys (no redraw)."""
+        if key == 21:  # Ctrl+U — clear line
             self._filter_history_idx = -1
             self._filter_history_saved = ""
             self._filter_bar_text = ""
             self._filter_bar_cursor = 0
-            self.draw_screen()
         elif key == cm.KEY_UP:  # history: older entry
             if self._filter_history:
                 if self._filter_history_idx == -1:
@@ -256,7 +263,6 @@ class MonitorDisplay:
                     self._filter_history_idx -= 1
                 self._filter_bar_text = self._filter_history[self._filter_history_idx]
                 self._filter_bar_cursor = len(self._filter_bar_text)
-                self.draw_screen()
         elif key == cm.KEY_DOWN:  # history: newer entry
             if self._filter_history_idx != -1:
                 self._filter_history_idx += 1
@@ -267,39 +273,30 @@ class MonitorDisplay:
                 else:
                     self._filter_bar_text = self._filter_history[self._filter_history_idx]
                 self._filter_bar_cursor = len(self._filter_bar_text)
-                self.draw_screen()
-        elif key in (cm.KEY_LEFT,):
+        elif key == cm.KEY_LEFT:
             self._filter_bar_cursor = max(0, pos - 1)
-            self.draw_screen()
-        elif key in (cm.KEY_RIGHT,):
+        elif key == cm.KEY_RIGHT:
             self._filter_bar_cursor = min(len(text), pos + 1)
-            self.draw_screen()
         elif key in (cm.KEY_HOME, 1):  # Home or Ctrl+A
             self._filter_bar_cursor = 0
-            self.draw_screen()
         elif key in (cm.KEY_END, 5):  # End or Ctrl+E
             self._filter_bar_cursor = len(text)
-            self.draw_screen()
         elif key in (cm.KEY_BACKSPACE, 127, 8):  # Backspace — delete before cursor
             self._filter_history_idx = -1
             self._filter_history_saved = ""
             if pos > 0:
                 self._filter_bar_text = text[: pos - 1] + text[pos:]
                 self._filter_bar_cursor = pos - 1
-                self.draw_screen()
         elif key == cm.KEY_DC:  # Delete — delete at cursor
             self._filter_history_idx = -1
             self._filter_history_saved = ""
             if pos < len(text):
                 self._filter_bar_text = text[:pos] + text[pos + 1 :]
-                self.draw_screen()
         elif 32 <= key < 127:  # printable ASCII — insert at cursor
             self._filter_history_idx = -1
             self._filter_history_saved = ""
             self._filter_bar_text = text[:pos] + chr(key) + text[pos:]
             self._filter_bar_cursor = pos + 1
-            self.draw_screen()
-        return False
 
     def handle_key(self, key: int, *, draw: bool = True) -> bool:
         """Handle a keypress. Returns True if we should exit.
@@ -322,7 +319,7 @@ class MonitorDisplay:
 
         # Route all keypresses to filter bar when active
         if self._filter_bar_active:
-            return self._handle_filter_bar_key(key)
+            return self._handle_filter_bar_key(key, draw=draw)
 
         if key in (ord("q"), ord("Q")):
             return True
