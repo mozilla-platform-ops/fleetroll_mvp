@@ -38,7 +38,8 @@
       "Bash(git show:*)",
       "Bash(cm onboard:*)",
       "Bash(cm context:*)",
-      "Bash(gh run view:*)"
+      "Bash(gh run view:*)",
+      "Bash(cass view:*)"
     ]
   }
 }
