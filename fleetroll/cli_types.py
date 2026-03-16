@@ -33,6 +33,7 @@ class HostMonitorArgs:
     once: bool
     sort: str
     filter: str | None = None
+    hostname_only: bool = False
 
 
 @dataclass

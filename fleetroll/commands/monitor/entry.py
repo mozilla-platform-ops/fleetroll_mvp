@@ -44,6 +44,11 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
     """Monitor the latest audit record for hosts by tailing the audit log."""
     from ...db import get_connection, get_db_path, init_db
 
+    if args.hostname_only and not args.once:
+        raise FleetRollError("--hostname-only requires --once")
+    if args.hostname_only and args.json:
+        raise FleetRollError("--hostname-only and --json are mutually exclusive")
+
     ensure_host_or_file(args.host)
     if is_host_file(args.host):
         host_file = Path(args.host)
@@ -111,7 +116,10 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     filtered = apply_query(row_dicts, query)
                     sorted_hosts = [d["_host"] for d in filtered]
 
-            if args.json:
+            if args.hostname_only:
+                for h in sorted_hosts:
+                    print(h)
+            elif args.json:
                 payload = {host: latest.get(host) for host in sorted_hosts}
                 print(json.dumps(payload, indent=2, sort_keys=True))
             else:

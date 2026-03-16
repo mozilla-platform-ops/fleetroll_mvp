@@ -292,6 +292,7 @@ class TestCliMissingHelp:
         assert result.exit_code == 0
         assert "--once" in result.output
         assert "--sort" in result.output
+        assert "--hostname-only" in result.output
 
     def test_show_override_help(self, runner: CliRunner):
         """show-override --help shows command options."""
@@ -312,6 +313,63 @@ class TestCliMutualExclusion:
         """tc-fetch rejects --verbose and --quiet together."""
         result = runner.invoke(cli, ["tc-fetch", "somehost", "--verbose", "--quiet"])
         assert result.exit_code != 0
+
+    def test_hostname_only_without_once_rejected(self, runner: CliRunner, tmp_path: Path):
+        """host-monitor rejects --hostname-only without --once."""
+        hosts_file = tmp_path / "hosts.txt"
+        hosts_file.write_text("host1.example.com\n")
+        result = runner.invoke(cli, ["host-monitor", str(hosts_file), "--hostname-only"])
+        assert result.exit_code != 0
+
+    def test_hostname_only_with_json_rejected(self, runner: CliRunner, tmp_path: Path):
+        """host-monitor rejects --hostname-only with --json."""
+        hosts_file = tmp_path / "hosts.txt"
+        hosts_file.write_text("host1.example.com\n")
+        result = runner.invoke(
+            cli, ["host-monitor", str(hosts_file), "--hostname-only", "--once", "--json"]
+        )
+        assert result.exit_code != 0
+
+
+class TestHostMonitorHostnameOnly:
+    """Tests for host-monitor --hostname-only --once output."""
+
+    def test_hostname_only_once_outputs_one_per_line(self, runner: CliRunner, tmp_path: Path):
+        """--hostname-only --once prints one FQDN per line with no headers."""
+        from unittest.mock import MagicMock, patch
+
+        hosts_file = tmp_path / "hosts.txt"
+        hosts_file.write_text("host1.example.com\nhost2.example.com\n")
+
+        db_path = tmp_path / "test.db"
+        db_path.touch()
+
+        with (
+            patch("fleetroll.db.get_db_path", return_value=db_path),
+            patch("fleetroll.db.init_db"),
+            patch("fleetroll.db.get_connection", return_value=MagicMock()),
+            patch(
+                "fleetroll.commands.monitor.entry.load_latest_records",
+                return_value=({}, {}),
+            ),
+            patch(
+                "fleetroll.commands.monitor.entry.load_tc_worker_data_from_db",
+                return_value={},
+            ),
+            patch(
+                "fleetroll.commands.monitor.entry.load_github_refs_from_db",
+                return_value={},
+            ),
+            patch("fleetroll.commands.monitor.entry.load_latest_notes", return_value={}),
+        ):
+            result = runner.invoke(
+                cli,
+                ["host-monitor", str(hosts_file), "--hostname-only", "--once"],
+            )
+
+        assert result.exit_code == 0
+        lines = result.output.strip().splitlines()
+        assert lines == ["host1.example.com", "host2.example.com"]
 
 
 class TestMaintainCommand:

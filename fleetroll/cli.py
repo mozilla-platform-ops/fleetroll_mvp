@@ -208,6 +208,11 @@ def host_audit(
     default=None,
     help='Filter/sort query (e.g. "pp_last>20h sort:tc_act:desc").',
 )
+@click.option(
+    "--hostname-only",
+    is_flag=True,
+    help="Print one FQDN per line (requires --once).",
+)
 def host_monitor(
     host: str,
     audit_log: str | None,
@@ -215,8 +220,13 @@ def host_monitor(
     once: bool,
     sort: str,
     filter_query: str | None,
+    hostname_only: bool,
 ):
     """Monitor the latest audit record for a host (follows the audit log)."""
+    if hostname_only and not once:
+        raise click.UsageError("--hostname-only requires --once")
+    if hostname_only and json_output:
+        raise click.UsageError("--hostname-only and --json are mutually exclusive")
     args = HostMonitorArgs(
         host=host,
         audit_log=audit_log,
@@ -224,6 +234,7 @@ def host_monitor(
         once=once,
         sort=sort.lower(),
         filter=filter_query,
+        hostname_only=hostname_only,
     )
     cmd_host_monitor(args)
 
