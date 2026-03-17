@@ -257,13 +257,95 @@ This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) 
 
 ### Best Practices
 
-- **Session start**: Check `br ready` at session start to find available work
+- **Session start**: Check `br ready` at session start to find available work (via MCP or CLI)
 - **Starting work on a bead**: Set the bead's status to in_progress.
 - **Creating new beads**: Use descriptive titles, descriptions, and set appropriate priority and type.
 - **Closing beads**: Provide descriptive reasons that explain what was accomplished (see examples below)
+- **Choose the right interface** — MCP tools vs CLI differ significantly in token cost (see below).
 - **Never spawn a subagent for `br` operations** — subagents carry ~16,000 tokens of fixed overhead. Use native MCP tools or CLI directly instead.
 
-### Essential Commands
+## br MCP Server — Native Tool Interface
+
+The `br` MCP server runs via `br serve` (stdio transport) and exposes the full issue tracker as first-class tools/resources.
+
+### MCP vs CLI — Choose the right interface
+
+Routing a query through an MCP subagent carries ~16,000 tokens of overhead (system prompt, tool schemas, conversation history). A direct CLI `br` command via Bash costs ~100–300 tokens. That's roughly a **100x difference**.
+
+**Use CLI (Bash `br` commands) for:**
+- Simple reads: `br list`, `br show`, `br ready`
+- Counting or filtering queries
+- Any question answerable in one shell command
+
+**Use MCP tools for:**
+- Mutations: creating, updating, or closing issues (structured data avoids shell quoting bugs)
+- Multi-step workflows: triage, dependency management, plan-next-work
+- When the structured JSON response will be consumed or reasoned over
+
+**Never** spawn a subagent just to run a single `br list` or `br show` — call Bash directly.
+
+### MCP Configuration (add to your agent's MCP config)
+
+```json
+{
+  "mcpServers": {
+    "br": {
+      "command": "br",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+### Tools (7)
+
+| Tool | Purpose |
+|------|---------|
+| `project_overview` | Start here — project health, status counts, top ready issues |
+| `list_issues` | Query issues by status, priority, label, assignee, type |
+| `show_issue` | Full detail for a single issue including events |
+| `create_issue` | Create a new issue |
+| `update_issue` | Update fields, add labels, add comments |
+| `close_issue` | Close an issue with a reason |
+| `manage_dependencies` | Add/remove/list blockers between issues |
+
+### Resources (read-only state snapshots)
+
+**IMPORTANT:** The URI scheme is `beads://`, NOT `br://`. There is no `issues/open` resource — use the `list_issues` tool or `beads://issues/ready` for open/actionable issues.
+
+| URI | Contents |
+|-----|---------|
+| `beads://project/info` | Project name, counts, recent activity |
+| `beads://schema` | Valid field values and bead anatomy guidance |
+| `beads://labels` | All labels in use |
+| `beads://issues/ready` | Unblocked, actionable open issues (closest thing to "open issues") |
+| `beads://issues/blocked` | Blocked issues with blocker IDs |
+| `beads://issues/in_progress` | Issues currently being worked on |
+| `beads://issues/deferred` | Deferred issues |
+| `beads://issues/bottlenecks` | Issues blocking the most downstream work |
+| `beads://graph/health` | Cycle detection, health metrics |
+| `beads://events/recent` | Recent audit events |
+| `beads://issues/{id}` | Single issue detail (URI template) |
+
+### Prompts (guided workflows)
+
+| Prompt | Use when |
+|--------|---------|
+| `triage` | Reviewing backlog health, unblocking stuck issues |
+| `plan_next_work` | Choosing what to work on next (bottleneck + quick-win aware) |
+| `status_report` | Generating a project status summary |
+| `polish_backlog` | Reviewing issue quality and dependency hygiene |
+
+### Typical MCP Flow
+
+1. Call `project_overview` to orient
+2. Read `beads://schema` to confirm valid field values
+3. Use `list_issues` or `beads://issues/ready` to find work
+4. `update_issue` to claim (`status=in_progress`, `assignee=<you>`)
+5. Do the work
+6. `close_issue` with a reason
+
+### Essential CLI Commands
 
 ```bash
 br ready              # Show issues ready to work (no blockers)
@@ -286,10 +368,10 @@ br close <id1> <id2>  # Close multiple issues at once
 
 ### Workflow Pattern
 
-1. **Start**: Run `br ready` to find actionable work
-2. **Claim**: Use `br update <id> --status=in_progress`
-3. **Work**: Implement the task
-4. **Complete**: Use `br close <id>`
+1. **Find work** — CLI: `br ready` (cheap read)
+2. **Claim it** — MCP: `update_issue` with `status=in_progress` (structured mutation)
+3. **Implement the task**
+4. **Close it** — MCP: `close_issue` with a descriptive reason (structured mutation)
 
 ### Closing Beads
 
