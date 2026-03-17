@@ -104,22 +104,27 @@ def is_housekeeping_commit(subject: str) -> bool:
     return any(pat in lower for pat in _HOUSEKEEPING_PATTERNS)
 
 
-def classify_commits(commits: list[dict], bead_ids: set[str]) -> tuple[list[dict], list[dict]]:
-    """Split commits into (covered, orphan) based on bead ID references.
+def classify_commits(
+    commits: list[dict], bead_ids: set[str]
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Split commits into (covered, orphan, housekeeping).
 
     covered     = commit references a bead in bead_ids
     orphan      = commit does not reference any bead in bead_ids
-    housekeeping commits (br sync / beads sync) are silently dropped from orphans
+    housekeeping = br sync / beads sync commits (excluded from coverage calculation)
     """
     covered = []
     orphans = []
+    housekeeping = []
     for commit in commits:
         bead_id = extract_bead_id(commit["subject"])
         if bead_id and bead_id in bead_ids:
             covered.append(commit)
-        elif not is_housekeeping_commit(commit["subject"]):
+        elif is_housekeeping_commit(commit["subject"]):
+            housekeeping.append(commit)
+        else:
             orphans.append(commit)
-    return covered, orphans
+    return covered, orphans, housekeeping
 
 
 def render_bead_line(bead: dict) -> str:
@@ -199,6 +204,7 @@ def render_markdown(
     grouped_beads: dict[str, list[dict]],
     orphan_commits: list[dict],
     all_commits: list[dict],
+    housekeeping_count: int = 0,
 ) -> str:
     """Render the full markdown string for a version's release notes."""
     total_beads = sum(len(v) for v in grouped_beads.values())
@@ -210,8 +216,9 @@ def render_markdown(
     from_date_display = vrange.from_date[:10] if vrange.from_date else "unknown"
     to_date_display = vrange.to_date[:10]
 
-    covered_count = total_commits - orphan_count
-    coverage_pct = (covered_count / total_commits * 100) if total_commits else 0
+    countable = total_commits - housekeeping_count
+    covered_count = countable - orphan_count
+    coverage_pct = (covered_count / countable * 100) if countable else 0
     bead_breakdown = " | ".join(
         f"{SECTION_LABELS.get(btype, btype.capitalize())}: {len(grouped_beads[btype])}"
         for btype in SECTION_ORDER
@@ -226,11 +233,15 @@ def render_markdown(
         "| | |",
         "|---|---|",
         f"| **Range** | `{from_sha_display}..{to_sha_display}` ({from_date_display} to {to_date_display}) |",
-        f"| **Commits** | {total_commits} ({coverage_pct:.0f}% bead-covered) |",
+        f"| **Commits** | {total_commits} ({coverage_pct:.0f}% beads-covered) |",
         f"| **Beads closed** | {total_beads} |",
         f"| **By type** | {bead_breakdown or 'none'} |",
         "",
     ]
+    if housekeeping_count:
+        lines.insert(
+            -1, f"| **Housekeeping** | {housekeeping_count} (not counted toward coverage) |"
+        )
 
     for btype in SECTION_ORDER:
         beads = grouped_beads.get(btype, [])
@@ -646,21 +657,24 @@ def generate_notes_for_range(
     grouped = group_beads_by_type(beads_in_range)
 
     bead_ids = {b["id"] for b in beads_in_range}
-    _, orphan_commits = classify_commits(commits, bead_ids)
+    _, orphan_commits, housekeeping_commits = classify_commits(commits, bead_ids)
 
-    md = render_markdown(version, vrange, grouped, orphan_commits, commits)
+    md = render_markdown(
+        version, vrange, grouped, orphan_commits, commits, len(housekeeping_commits)
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path.write_text(md)
 
     total_beads = sum(len(v) for v in grouped.values())
-    covered = len(commits) - len(orphan_commits)
-    coverage_pct = (covered / len(commits) * 100) if commits else 0
+    countable = len(commits) - len(housekeeping_commits)
+    covered = countable - len(orphan_commits)
+    coverage_pct = (covered / countable * 100) if countable else 0
     from_display = vrange.from_sha[:7] if vrange.from_sha else "root"
     git_range = f"{from_display}..{vrange.to_sha[:7]}"
     print(
         f"  {version:<24}  {git_range}  "
-        f"{total_beads} beads ({coverage_pct:.0f}% covered)  "
+        f"{total_beads} beads ({coverage_pct:.0f}% beads-covered)  "
         f"{len(commits)} commits"
     )
     return str(output_path)

@@ -173,42 +173,46 @@ class TestClassifyCommits:
             self._commit("ccc", "Add feature (mvp-xyz)"),
         ]
         bead_ids = {"mvp-abc", "mvp-xyz"}
-        covered, orphans = classify_commits(commits, bead_ids)
+        covered, orphans, _ = classify_commits(commits, bead_ids)
         assert len(covered) == 2
         assert len(orphans) == 1
         assert orphans[0]["sha"] == "bbb"
 
     def test_all_orphan(self):
         commits = [self._commit("aaa", "No bead ref")]
-        covered, orphans = classify_commits(commits, set())
+        covered, orphans, _ = classify_commits(commits, set())
         assert covered == []
         assert len(orphans) == 1
 
     def test_bead_id_not_in_set_is_orphan(self):
         commits = [self._commit("aaa", "Fix (mvp-other)")]
         bead_ids = {"mvp-abc"}  # mvp-other not in range
-        _, orphans = classify_commits(commits, bead_ids)
+        _, orphans, _ = classify_commits(commits, bead_ids)
         assert len(orphans) == 1
 
-    def test_br_sync_not_orphan(self):
+    def test_br_sync_in_housekeeping_not_orphan(self):
         commits = [self._commit("aaa", "br sync")]
-        _, orphans = classify_commits(commits, set())
+        _, orphans, housekeeping = classify_commits(commits, set())
         assert orphans == []
+        assert len(housekeeping) == 1
 
-    def test_beads_sync_not_orphan(self):
+    def test_beads_sync_in_housekeeping(self):
         commits = [self._commit("aaa", "beads sync")]
-        _, orphans = classify_commits(commits, set())
+        _, orphans, housekeeping = classify_commits(commits, set())
         assert orphans == []
+        assert len(housekeeping) == 1
 
-    def test_br_sync_with_extra_content_not_orphan(self):
+    def test_br_sync_with_extra_content_in_housekeeping(self):
         commits = [self._commit("aaa", "br sync, claude sync")]
-        _, orphans = classify_commits(commits, set())
+        _, orphans, housekeeping = classify_commits(commits, set())
         assert orphans == []
+        assert len(housekeeping) == 1
 
     def test_unrelated_sync_is_orphan(self):
         commits = [self._commit("aaa", "sync notes and beads")]
-        _, orphans = classify_commits(commits, set())
+        _, orphans, housekeeping = classify_commits(commits, set())
         assert len(orphans) == 1
+        assert housekeeping == []
 
 
 class TestIsHousekeepingCommit:
@@ -319,6 +323,21 @@ class TestRenderMarkdown:
         md = render_markdown("0.1.0", vrange, {}, [], [])
         assert "test_fr" in md
         assert "test_to" in md
+
+    def test_commits_label_is_beads_covered(self):
+        commits = [{"sha": "abc1234", "date": "2026-01-01", "subject": "Fix thing"}]
+        md = render_markdown("0.2.3", self._range(), {}, commits, commits)
+        assert "beads-covered" in md
+
+    def test_housekeeping_row_shown_when_nonzero(self):
+        md = render_markdown("0.2.3", self._range(), {}, [], [], housekeeping_count=3)
+        assert "Housekeeping" in md
+        assert "3" in md
+        assert "not counted toward coverage" in md
+
+    def test_housekeeping_row_absent_when_zero(self):
+        md = render_markdown("0.2.3", self._range(), {}, [], [], housekeeping_count=0)
+        assert "Housekeeping" not in md
 
 
 class TestFormatDebugLog:
