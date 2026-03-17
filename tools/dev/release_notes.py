@@ -370,7 +370,7 @@ def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
             ranges.insert(
                 0,
                 VersionRange(
-                    version="unreleased",
+                    version=f"{latest_bump['version']}-UNRELEASED",
                     from_sha=latest_bump["sha"],
                     to_sha=head_sha,
                     from_date=latest_bump["date"],
@@ -380,7 +380,7 @@ def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
 
     # Sort: unreleased first, then newest version first (descending)
     def sort_key(r: VersionRange):
-        if r.version == "unreleased":
+        if r.version.endswith("-UNRELEASED"):
             return (0, [])
         return (1, [-int(x) for x in r.version.split(".")])
 
@@ -486,7 +486,7 @@ def generate_notes_for_range(
 ) -> str:
     """Generate notes for one version range. Returns the output file path."""
     version = vrange.version
-    filename = f"v{version}.md" if version != "unreleased" else "unreleased.md"
+    filename = f"v{version}.md" if not version.endswith("-UNRELEASED") else "unreleased.md"
     output_path = output_dir / filename
 
     if output_path.exists() and not force:
@@ -592,7 +592,7 @@ def main() -> int:
     elif args.all:
         ranges_to_process = ranges
     # Default: generate for the latest unreleased (or newest version if all released)
-    elif (ranges and ranges[0].version == "unreleased") or ranges:
+    elif (ranges and ranges[0].version.endswith("-UNRELEASED")) or ranges:
         ranges_to_process = [ranges[0]]
     else:
         print("No ranges to process.", file=sys.stderr)
