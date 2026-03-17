@@ -24,6 +24,10 @@ BASE_DIR = Path("configs/host-lists")
 OS_DIRS = ["linux", "mac", "windows"]
 OUTPUT_PATH = BASE_DIR / "all.list"
 
+# Linux host lists are manually maintained per-group; only this file is used
+# as the authoritative source for linux/all.list generation.
+LINUX_SOURCE_FILE = "all_moonshots.list"
+
 
 def read_hosts(list_file: Path) -> list[str]:
     """Read hosts from a list file, expanding short names via # fqdn: directives."""
@@ -45,18 +49,29 @@ def read_hosts(list_file: Path) -> list[str]:
     return hosts
 
 
-def generate_os_all_list(os_dir: Path) -> Path:
-    """Combine all .list files in os_dir (excluding all.list) into os_dir/all.list.
+def generate_os_all_list(os_dir: Path, *, only: str | None = None) -> Path:
+    """Combine .list files in os_dir (excluding all.list) into os_dir/all.list.
+
+    Args:
+        os_dir: Directory containing the per-group .list files.
+        only: If set, use only this filename as the source instead of all files.
 
     Returns the path to the generated file.
     """
     output = os_dir / "all.list"
 
-    list_files = sorted(
-        (f for f in os_dir.glob("*.list") if f.name != "all.list"),
-        key=lambda f: f.stat().st_size,
-        reverse=True,
-    )
+    if only is not None:
+        single = os_dir / only
+        if not single.exists():
+            print(f"Warning: {single} does not exist, skipping", file=sys.stderr)
+            return output
+        list_files = [single]
+    else:
+        list_files = sorted(
+            (f for f in os_dir.glob("*.list") if f.name != "all.list"),
+            key=lambda f: f.stat().st_size,
+            reverse=True,
+        )
 
     if not list_files:
         print(f"Warning: no .list files found in {os_dir}", file=sys.stderr)
@@ -87,7 +102,7 @@ def generate_os_all_list(os_dir: Path) -> Path:
         "# #############################################################",
         "# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.",
         f"# Generated: {timestamp}",
-        f"# Source:    configs/host-lists/{os_dir.name}/*.list (excluding all.list)",
+        f"# Source:    configs/host-lists/{os_dir.name}/{only or '*.list (excluding all.list)'}",
         "# Regenerate: uv run tools/generate_all_host_lists.py",
         "# #############################################################",
         "",
@@ -169,7 +184,8 @@ def main() -> None:
         if not os_dir.is_dir():
             print(f"Warning: {os_dir} does not exist, skipping", file=sys.stderr)
             continue
-        all_list = generate_os_all_list(os_dir)
+        only = LINUX_SOURCE_FILE if os_name == "linux" else None
+        all_list = generate_os_all_list(os_dir, only=only)
         os_all_lists.append((os_name, all_list))
 
     # Step 2: Generate base all.list
