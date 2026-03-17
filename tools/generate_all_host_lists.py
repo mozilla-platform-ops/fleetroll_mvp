@@ -64,16 +64,23 @@ def generate_os_all_list(os_dir: Path) -> Path:
 
     # Collect hosts with deduplication; track which source contributed each host
     seen: set[str] = set()
-    # (source_name, new_hosts, duplicate_hosts)
-    section_entries: list[tuple[str, list[str], list[str]]] = []
+    # (host, source_name) for all unique hosts; duplicates tracked separately
+    host_source: list[tuple[str, str]] = []
+    duplicates: list[tuple[str, str]] = []
 
     for list_file in list_files:
         hosts = read_hosts(list_file)
-        new_hosts = sorted((h for h in hosts if h not in seen), key=natural_key)
-        duplicate_hosts = sorted((h for h in hosts if h in seen), key=natural_key)
-        seen.update(new_hosts)
-        if hosts:
-            section_entries.append((list_file.name, new_hosts, duplicate_hosts))
+        for h in hosts:
+            if h not in seen:
+                seen.add(h)
+                host_source.append((h, list_file.name))
+            else:
+                duplicates.append((h, list_file.name))
+
+    # Globally sort all unique hosts by natural key so ordering is correct
+    # across sources (e.g. host-44 before host-104 regardless of which file
+    # each came from).
+    host_source.sort(key=lambda hs: natural_key(hs[0]))
 
     timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines: list[str] = [
@@ -86,19 +93,28 @@ def generate_os_all_list(os_dir: Path) -> Path:
         "",
     ]
 
-    for source_name, new_hosts, duplicate_hosts in section_entries:
-        lines.append(f"# source: {source_name}")
-        lines.extend(new_hosts)
-        if duplicate_hosts:
-            lines.append("# duplicates (already listed above):")
-            lines.extend(f"# {h}" for h in duplicate_hosts)
+    # Emit hosts in global natural-sort order; annotate source changes inline.
+    current_source: str | None = None
+    for host, source_name in host_source:
+        if source_name != current_source:
+            if current_source is not None:
+                lines.append("")
+            lines.append(f"# source: {source_name}")
+            current_source = source_name
+        lines.append(host)
+
+    if duplicates:
         lines.append("")
+        lines.append("# duplicates (already listed above):")
+        for host, source_name in sorted(duplicates, key=lambda hs: natural_key(hs[0])):
+            lines.append(f"# {host}  (from {source_name})")
+
+    lines.append("")
 
     content = "\n".join(lines)
     output.write_text(content, encoding="utf-8")
 
-    total = sum(len(new_hosts) for _, new_hosts, _ in section_entries)
-    print(f"Wrote {total} hosts to {output}", file=sys.stderr)
+    print(f"Wrote {len(host_source)} hosts to {output}", file=sys.stderr)
     return output
 
 
