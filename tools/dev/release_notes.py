@@ -24,13 +24,13 @@ class VersionRange:
     to_date: str
 
 
-SECTION_ORDER = ["feature", "bug", "task", "docs", "epic", "chore"]
+SECTION_ORDER = ["epic", "feature", "bug", "task", "docs", "chore"]
 SECTION_LABELS = {
+    "epic": "Epics",
     "feature": "Features",
     "bug": "Bug Fixes",
     "task": "Tasks",
     "docs": "Documentation",
-    "epic": "Epics",
     "chore": "Chores",
 }
 
@@ -129,20 +129,70 @@ def render_commit_line(commit: dict) -> str:
     return f"- `{short_sha}` {subject}"
 
 
+def format_debug_log(
+    ranges: list[VersionRange], annotated_commits: list[dict], *, color: bool = False
+) -> str:
+    """Format annotated git log for debug output.
+
+    annotated_commits: list of dicts with 'sha', 'subject', 'version' keys.
+    Returns a multi-line string with version boundary headers inserted between ranges.
+    """
+    if not annotated_commits:
+        return "(no commits)"
+
+    _cyan_bold = "\033[1;36m"
+    _reset = "\033[0m"
+
+    def _colorize(line: str) -> str:
+        if color:
+            return f"{_cyan_bold}{line}{_reset}"
+        return line
+
+    version_counts: dict[str, int] = {}
+    for c in annotated_commits:
+        v = c["version"]
+        version_counts[v] = version_counts.get(v, 0) + 1
+
+    range_info: dict[str, str] = {}
+    for r in ranges:
+        from_short = r.from_sha[:7] if r.from_sha else "root"
+        to_short = r.to_sha[:7]
+        range_info[r.version] = f"{from_short}..{to_short}"
+
+    lines = []
+    current_version: str | None = None
+    for commit in annotated_commits:
+        version = commit["version"]
+        if version != current_version:
+            if current_version is not None:
+                lines.append(_colorize(f"--- end {current_version} ---"))
+            count = version_counts.get(version, 0)
+            range_str = range_info.get(version, "unknown")
+            lines.append(_colorize(f"--- start v{version} ({range_str}) [{count} commits] ---"))
+            current_version = version
+        lines.append(f"{commit['sha']} {commit['subject']}")
+
+    if current_version is not None:
+        lines.append(_colorize(f"--- end {current_version} ---"))
+
+    return "\n".join(lines)
+
+
 def render_markdown(
     version: str,
     vrange: VersionRange,
     grouped_beads: dict[str, list[dict]],
     orphan_commits: list[dict],
-    total_commits: int,
+    all_commits: list[dict],
 ) -> str:
     """Render the full markdown string for a version's release notes."""
     total_beads = sum(len(v) for v in grouped_beads.values())
     orphan_count = len(orphan_commits)
+    total_commits = len(all_commits)
 
-    from_sha_display = vrange.from_sha[:7] if vrange.from_sha else "initial"
+    from_sha_display = vrange.from_sha[:7] if vrange.from_sha else "unknown"
     to_sha_display = vrange.to_sha[:7]
-    from_date_display = vrange.from_date[:10] if vrange.from_date else "start"
+    from_date_display = vrange.from_date[:10] if vrange.from_date else "unknown"
     to_date_display = vrange.to_date[:10]
 
     lines = [
@@ -173,6 +223,12 @@ def render_markdown(
         lines.extend(render_commit_line(commit) for commit in orphan_commits)
         lines.append("")
 
+    if all_commits:
+        lines.append("## Git Log")
+        lines.append("")
+        lines.extend(render_commit_line(commit) for commit in all_commits)
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -185,8 +241,15 @@ def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=check)
 
 
-def detect_version_ranges() -> list[VersionRange]:
-    """Walk git log for pyproject.toml, detect version bumps, return ranges."""
+def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
+    """Walk git log for pyproject.toml, detect version bumps, return ranges.
+
+    rolling_main=True (default): era semantics — each version covers commits made
+    while that version was active (from its bump commit to the next bump).
+
+    rolling_main=False: traditional release-notes semantics — each version covers
+    commits since the previous version bump up to the current bump.
+    """
     result = _run(["git", "log", "--format=%H %aI", "--", "pyproject.toml"])
     commits = []
     for line in result.stdout.splitlines():
@@ -207,61 +270,92 @@ def detect_version_ranges() -> list[VersionRange]:
     if not commits:
         return []
 
-    # commits is newest-first; group by version changes
-    ranges: list[VersionRange] = []
-    # The most recent commit is commits[0]; oldest is commits[-1]
-    prev_version = None
+    # Find version-bump commits by comparing each entry to the next (older) one.
+    # Many commits touch pyproject.toml without changing the version; a bump commit
+    # is one whose version DIFFERS from its predecessor in the log (or is the oldest).
+    bump_commits = []
     for i, commit in enumerate(commits):
-        version = commit["version"]
-        if version == prev_version:
-            continue
-        # Version changed at this commit
-        to_sha = commit["sha"]
-        to_date = commit["date"]
-        if i == 0:
-            # This is the HEAD version — handled as "unreleased" separately
-            prev_version = version
-            continue
-        # The range for this version: from the commit after the previous version bump
-        # to_sha = this commit (the version bump commit for `version`)
-        # from_sha = the commit just before this one in the log (i.e. commits[i-1] sha)
-        # But actually: the range is from the previous version's commit (exclusive) to this commit
-        # In git terms: prev_commit..this_commit
-        prev_commit = commits[i - 1]
-        from_sha = prev_commit["sha"]
-        from_date = prev_commit["date"]
-        ranges.append(
-            VersionRange(
-                version=version,
-                from_sha=from_sha,
-                to_sha=to_sha,
-                from_date=from_date,
-                to_date=to_date,
-            )
-        )
-        prev_version = version
+        is_oldest = i + 1 >= len(commits)
+        version_changed = is_oldest or commit["version"] != commits[i + 1]["version"]
+        if version_changed:
+            bump_commits.append(commit)
 
-    # Handle the oldest range: from initial commit to first version bump
-    if commits:
-        oldest = commits[-1]
-        # If there's a range that ends at the same commit as the oldest pyproject.toml commit
-        # then we need a range from None to this commit
-        # Check if we have a range ending at oldest["sha"]
-        existing_to_shas = {r.to_sha for r in ranges}
-        if oldest["sha"] not in existing_to_shas:
+    ranges: list[VersionRange] = []
+
+    if rolling_main:
+        # Era semantics: each version's range covers commits made while it was active.
+        # from_sha = this version's bump commit (exclusive lower bound in git range)
+        # to_sha   = the next (newer) bump commit, so from_sha..to_sha captures the era.
+        # Iterate oldest-first (high index → low index in bump_commits which is newest-first).
+        for i in range(len(bump_commits) - 1, -1, -1):
+            bump = bump_commits[i]
+            if i > 0:
+                newer = bump_commits[i - 1]
+                to_sha: str = newer["sha"]
+                to_date: str = newer["date"]
+            else:
+                # Newest bump: extends to itself; unreleased logic covers HEAD separately.
+                to_sha = bump["sha"]
+                to_date = bump["date"]
+            from_sha: str | None = bump["sha"]
+            from_date: str | None = bump["date"]
+            # Oldest version: use the repo root as the lower bound so the era
+            # captures commits from the very beginning through the next bump.
+            if i == len(bump_commits) - 1:
+                root_result = _run(["git", "rev-list", "--max-parents=0", bump["sha"]], check=False)
+                if root_result.returncode == 0:
+                    from_sha = root_result.stdout.strip()
+                    root_date_result = _run(
+                        ["git", "log", "-1", "--format=%aI", from_sha], check=False
+                    )
+                    from_date = (
+                        root_date_result.stdout.strip()
+                        if root_date_result.returncode == 0
+                        else from_date
+                    )
             ranges.append(
                 VersionRange(
-                    version=oldest["version"],
-                    from_sha=None,
-                    to_sha=oldest["sha"],
-                    from_date=None,
-                    to_date=oldest["date"],
+                    version=bump["version"],
+                    from_sha=from_sha,
+                    to_sha=to_sha,
+                    from_date=from_date,
+                    to_date=to_date,
+                )
+            )
+    else:
+        # Traditional semantics: each version covers commits since the previous bump.
+        # to_sha   = bump commit for this version (newer end)
+        # from_sha = bump commit for the previous (older) version
+        for i, bump in enumerate(bump_commits):
+            to_sha = bump["sha"]
+            to_date = bump["date"]
+            if i + 1 < len(bump_commits):
+                older = bump_commits[i + 1]
+                from_sha = older["sha"]
+                from_date = older["date"]
+            else:
+                # Oldest version: use the repo root commit as the lower bound.
+                root_result = _run(["git", "rev-list", "--max-parents=0", to_sha], check=False)
+                from_sha = root_result.stdout.strip() if root_result.returncode == 0 else None
+                root_date_result = _run(
+                    ["git", "log", "-1", "--format=%aI", from_sha or to_sha], check=False
+                )
+                from_date = (
+                    root_date_result.stdout.strip() if root_date_result.returncode == 0 else None
+                )
+            ranges.append(
+                VersionRange(
+                    version=bump["version"],
+                    from_sha=from_sha,
+                    to_sha=to_sha,
+                    from_date=from_date,
+                    to_date=to_date,
                 )
             )
 
     # Also handle HEAD (unreleased commits after the latest version bump)
-    if commits:
-        latest_bump = commits[0]
+    if bump_commits:
+        latest_bump = bump_commits[0]
         head_result = _run(["git", "rev-parse", "HEAD"])
         head_sha = head_result.stdout.strip()
         if head_sha != latest_bump["sha"]:
@@ -279,11 +373,11 @@ def detect_version_ranges() -> list[VersionRange]:
                 ),
             )
 
-    # Sort: unreleased first, then newest version first
+    # Sort: unreleased first, then newest version first (descending)
     def sort_key(r: VersionRange):
         if r.version == "unreleased":
-            return (0, "")
-        return (1, [int(x) for x in r.version.split(".")])
+            return (0, [])
+        return (1, [-int(x) for x in r.version.split(".")])
 
     ranges.sort(key=sort_key)
     return ranges
@@ -313,7 +407,8 @@ def fetch_closed_beads() -> list[dict]:
 
 def fetch_git_commits(from_sha: str | None, to_sha: str) -> list[dict]:
     """Fetch git commits in the given range."""
-    if from_sha is None:
+    if from_sha is None or from_sha == to_sha:
+        # No lower bound (initial version whose bump IS the root commit).
         rev_range = to_sha
     else:
         rev_range = f"{from_sha}..{to_sha}"
@@ -334,6 +429,38 @@ def fetch_git_commits(from_sha: str | None, to_sha: str) -> list[dict]:
         if parsed:
             commits.append(parsed)
     return commits
+
+
+def build_debug_annotated_commits(ranges: list[VersionRange]) -> list[dict]:
+    """Build annotated commit list for debug output by mapping each commit to its version."""
+    sha_to_version: dict[str, str] = {}
+    for vrange in ranges:
+        if vrange.from_sha is None or vrange.from_sha == vrange.to_sha:
+            rev_range = vrange.to_sha
+        else:
+            rev_range = f"{vrange.from_sha}..{vrange.to_sha}"
+        result = _run(["git", "log", "--format=%h", rev_range], check=False)
+        if result.returncode == 0:
+            for sha in result.stdout.splitlines():
+                sha = sha.strip()
+                if sha:
+                    sha_to_version[sha] = vrange.version
+
+    result = _run(["git", "log", "--format=%h %s"], check=False)
+    if result.returncode != 0:
+        return []
+
+    annotated = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(" ", 1)
+        sha = parts[0]
+        subject = parts[1] if len(parts) > 1 else ""
+        version = sha_to_version.get(sha, "unknown")
+        annotated.append({"sha": sha, "subject": subject, "version": version})
+    return annotated
 
 
 # ---------------------------------------------------------------------------
@@ -360,12 +487,25 @@ def generate_notes_for_range(
     bead_ids = {b["id"] for b in beads_in_range}
     _, orphan_commits = classify_commits(commits, bead_ids)
 
-    md = render_markdown(version, vrange, grouped, orphan_commits, len(commits))
+    md = render_markdown(version, vrange, grouped, orphan_commits, commits)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path.write_text(md)
-    print(f"  Wrote {output_path}")
-    print(md)
+
+    bead_summary = ", ".join(
+        f"{len(beads)} {SECTION_LABELS.get(btype, btype)}"
+        for btype in SECTION_ORDER
+        if (beads := grouped.get(btype, []))
+    )
+    orphan_count = len(orphan_commits)
+    total_commits = len(commits)
+    from_display = vrange.from_sha[:7] if vrange.from_sha else "root"
+    git_range = f"{from_display}..{vrange.to_sha[:7]}"
+    print(
+        f"  {output_path}  |  {git_range}"
+        f"  |  beads: {bead_summary or 'none'}"
+        f"  |  commits: {total_commits}  |  orphans: {orphan_count}"
+    )
     return str(output_path)
 
 
@@ -394,15 +534,33 @@ def main() -> int:
         action="store_true",
         help="Overwrite existing output files.",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print annotated git log showing version boundaries, then exit.",
+    )
+    parser.add_argument(
+        "--rolling-main",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use era-based version ranges (default). "
+        "Each version includes commits made while that version was active. "
+        "Use --no-rolling-main for traditional release-notes semantics.",
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
 
     print("Detecting version ranges from git history...")
-    ranges = detect_version_ranges()
+    ranges = detect_version_ranges(rolling_main=args.rolling_main)
     if not ranges:
         print("No version ranges detected.", file=sys.stderr)
         return 1
+
+    if args.debug:
+        annotated = build_debug_annotated_commits(ranges)
+        print(format_debug_log(ranges, annotated, color=sys.stdout.isatty()))
+        return 0
 
     print("Fetching closed beads...")
     all_beads = fetch_closed_beads()

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 from tools.dev.release_notes import (
     VersionRange,
     classify_commits,
+    detect_version_ranges,
     extract_bead_id,
     extract_version_from_toml,
     filter_beads_by_date,
+    format_debug_log,
     group_beads_by_type,
     parse_git_log_line,
     render_bead_line,
@@ -235,33 +239,33 @@ class TestRenderMarkdown:
         )
 
     def test_contains_version_header(self):
-        md = render_markdown("0.2.3", self._range(), {}, [], 10)
+        md = render_markdown("0.2.3", self._range(), {}, [], [])
         assert "# v0.2.3 Release Notes (DRAFT)" in md
 
     def test_contains_range_info(self):
-        md = render_markdown("0.2.3", self._range(), {}, [], 10)
+        md = render_markdown("0.2.3", self._range(), {}, [], [])
         assert "aaa1111" in md
         assert "bbb2222" in md
 
     def test_features_section(self):
         beads = [{"id": "mvp-x", "title": "My feature", "close_reason": "Done", "priority": 2}]
         grouped = {"feature": beads}
-        md = render_markdown("0.2.3", self._range(), grouped, [], 5)
+        md = render_markdown("0.2.3", self._range(), grouped, [], [])
         assert "## Features" in md
         assert "My feature" in md
 
     def test_orphan_section_present_when_exists(self):
         orphans = [{"sha": "abc1234", "subject": "Fix without bead"}]
-        md = render_markdown("0.2.3", self._range(), {}, orphans, 1)
+        md = render_markdown("0.2.3", self._range(), {}, orphans, orphans)
         assert "## Orphan Commits" in md
         assert "abc1234" in md
 
     def test_orphan_section_absent_when_empty(self):
-        md = render_markdown("0.2.3", self._range(), {}, [], 5)
+        md = render_markdown("0.2.3", self._range(), {}, [], [])
         assert "## Orphan Commits" not in md
 
     def test_empty_sections_skipped(self):
-        md = render_markdown("0.2.3", self._range(), {}, [], 0)
+        md = render_markdown("0.2.3", self._range(), {}, [], [])
         assert "## Features" not in md
         assert "## Bug Fixes" not in md
 
@@ -269,21 +273,192 @@ class TestRenderMarkdown:
         grouped = {
             "chore": [{"id": "c", "title": "chore", "priority": 2}],
             "feature": [{"id": "f", "title": "feature", "priority": 2}],
-            "bug": [{"id": "b", "title": "bug", "priority": 2}],
+            "epic": [{"id": "e", "title": "epic", "priority": 2}],
         }
-        md = render_markdown("0.2.3", self._range(), grouped, [], 3)
+        md = render_markdown("0.2.3", self._range(), grouped, [], [])
+        epic_pos = md.index("## Epics")
         feat_pos = md.index("## Features")
-        bug_pos = md.index("## Bug Fixes")
         chore_pos = md.index("## Chores")
-        assert feat_pos < bug_pos < chore_pos
+        assert epic_pos < feat_pos < chore_pos
 
-    def test_from_sha_none_shows_initial(self):
+    def test_from_sha_shown_when_set(self):
         vrange = VersionRange(
             version="0.1.0",
-            from_sha=None,
-            to_sha="abc1234",
-            from_date=None,
-            to_date="2026-01-01T00:00:00Z",
+            from_sha="test_from_sha_prefix_1234",
+            to_sha="test_to_sha_prefix_5678",
+            from_date="2026-01-01T00:00:00Z",
+            to_date="2026-02-01T00:00:00Z",
         )
-        md = render_markdown("0.1.0", vrange, {}, [], 0)
-        assert "initial" in md
+        md = render_markdown("0.1.0", vrange, {}, [], [])
+        assert "test_fr" in md
+        assert "test_to" in md
+
+
+class TestFormatDebugLog:
+    def _range(self, version, from_sha, to_sha):
+        return VersionRange(
+            version=version,
+            from_sha=from_sha,
+            to_sha=to_sha,
+            from_date="2026-01-01T00:00:00Z",
+            to_date="2026-03-01T00:00:00Z",
+        )
+
+    def test_boundary_headers_inserted(self):
+        ranges = [
+            self._range("unreleased", "aaa1111", "bbb2222"),
+            self._range("0.2.3", "ccc3333", "aaa1111"),
+        ]
+        commits = [
+            {"sha": "bbb2222", "subject": "latest commit", "version": "unreleased"},
+            {"sha": "aaa1111", "subject": "rev version", "version": "0.2.3"},
+            {"sha": "ccc3333", "subject": "older commit", "version": "0.2.3"},
+        ]
+        output = format_debug_log(ranges, commits)
+        assert "--- start vunreleased (aaa1111..bbb2222) [1 commits] ---" in output
+        assert "--- end unreleased ---" in output
+        assert "--- start v0.2.3 (ccc3333..aaa1111) [2 commits] ---" in output
+        assert "--- end 0.2.3 ---" in output
+
+    def test_commit_lines_appear_after_header(self):
+        ranges = [self._range("0.1.0", "root000", "abc1234")]
+        commits = [
+            {"sha": "abc1234", "subject": "fix bug", "version": "0.1.0"},
+        ]
+        output = format_debug_log(ranges, commits)
+        lines = output.splitlines()
+        header_idx = next(i for i, ln in enumerate(lines) if "--- start v0.1.0" in ln)
+        assert lines[header_idx + 1] == "abc1234 fix bug"
+
+    def test_empty_commits_returns_placeholder(self):
+        assert format_debug_log([], []) == "(no commits)"
+
+    def test_commit_count_in_header(self):
+        ranges = [self._range("0.2.0", "aaa0000", "bbb1111")]
+        commits = [
+            {"sha": "bbb1111", "subject": "c1", "version": "0.2.0"},
+            {"sha": "aaa9999", "subject": "c2", "version": "0.2.0"},
+            {"sha": "aaa8888", "subject": "c3", "version": "0.2.0"},
+        ]
+        output = format_debug_log(ranges, commits)
+        assert "[3 commits]" in output
+
+    def test_unknown_version_commits_shown(self):
+        ranges = [self._range("0.1.0", "aaa0000", "bbb1111")]
+        commits = [
+            {"sha": "zzz9999", "subject": "mystery commit", "version": "unknown"},
+        ]
+        output = format_debug_log(ranges, commits)
+        assert "--- start vunknown (unknown) [1 commits] ---" in output
+        assert "zzz9999 mystery commit" in output
+
+    def test_end_line_after_last_version(self):
+        ranges = [self._range("0.1.0", "aaa0000", "bbb1111")]
+        commits = [{"sha": "bbb1111", "subject": "commit", "version": "0.1.0"}]
+        output = format_debug_log(ranges, commits)
+        assert "--- end 0.1.0 ---" in output
+
+    def test_color_true_adds_ansi_codes(self):
+        ranges = [self._range("0.1.0", "aaa0000", "bbb1111")]
+        commits = [{"sha": "bbb1111", "subject": "commit", "version": "0.1.0"}]
+        output = format_debug_log(ranges, commits, color=True)
+        assert "\033[" in output
+
+    def test_color_false_no_ansi_codes(self):
+        ranges = [self._range("0.1.0", "aaa0000", "bbb1111")]
+        commits = [{"sha": "bbb1111", "subject": "commit", "version": "0.1.0"}]
+        output = format_debug_log(ranges, commits, color=False)
+        assert "\033[" not in output
+
+    def test_color_applies_to_boundary_lines_not_commits(self):
+        ranges = [self._range("0.1.0", "aaa0000", "bbb1111")]
+        commits = [{"sha": "bbb1111", "subject": "fix bug", "version": "0.1.0"}]
+        output = format_debug_log(ranges, commits, color=True)
+        lines = output.splitlines()
+        # Commit lines should not have ANSI codes
+        commit_lines = [ln for ln in lines if ln.startswith("bbb1111")]
+        assert len(commit_lines) == 1
+        assert "\033[" not in commit_lines[0]
+
+
+class TestDetectVersionRangesRollingMain:
+    """Tests for rolling-main era semantics in detect_version_ranges."""
+
+    def _mock_run(self, responses: dict):
+        """Build a mock _run that returns preset responses keyed by cmd tuple."""
+
+        def mock_run(cmd, *, check=True):
+            key = tuple(cmd)
+            if key in responses:
+                result = MagicMock()
+                result.stdout, result.returncode = responses[key]
+                return result
+            # Default: success with empty stdout
+            result = MagicMock()
+            result.stdout = ""
+            result.returncode = 0
+            return result
+
+        return mock_run
+
+    def test_rolling_main_oldest_era_uses_root_as_from(self):
+        """Oldest era: from_sha should be the root commit, to_sha the next bump."""
+        sha_010 = "a" * 40
+        sha_020 = "b" * 40
+        sha_root = "c" * 40
+
+        responses = {
+            ("git", "log", "--format=%H %aI", "--", "pyproject.toml"): (
+                f"{sha_020} 2026-02-01T00:00:00Z\n{sha_010} 2026-01-01T00:00:00Z\n",
+                0,
+            ),
+            ("git", "show", f"{sha_020}:pyproject.toml"): ('version = "0.2.0"\n', 0),
+            ("git", "show", f"{sha_010}:pyproject.toml"): ('version = "0.1.0"\n', 0),
+            ("git", "rev-list", "--max-parents=0", sha_010): (sha_root + "\n", 0),
+            ("git", "log", "-1", "--format=%aI", sha_root): ("2026-01-01T00:00:00Z\n", 0),
+            ("git", "rev-parse", "HEAD"): (sha_020 + "\n", 0),
+        }
+        with patch("tools.dev.release_notes._run", side_effect=self._mock_run(responses)):
+            ranges = detect_version_ranges(rolling_main=True)
+
+        version_map = {r.version: r for r in ranges}
+        r010 = version_map["0.1.0"]
+        r020 = version_map["0.2.0"]
+
+        # 0.1.0 era: from=root, to=0.2.0 bump
+        assert r010.from_sha == sha_root
+        assert r010.to_sha == sha_020
+        # 0.2.0 era (newest): from=0.2.0 bump, to=0.2.0 bump (HEAD == latest bump)
+        assert r020.from_sha == sha_020
+        assert r020.to_sha == sha_020
+
+    def test_no_rolling_main_traditional_semantics(self):
+        """Traditional mode: each version's to_sha is its own bump."""
+        sha_010 = "a" * 40
+        sha_020 = "b" * 40
+        sha_root = "c" * 40
+
+        responses = {
+            ("git", "log", "--format=%H %aI", "--", "pyproject.toml"): (
+                f"{sha_020} 2026-02-01T00:00:00Z\n{sha_010} 2026-01-01T00:00:00Z\n",
+                0,
+            ),
+            ("git", "show", f"{sha_020}:pyproject.toml"): ('version = "0.2.0"\n', 0),
+            ("git", "show", f"{sha_010}:pyproject.toml"): ('version = "0.1.0"\n', 0),
+            ("git", "rev-list", "--max-parents=0", sha_010): (sha_root + "\n", 0),
+            ("git", "log", "-1", "--format=%aI", sha_root): ("2026-01-01T00:00:00Z\n", 0),
+            ("git", "rev-parse", "HEAD"): (sha_020 + "\n", 0),
+        }
+        with patch("tools.dev.release_notes._run", side_effect=self._mock_run(responses)):
+            ranges = detect_version_ranges(rolling_main=False)
+
+        version_map = {r.version: r for r in ranges}
+        r010 = version_map["0.1.0"]
+        r020 = version_map["0.2.0"]
+
+        # Traditional 0.1.0: to=0.1.0 bump, from=root
+        assert r010.to_sha == sha_010
+        assert r010.from_sha == sha_root
+        # Traditional 0.2.0: to=0.2.0 bump, from=0.1.0 bump
+        assert r020.to_sha == sha_020
+        assert r020.from_sha == sha_010
