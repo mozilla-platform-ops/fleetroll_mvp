@@ -200,14 +200,25 @@ def render_markdown(
     from_date_display = vrange.from_date[:10] if vrange.from_date else "unknown"
     to_date_display = vrange.to_date[:10]
 
+    covered_count = total_commits - orphan_count
+    coverage_pct = (covered_count / total_commits * 100) if total_commits else 0
+    bead_breakdown = " | ".join(
+        f"{SECTION_LABELS.get(btype, btype.capitalize())}: {len(grouped_beads[btype])}"
+        for btype in SECTION_ORDER
+        if btype in grouped_beads
+    )
+
     lines = [
         f"# v{version} Release Notes (DRAFT)",
         "",
-        f"**Range:** `{from_sha_display}..{to_sha_display}` "
-        f"({from_date_display} to {to_date_display})",
-        f"**Beads closed:** {total_beads} | "
-        f"**Commits:** {total_commits} | "
-        f"**Orphan commits:** {orphan_count}",
+        "## Stats",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| **Range** | `{from_sha_display}..{to_sha_display}` ({from_date_display} to {to_date_display}) |",
+        f"| **Commits** | {total_commits} ({coverage_pct:.0f}% bead-covered) |",
+        f"| **Beads closed** | {total_beads} |",
+        f"| **By type** | {bead_breakdown or 'none'} |",
         "",
     ]
 
