@@ -141,12 +141,14 @@ def format_debug_log(
         return "(no commits)"
 
     _cyan_bold = "\033[1;36m"
+    _yellow_bold = "\033[1;33m"
     _reset = "\033[0m"
 
-    def _colorize(line: str) -> str:
-        if color:
-            return f"{_cyan_bold}{line}{_reset}"
-        return line
+    def _color_end(line: str) -> str:
+        return f"{_cyan_bold}{line}{_reset}" if color else line
+
+    def _color_start(line: str) -> str:
+        return f"{_yellow_bold}{line}{_reset}" if color else line
 
     version_counts: dict[str, int] = {}
     for c in annotated_commits:
@@ -159,21 +161,24 @@ def format_debug_log(
         to_short = r.to_sha[:7]
         range_info[r.version] = f"{from_short}..{to_short}"
 
+    def _fmt_tag(label: str, version: str) -> str:
+        count = version_counts.get(version, 0)
+        range_str = range_info.get(version, "unknown")
+        return f"--- {label} v{version} ({range_str}) [{count} commits] ---"
+
     lines = []
     current_version: str | None = None
     for commit in annotated_commits:
         version = commit["version"]
         if version != current_version:
             if current_version is not None:
-                lines.append(_colorize(f"--- end {current_version} ---"))
-            count = version_counts.get(version, 0)
-            range_str = range_info.get(version, "unknown")
-            lines.append(_colorize(f"--- start v{version} ({range_str}) [{count} commits] ---"))
+                lines.append(_color_start(_fmt_tag("start", current_version)))
+            lines.append(_color_end(_fmt_tag("end", version)))
             current_version = version
         lines.append(f"{commit['sha']} {commit['subject']}")
 
     if current_version is not None:
-        lines.append(_colorize(f"--- end {current_version} ---"))
+        lines.append(_color_start(_fmt_tag("start", current_version)))
 
     return "\n".join(lines)
 
