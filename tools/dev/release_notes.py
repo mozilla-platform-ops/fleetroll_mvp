@@ -158,10 +158,13 @@ def format_debug_log(
         to_short = r.to_sha[:7]
         range_info[r.version] = f"{from_short}..{to_short}"
 
-    def _fmt_tag(label: str, version: str) -> str:
+    def _fmt_start(version: str) -> str:
         count = version_counts.get(version, 0)
         range_str = range_info.get(version, "unknown")
-        return f"--- {label} v{version} ({range_str}) [{count} commits] ---"
+        return f"--- start v{version} ({range_str}) [{count} commits] ---"
+
+    def _fmt_end(version: str) -> str:
+        return f"--- end {version} ---"
 
     lines = []
     current_version: str | None = None
@@ -169,13 +172,13 @@ def format_debug_log(
         version = commit["version"]
         if version != current_version:
             if current_version is not None:
-                lines.append(_color_start(_fmt_tag("start", current_version)))
-            lines.append(_color_end(_fmt_tag("end", version)))
+                lines.append(_color_end(_fmt_end(current_version)))
+            lines.append(_color_start(_fmt_start(version)))
             current_version = version
         lines.append(f"{commit['sha']} {commit['subject']}")
 
     if current_version is not None:
-        lines.append(_color_start(_fmt_tag("start", current_version)))
+        lines.append(_color_end(_fmt_end(current_version)))
 
     return "\n".join(lines)
 
@@ -450,9 +453,125 @@ def fetch_git_commits(from_sha: str | None, to_sha: str) -> list[dict]:
     return commits
 
 
+def parse_bead_close_commits_from_diff(log_output: str) -> dict[str, str]:
+    """Parse raw git log -p output and return {bead_id: first_close_commit_sha}.
+
+    Identifies the first commit where each bead's status transitioned to "closed".
+    Compaction commits (status stays "closed" on both sides) are ignored.
+    """
+    result: dict[str, str] = {}
+    current_sha: str | None = None
+    removed: dict[str, str] = {}  # bead_id -> old status in this commit
+    added_closed: dict[str, str] = {}  # bead_id -> sha for +closed lines in this commit
+
+    def _flush() -> None:
+        for bead_id, sha in added_closed.items():
+            old_status = removed.get(bead_id)
+            if old_status is None or old_status != "closed":
+                if bead_id not in result:
+                    result[bead_id] = sha
+
+    for line in log_output.splitlines():
+        if line.startswith("COMMIT:"):
+            _flush()
+            current_sha = line[7:]
+            removed = {}
+            added_closed = {}
+        elif line.startswith(("---", "+++")):
+            continue
+        elif line.startswith("-") and current_sha:
+            try:
+                data = json.loads(line[1:])
+                if isinstance(data, dict) and "id" in data:
+                    removed[data["id"]] = data.get("status", "")
+            except (json.JSONDecodeError, ValueError):
+                pass
+        elif line.startswith("+") and current_sha:
+            try:
+                data = json.loads(line[1:])
+                if isinstance(data, dict) and "id" in data and data.get("status") == "closed":
+                    added_closed[data["id"]] = current_sha
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+    _flush()
+    return result
+
+
+def fetch_bead_close_commits() -> dict[str, str]:
+    """Return {bead_id: commit_sha} for the first commit where each bead was closed."""
+    result = _run(
+        [
+            "git",
+            "log",
+            "-p",
+            "--diff-filter=M",
+            "--format=COMMIT:%H",
+            "--",
+            ".beads/issues.jsonl",
+        ],
+        check=False,
+    )
+    if result.returncode != 0:
+        return {}
+    return parse_bead_close_commits_from_diff(result.stdout)
+
+
+def build_sha_to_version(ranges: list[VersionRange]) -> dict[str, str]:
+    """Return {full_sha: version} for all commits in all ranges."""
+    sha_to_version: dict[str, str] = {}
+    for vrange in ranges:
+        if vrange.from_sha is None:
+            result = _run(["git", "log", "--format=%H", vrange.to_sha], check=False)
+        elif vrange.from_sha == vrange.to_sha:
+            result = _run(["git", "log", "--format=%H", "-1", vrange.to_sha], check=False)
+        else:
+            parent_result = _run(["git", "log", "--format=%P", "-1", vrange.from_sha], check=False)
+            is_root = parent_result.returncode == 0 and not parent_result.stdout.strip()
+            rev_range = vrange.to_sha if is_root else f"{vrange.from_sha}..{vrange.to_sha}"
+            result = _run(["git", "log", "--format=%H", rev_range], check=False)
+        if result.returncode == 0:
+            for sha in result.stdout.splitlines():
+                sha = sha.strip()
+                if sha:
+                    sha_to_version[sha] = vrange.version
+    return sha_to_version
+
+
+def assign_beads_to_versions(all_beads: list[dict], ranges: list[VersionRange]) -> dict[str, str]:
+    """Return {bead_id: version} for all closed beads using git commit attribution.
+
+    Falls back to date-based filtering for beads whose close commit isn't in any range.
+    """
+    close_commits = fetch_bead_close_commits()
+    sha_to_version = build_sha_to_version(ranges)
+
+    bead_id_to_version: dict[str, str] = {}
+    fallback_beads: list[dict] = []
+
+    for bead in all_beads:
+        bead_id = bead.get("id")
+        if not bead_id:
+            continue
+        close_sha = close_commits.get(bead_id)
+        if close_sha and close_sha in sha_to_version:
+            bead_id_to_version[bead_id] = sha_to_version[close_sha]
+        else:
+            fallback_beads.append(bead)
+
+    for vrange in ranges:
+        fallback_in_range = filter_beads_by_date(fallback_beads, vrange.from_date, vrange.to_date)
+        for bead in fallback_in_range:
+            bead_id = bead.get("id")
+            if bead_id and bead_id not in bead_id_to_version:
+                bead_id_to_version[bead_id] = vrange.version
+
+    return bead_id_to_version
+
+
 def build_debug_annotated_commits(ranges: list[VersionRange]) -> list[dict]:
     """Build annotated commit list for debug output by mapping each commit to its version."""
-    sha_to_version: dict[str, str] = {}
+    sha_to_version_short: dict[str, str] = {}
     for vrange in ranges:
         if vrange.from_sha is None:
             # No lower bound: include all ancestors of to_sha
@@ -471,7 +590,7 @@ def build_debug_annotated_commits(ranges: list[VersionRange]) -> list[dict]:
             for sha in result.stdout.splitlines():
                 sha = sha.strip()
                 if sha:
-                    sha_to_version[sha] = vrange.version
+                    sha_to_version_short[sha] = vrange.version
 
     result = _run(["git", "log", "--format=%h %s"], check=False)
     if result.returncode != 0:
@@ -485,7 +604,7 @@ def build_debug_annotated_commits(ranges: list[VersionRange]) -> list[dict]:
         parts = line.split(" ", 1)
         sha = parts[0]
         subject = parts[1] if len(parts) > 1 else ""
-        version = sha_to_version.get(sha, "unknown")
+        version = sha_to_version_short.get(sha, "unknown")
         annotated.append({"sha": sha, "subject": subject, "version": version})
     return annotated
 
@@ -496,7 +615,12 @@ def build_debug_annotated_commits(ranges: list[VersionRange]) -> list[dict]:
 
 
 def generate_notes_for_range(
-    vrange: VersionRange, all_beads: list[dict], output_dir: Path, *, force: bool
+    vrange: VersionRange,
+    all_beads: list[dict],
+    output_dir: Path,
+    bead_id_to_version: dict[str, str],
+    *,
+    force: bool,
 ) -> str:
     """Generate notes for one version range. Returns the output file path."""
     version = vrange.version
@@ -508,7 +632,7 @@ def generate_notes_for_range(
         return str(output_path)
 
     commits = fetch_git_commits(vrange.from_sha, vrange.to_sha)
-    beads_in_range = filter_beads_by_date(all_beads, vrange.from_date, vrange.to_date)
+    beads_in_range = [b for b in all_beads if bead_id_to_version.get(b.get("id")) == version]
     grouped = group_beads_by_type(beads_in_range)
 
     bead_ids = {b["id"] for b in beads_in_range}
@@ -586,6 +710,7 @@ def main() -> int:
         return 0
 
     all_beads = fetch_closed_beads()
+    bead_id_to_version = assign_beads_to_versions(all_beads, ranges)
 
     if args.version:
         target = args.version.lstrip("v")
@@ -608,7 +733,9 @@ def main() -> int:
         return 1
 
     for vrange in ranges_to_process:
-        generate_notes_for_range(vrange, all_beads, output_dir, force=args.force)
+        generate_notes_for_range(
+            vrange, all_beads, output_dir, bead_id_to_version, force=args.force
+        )
 
     return 0
 

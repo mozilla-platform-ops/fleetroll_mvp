@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 from tools.dev.release_notes import (
     VersionRange,
+    assign_beads_to_versions,
     classify_commits,
     detect_version_ranges,
     extract_bead_id,
     extract_version_from_toml,
     filter_beads_by_date,
     format_debug_log,
+    generate_notes_for_range,
     group_beads_by_type,
+    parse_bead_close_commits_from_diff,
     parse_git_log_line,
     render_bead_line,
     render_commit_line,
@@ -188,37 +192,19 @@ class TestClassifyCommits:
 
 class TestRenderBeadLine:
     def test_basic(self):
-        bead = {
-            "id": "mvp-1ab",
-            "title": "Add ovr_info column",
-            "close_reason": "Completed successfully",
-        }
+        bead = {"id": "mvp-1ab", "title": "Add ovr_info column"}
         result = render_bead_line(bead)
-        assert result == "- **Add ovr_info column** (mvp-1ab) — Completed successfully"
+        assert result == "- **Add ovr_info column** (mvp-1ab)"
 
-    def test_truncates_long_reason(self):
-        bead = {
-            "id": "mvp-1ab",
-            "title": "Feature",
-            "close_reason": "x" * 200,
-        }
+    def test_no_title_fallback(self):
+        bead = {"id": "mvp-1ab"}
         result = render_bead_line(bead)
-        assert len(result) < 300
-        assert result.endswith("...")
+        assert "(no title)" in result
 
-    def test_no_close_reason(self):
-        bead = {"id": "mvp-1ab", "title": "Feature"}
+    def test_close_reason_not_shown(self):
+        bead = {"id": "mvp-1ab", "title": "Feature", "close_reason": "Done"}
         result = render_bead_line(bead)
-        assert "(no reason provided)" in result
-
-    def test_exact_120_chars_not_truncated(self):
-        bead = {
-            "id": "mvp-x",
-            "title": "T",
-            "close_reason": "a" * 120,
-        }
-        result = render_bead_line(bead)
-        assert "..." not in result
+        assert "Done" not in result
 
 
 class TestRenderCommitLine:
@@ -462,3 +448,199 @@ class TestDetectVersionRangesRollingMain:
         # Traditional 0.2.0: to=0.2.0 bump, from=0.1.0 bump
         assert r020.to_sha == sha_020
         assert r020.from_sha == sha_010
+
+
+class TestParseBreadCloseCommitsFromDiff:
+    def _jline(self, **kwargs) -> str:
+        return json.dumps(kwargs)
+
+    def test_basic_open_to_closed(self):
+        log = "\n".join(
+            [
+                "COMMIT:abc1234",
+                f"-{self._jline(id='mvp-aaa', status='open')}",
+                f"+{self._jline(id='mvp-aaa', status='closed')}",
+            ]
+        )
+        assert parse_bead_close_commits_from_diff(log) == {"mvp-aaa": "abc1234"}
+
+    def test_compaction_same_status_not_recorded(self):
+        log = "\n".join(
+            [
+                "COMMIT:abc1234",
+                f"-{self._jline(id='mvp-aaa', status='closed')}",
+                f"+{self._jline(id='mvp-aaa', status='closed')}",
+            ]
+        )
+        assert parse_bead_close_commits_from_diff(log) == {}
+
+    def test_new_bead_immediately_closed(self):
+        log = "\n".join(
+            [
+                "COMMIT:abc1234",
+                f"+{self._jline(id='mvp-aaa', status='closed')}",
+            ]
+        )
+        assert parse_bead_close_commits_from_diff(log) == {"mvp-aaa": "abc1234"}
+
+    def test_multiple_beads_same_commit(self):
+        log = "\n".join(
+            [
+                "COMMIT:abc1234",
+                f"-{self._jline(id='mvp-aaa', status='open')}",
+                f"+{self._jline(id='mvp-aaa', status='closed')}",
+                f"-{self._jline(id='mvp-bbb', status='in_progress')}",
+                f"+{self._jline(id='mvp-bbb', status='closed')}",
+            ]
+        )
+        assert parse_bead_close_commits_from_diff(log) == {
+            "mvp-aaa": "abc1234",
+            "mvp-bbb": "abc1234",
+        }
+
+    def test_invalid_json_skipped(self):
+        log = "COMMIT:abc1234\n-not valid json\n+also not json"
+        assert parse_bead_close_commits_from_diff(log) == {}
+
+    def test_file_header_lines_skipped(self):
+        log = "\n".join(
+            [
+                "COMMIT:abc1234",
+                "--- a/.beads/issues.jsonl",
+                "+++ b/.beads/issues.jsonl",
+                f"+{self._jline(id='mvp-aaa', status='closed')}",
+            ]
+        )
+        assert parse_bead_close_commits_from_diff(log) == {"mvp-aaa": "abc1234"}
+
+    def test_first_close_commit_wins(self):
+        log = "\n".join(
+            [
+                "COMMIT:first111",
+                f"-{self._jline(id='mvp-aaa', status='open')}",
+                f"+{self._jline(id='mvp-aaa', status='closed')}",
+                "COMMIT:second222",
+                f"-{self._jline(id='mvp-aaa', status='closed')}",
+                f"+{self._jline(id='mvp-aaa', status='closed')}",
+            ]
+        )
+        assert parse_bead_close_commits_from_diff(log) == {"mvp-aaa": "first111"}
+
+    def test_empty_input(self):
+        assert parse_bead_close_commits_from_diff("") == {}
+
+
+class TestAssignBeadsToVersions:
+    def _vrange(self, version, *, from_date=None, to_date="2026-02-01T00:00:00Z"):
+        return VersionRange(
+            version=version,
+            from_sha="sha_from",
+            to_sha="sha_to",
+            from_date=from_date,
+            to_date=to_date,
+        )
+
+    def test_bead_assigned_by_close_commit(self):
+        beads = [{"id": "mvp-abc", "closed_at": "2026-01-15T00:00:00Z"}]
+        ranges = [self._vrange("0.1.0")]
+
+        with (
+            patch("tools.dev.release_notes.fetch_bead_close_commits") as mock_close,
+            patch("tools.dev.release_notes.build_sha_to_version") as mock_sha_ver,
+        ):
+            mock_close.return_value = {"mvp-abc": "sha_commit"}
+            mock_sha_ver.return_value = {"sha_commit": "0.1.0"}
+            result = assign_beads_to_versions(beads, ranges)
+
+        assert result == {"mvp-abc": "0.1.0"}
+
+    def test_fallback_to_date_when_commit_not_in_range(self):
+        beads = [{"id": "mvp-abc", "closed_at": "2026-01-15T00:00:00Z"}]
+        ranges = [self._vrange("0.1.0", from_date=None, to_date="2026-02-01T00:00:00Z")]
+
+        with (
+            patch("tools.dev.release_notes.fetch_bead_close_commits") as mock_close,
+            patch("tools.dev.release_notes.build_sha_to_version") as mock_sha_ver,
+        ):
+            mock_close.return_value = {"mvp-abc": "unknown_sha"}
+            mock_sha_ver.return_value = {}
+            result = assign_beads_to_versions(beads, ranges)
+
+        assert result == {"mvp-abc": "0.1.0"}
+
+    def test_bead_without_close_commit_uses_date_fallback(self):
+        beads = [{"id": "mvp-xyz", "closed_at": "2026-01-20T00:00:00Z"}]
+        ranges = [self._vrange("0.2.0", from_date=None, to_date="2026-02-01T00:00:00Z")]
+
+        with (
+            patch("tools.dev.release_notes.fetch_bead_close_commits") as mock_close,
+            patch("tools.dev.release_notes.build_sha_to_version") as mock_sha_ver,
+        ):
+            mock_close.return_value = {}  # no close commit found at all
+            mock_sha_ver.return_value = {}
+            result = assign_beads_to_versions(beads, ranges)
+
+        assert result == {"mvp-xyz": "0.2.0"}
+
+
+class TestGenerateNotesForRange:
+    def _vrange(self):
+        return VersionRange(
+            version="0.1.0",
+            from_sha="sha_from_1234",
+            to_sha="sha_to_5678",
+            from_date="2026-01-01T00:00:00Z",
+            to_date="2026-02-01T00:00:00Z",
+        )
+
+    def test_writes_markdown_file(self, tmp_path):
+        beads = [
+            {
+                "id": "mvp-abc",
+                "title": "My feature",
+                "issue_type": "feature",
+                "priority": 2,
+                "close_reason": "Done",
+                "closed_at": "2026-01-15T00:00:00Z",
+            }
+        ]
+        bead_id_to_version = {"mvp-abc": "0.1.0"}
+
+        with patch("tools.dev.release_notes.fetch_git_commits") as mock_commits:
+            mock_commits.return_value = [
+                {"sha": "abc1234", "date": "2026-01-10", "subject": "Add feature (mvp-abc)"}
+            ]
+            generate_notes_for_range(
+                self._vrange(), beads, tmp_path, bead_id_to_version, force=True
+            )
+
+        out = (tmp_path / "v0.1.0.md").read_text()
+        assert "My feature" in out
+        assert "mvp-abc" in out
+
+    def test_skips_when_file_exists_no_force(self, tmp_path):
+        existing = tmp_path / "v0.1.0.md"
+        existing.write_text("existing content")
+
+        with patch("tools.dev.release_notes.fetch_git_commits") as mock_commits:
+            mock_commits.return_value = []
+            generate_notes_for_range(self._vrange(), [], tmp_path, {}, force=False)
+
+        assert existing.read_text() == "existing content"
+
+    def test_only_beads_in_version_included(self, tmp_path):
+        beads = [
+            {"id": "mvp-v1", "title": "V1 bead", "issue_type": "task", "priority": 2},
+            {"id": "mvp-v2", "title": "V2 bead", "issue_type": "task", "priority": 2},
+        ]
+        bead_id_to_version = {"mvp-v1": "0.1.0", "mvp-v2": "0.2.0"}
+
+        with patch("tools.dev.release_notes.fetch_git_commits") as mock_commits:
+            mock_commits.return_value = []
+            generate_notes_for_range(
+                self._vrange(), beads, tmp_path, bead_id_to_version, force=True
+            )
+
+        out = (tmp_path / "v0.1.0.md").read_text()
+        assert "V1 bead" in out
+        assert "V2 bead" not in out
