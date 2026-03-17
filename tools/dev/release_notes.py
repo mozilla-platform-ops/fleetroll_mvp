@@ -370,7 +370,7 @@ def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
             ranges.insert(
                 0,
                 VersionRange(
-                    version=f"{latest_bump['version']}-UNRELEASED",
+                    version=f"{latest_bump['version']}-IN_PROGRESS",
                     from_sha=latest_bump["sha"],
                     to_sha=head_sha,
                     from_date=latest_bump["date"],
@@ -378,9 +378,15 @@ def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
                 ),
             )
 
+    # When IN_PROGRESS exists, drop the redundant newest-bump era (from_sha==to_sha).
+    unreleased_bases = {
+        r.version.removesuffix("-IN_PROGRESS") for r in ranges if r.version.endswith("-IN_PROGRESS")
+    }
+    ranges = [r for r in ranges if not (r.from_sha == r.to_sha and r.version in unreleased_bases)]
+
     # Sort: unreleased first, then newest version first (descending)
     def sort_key(r: VersionRange):
-        if r.version.endswith("-UNRELEASED"):
+        if r.version.endswith("-IN_PROGRESS"):
             return (0, [])
         return (1, [-int(x) for x in r.version.split(".")])
 
@@ -486,7 +492,7 @@ def generate_notes_for_range(
 ) -> str:
     """Generate notes for one version range. Returns the output file path."""
     version = vrange.version
-    filename = f"v{version}.md" if not version.endswith("-UNRELEASED") else "unreleased.md"
+    filename = f"v{version.removesuffix('-IN_PROGRESS')}.md"
     output_path = output_dir / filename
 
     if output_path.exists() and not force:
@@ -592,7 +598,7 @@ def main() -> int:
     elif args.all:
         ranges_to_process = ranges
     # Default: generate for the latest unreleased (or newest version if all released)
-    elif (ranges and ranges[0].version.endswith("-UNRELEASED")) or ranges:
+    elif (ranges and ranges[0].version.endswith("-IN_PROGRESS")) or ranges:
         ranges_to_process = [ranges[0]]
     else:
         print("No ranges to process.", file=sys.stderr)
