@@ -95,11 +95,21 @@ def extract_bead_id(subject: str) -> str | None:
     return match.group(1) if match else None
 
 
+_HOUSEKEEPING_PATTERNS = ("br sync", "beads sync")
+
+
+def is_housekeeping_commit(subject: str) -> bool:
+    """Return True for beads housekeeping commits that should not appear as orphans."""
+    lower = subject.lower()
+    return any(pat in lower for pat in _HOUSEKEEPING_PATTERNS)
+
+
 def classify_commits(commits: list[dict], bead_ids: set[str]) -> tuple[list[dict], list[dict]]:
     """Split commits into (covered, orphan) based on bead ID references.
 
-    covered = commit references a bead in bead_ids
-    orphan  = commit does not reference any bead in bead_ids
+    covered     = commit references a bead in bead_ids
+    orphan      = commit does not reference any bead in bead_ids
+    housekeeping commits (br sync / beads sync) are silently dropped from orphans
     """
     covered = []
     orphans = []
@@ -107,7 +117,7 @@ def classify_commits(commits: list[dict], bead_ids: set[str]) -> tuple[list[dict
         bead_id = extract_bead_id(commit["subject"])
         if bead_id and bead_id in bead_ids:
             covered.append(commit)
-        else:
+        elif not is_housekeeping_commit(commit["subject"]):
             orphans.append(commit)
     return covered, orphans
 

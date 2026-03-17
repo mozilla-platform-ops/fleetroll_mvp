@@ -16,6 +16,7 @@ from tools.dev.release_notes import (
     format_debug_log,
     generate_notes_for_range,
     group_beads_by_type,
+    is_housekeeping_commit,
     parse_bead_close_commits_from_diff,
     parse_git_log_line,
     render_bead_line,
@@ -188,6 +189,46 @@ class TestClassifyCommits:
         bead_ids = {"mvp-abc"}  # mvp-other not in range
         _, orphans = classify_commits(commits, bead_ids)
         assert len(orphans) == 1
+
+    def test_br_sync_not_orphan(self):
+        commits = [self._commit("aaa", "br sync")]
+        _, orphans = classify_commits(commits, set())
+        assert orphans == []
+
+    def test_beads_sync_not_orphan(self):
+        commits = [self._commit("aaa", "beads sync")]
+        _, orphans = classify_commits(commits, set())
+        assert orphans == []
+
+    def test_br_sync_with_extra_content_not_orphan(self):
+        commits = [self._commit("aaa", "br sync, claude sync")]
+        _, orphans = classify_commits(commits, set())
+        assert orphans == []
+
+    def test_unrelated_sync_is_orphan(self):
+        commits = [self._commit("aaa", "sync notes and beads")]
+        _, orphans = classify_commits(commits, set())
+        assert len(orphans) == 1
+
+
+class TestIsHousekeepingCommit:
+    def test_br_sync_exact(self):
+        assert is_housekeeping_commit("br sync") is True
+
+    def test_beads_sync_exact(self):
+        assert is_housekeeping_commit("beads sync") is True
+
+    def test_br_sync_with_suffix(self):
+        assert is_housekeeping_commit("br sync, br config reduction") is True
+
+    def test_case_insensitive(self):
+        assert is_housekeeping_commit("BR Sync") is True
+
+    def test_unrelated_commit(self):
+        assert is_housekeeping_commit("Fix login bug") is False
+
+    def test_sync_without_br_or_beads(self):
+        assert is_housekeeping_commit("sync notes and beads") is False
 
 
 class TestRenderBeadLine:
