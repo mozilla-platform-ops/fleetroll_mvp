@@ -116,10 +116,7 @@ def render_bead_line(bead: dict) -> str:
     """Render a single bead as a markdown bullet."""
     title = bead.get("title", "(no title)")
     bead_id = bead.get("id", "")
-    reason = bead.get("close_reason") or "(no reason provided)"
-    if len(reason) > 120:
-        reason = reason[:117] + "..."
-    return f"- **{title}** ({bead_id}) — {reason}"
+    return f"- **{title}** ({bead_id})"
 
 
 def render_commit_line(commit: dict) -> str:
@@ -522,19 +519,15 @@ def generate_notes_for_range(
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path.write_text(md)
 
-    bead_summary = ", ".join(
-        f"{len(beads)} {SECTION_LABELS.get(btype, btype)}"
-        for btype in SECTION_ORDER
-        if (beads := grouped.get(btype, []))
-    )
-    orphan_count = len(orphan_commits)
-    total_commits = len(commits)
+    total_beads = sum(len(v) for v in grouped.values())
+    covered = len(commits) - len(orphan_commits)
+    coverage_pct = (covered / len(commits) * 100) if commits else 0
     from_display = vrange.from_sha[:7] if vrange.from_sha else "root"
     git_range = f"{from_display}..{vrange.to_sha[:7]}"
     print(
-        f"  {output_path}  |  {git_range}"
-        f"  |  beads: {bead_summary or 'none'}"
-        f"  |  commits: {total_commits}  |  orphans: {orphan_count}"
+        f"  {version:<24}  {git_range}  "
+        f"{total_beads} beads ({coverage_pct:.0f}% covered)  "
+        f"{len(commits)} commits"
     )
     return str(output_path)
 
@@ -581,7 +574,7 @@ def main() -> int:
 
     output_dir = Path(args.output_dir)
 
-    print("Detecting version ranges from git history...")
+    print("Detecting ranges and fetching beads...")
     ranges = detect_version_ranges(rolling_main=args.rolling_main)
     if not ranges:
         print("No version ranges detected.", file=sys.stderr)
@@ -592,7 +585,6 @@ def main() -> int:
         print(format_debug_log(ranges, annotated, color=sys.stdout.isatty()))
         return 0
 
-    print("Fetching closed beads...")
     all_beads = fetch_closed_beads()
 
     if args.version:
@@ -616,7 +608,6 @@ def main() -> int:
         return 1
 
     for vrange in ranges_to_process:
-        print(f"\nGenerating notes for v{vrange.version}...")
         generate_notes_for_range(vrange, all_beads, output_dir, force=args.force)
 
     return 0
