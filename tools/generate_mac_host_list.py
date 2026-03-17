@@ -69,7 +69,7 @@ def parse_inventory(raw_yaml: str) -> list[dict]:
 
 def generate_group_file(
     group: dict, *, inventory_name: str, generated_at: datetime.datetime
-) -> str:
+) -> str | None:
     """Build file content for one inventory group."""
     targets = group.get("targets") or []
     facts = group.get("facts") or {}
@@ -92,7 +92,11 @@ def generate_group_file(
 
     lines.append("")
 
-    sorted_targets = sorted(targets, key=natural_key)
+    filtered = [t for t in targets if not str(t).endswith(".local")]
+    if not filtered:
+        return None
+
+    sorted_targets = sorted(filtered, key=natural_key)
     lines.extend(str(t) for t in sorted_targets)
 
     lines.append("")
@@ -154,6 +158,15 @@ def main() -> None:
             group_name = group.get("name", "unknown")
             content = generate_group_file(group, inventory_name=filename, generated_at=generated_at)
             out_path = OUTPUT_DIR / f"{group_name}.list"
+
+            if content is None:
+                if out_path.exists():
+                    out_path.unlink()
+                    print(f"  Removed {out_path} (empty after filtering)", file=sys.stderr)
+                else:
+                    print(f"  Skipped {group_name} (empty after filtering)", file=sys.stderr)
+                continue
+
             out_path.write_text(content, encoding="utf-8")
 
             host_count = len(group.get("targets") or [])
