@@ -90,8 +90,11 @@ def parse_git_log_line(line: str) -> dict | None:
 
 
 def extract_bead_id(subject: str) -> str | None:
-    """Extract mvp-xxx bead ID from a commit subject line."""
-    match = re.search(r"\((mvp-[a-z0-9]+)\)", subject)
+    """Extract mvp-xxx bead ID from a commit subject line.
+
+    Handles sub-task suffixes like (mvp-1k8.3) — strips the .N and returns mvp-1k8.
+    """
+    match = re.search(r"\((mvp-[a-z0-9]+)(?:\.[0-9]+)?\)", subject)
     return match.group(1) if match else None
 
 
@@ -219,7 +222,7 @@ def render_markdown(
     countable = total_commits - housekeeping_count
     covered_count = countable - orphan_count
     coverage_pct = (covered_count / countable * 100) if countable else 0
-    bead_breakdown = " | ".join(
+    bead_breakdown = ", ".join(
         f"{SECTION_LABELS.get(btype, btype.capitalize())}: {len(grouped_beads[btype])}"
         for btype in SECTION_ORDER
         if btype in grouped_beads
@@ -234,14 +237,15 @@ def render_markdown(
         "|---|---|",
         f"| **Range** | `{from_sha_display}..{to_sha_display}` ({from_date_display} to {to_date_display}) |",
         f"| **Commits** | {total_commits} ({coverage_pct:.0f}% beads-covered) |",
-        f"| **Beads closed** | {total_beads} |",
-        f"| **By type** | {bead_breakdown or 'none'} |",
-        "",
     ]
     if housekeeping_count:
-        lines.insert(
-            -1, f"| **Housekeeping** | {housekeeping_count} (not counted toward coverage) |"
+        lines.append(
+            f"| **Housekeeping** | {housekeeping_count} commits (not counted toward coverage) |"
         )
+    lines += [
+        f"| **Beads closed** | {total_beads}{f' ({bead_breakdown})' if bead_breakdown else ''} |",
+        "",
+    ]
 
     for btype in SECTION_ORDER:
         beads = grouped_beads.get(btype, [])

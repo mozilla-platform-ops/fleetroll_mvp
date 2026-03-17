@@ -161,6 +161,12 @@ class TestExtractBeadId:
     def test_no_match_without_parens(self):
         assert extract_bead_id("mvp-1ab without parens") is None
 
+    def test_subtask_suffix_stripped(self):
+        assert extract_bead_id("Fix thing (mvp-1k8.3)") == "mvp-1k8"
+
+    def test_subtask_suffix_double_digit(self):
+        assert extract_bead_id("Fix thing (mvp-1k8.12)") == "mvp-1k8"
+
 
 class TestClassifyCommits:
     def _commit(self, sha, subject):
@@ -332,7 +338,7 @@ class TestRenderMarkdown:
     def test_housekeeping_row_shown_when_nonzero(self):
         md = render_markdown("0.2.3", self._range(), {}, [], [], housekeeping_count=3)
         assert "Housekeeping" in md
-        assert "3" in md
+        assert "3 commits" in md
         assert "not counted toward coverage" in md
 
     def test_housekeeping_row_absent_when_zero(self):
