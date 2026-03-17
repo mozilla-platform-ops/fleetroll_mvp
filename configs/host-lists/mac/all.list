@@ -1,13 +1,34 @@
 # #############################################################
 # THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.
-# Generated: 2026-03-06 08:28 UTC
+# Generated: 2026-03-17 23:24 UTC
 # Source:    configs/host-lists/mac/*.list (excluding all.list)
 # Regenerate: uv run tools/generate_all_host_lists.py
 # #############################################################
 
-# source: all_macminis.list
+# source: mac-v3-signing-dep.list
+dep-mac-v3-signing1.srv.releng.mdc1.mozilla.com
+dep-mac-v3-signing3.srv.releng.mdc1.mozilla.com
+
+# source: mac-v3-signing-ff-prod.list
+mac-v3-signing1.srv.releng.mdc1.mozilla.com
+mac-v3-signing2.srv.releng.mdc1.mozilla.com
+mac-v3-signing3.srv.releng.mdc1.mozilla.com
+mac-v3-signing7.srv.releng.mdc1.mozilla.com
+mac-v3-signing8.srv.releng.mdc1.mozilla.com
+mac-v3-signing9.srv.releng.mdc1.mozilla.com
+mac-v3-signing14.srv.releng.mdc1.mozilla.com
+mac-v3-signing15.srv.releng.mdc1.mozilla.com
+mac-v3-signing16.srv.releng.mdc1.mozilla.com
+mac-v3-signing17.srv.releng.mdc1.mozilla.com
+mac-v3-signing18.srv.releng.mdc1.mozilla.com
+mac-v3-signing19.srv.releng.mdc1.mozilla.com
+mac-v3-signing20.srv.releng.mdc1.mozilla.com
+
+# source: mac-v4-signing-dep.list
 macmini-m2-44.test.releng.mdc1.mozilla.com
 macmini-m2-45.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1500-m4.list
 macmini-m4-60.test.releng.mdc1.mozilla.com
 macmini-m4-61.test.releng.mdc1.mozilla.com
 macmini-m4-62.test.releng.mdc1.mozilla.com
@@ -59,18 +80,30 @@ macmini-m4-107.test.releng.mdc1.mozilla.com
 macmini-m4-108.test.releng.mdc1.mozilla.com
 macmini-m4-109.test.releng.mdc1.mozilla.com
 macmini-m4-110.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1500-m4-staging.list
 macmini-m4-111.test.releng.mdc1.mozilla.com
 macmini-m4-112.test.releng.mdc1.mozilla.com
 macmini-m4-113.test.releng.mdc1.mozilla.com
 macmini-m4-114.test.releng.mdc1.mozilla.com
 macmini-m4-115.test.releng.mdc1.mozilla.com
+
+# source: gecko-3-b-osx-arm64.list
 macmini-m4-120.test.releng.mdc1.mozilla.com
+
+# source: gecko-1-b-osx-arm64.list
 macmini-m4-121.test.releng.mdc1.mozilla.com
 macmini-m4-122.test.releng.mdc1.mozilla.com
+
+# source: gecko-3-b-osx-arm64.list
 macmini-m4-123.test.releng.mdc1.mozilla.com
 macmini-m4-124.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1500-m4-staging.list
 macmini-m4-126.test.releng.mdc1.mozilla.com
 macmini-m4-127.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1500-m4.list
 macmini-m4-150.test.releng.mdc1.mozilla.com
 macmini-m4-151.test.releng.mdc1.mozilla.com
 macmini-m4-152.test.releng.mdc1.mozilla.com
@@ -92,9 +125,15 @@ macmini-m4-167.test.releng.mdc1.mozilla.com
 macmini-m4-168.test.releng.mdc1.mozilla.com
 macmini-m4-169.test.releng.mdc1.mozilla.com
 macmini-m4-170.test.releng.mdc1.mozilla.com
+
+# source: enterprise-1-b-osx-arm64.list
 macmini-m4-171.test.releng.mdc1.mozilla.com
+
+# source: enterprise-3-b-osx-arm64.list
 macmini-m4-172.test.releng.mdc1.mozilla.com
 macmini-m4-173.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1500-m4-ipv6.list
 macmini-m4-174.test.releng.mdc1.mozilla.com
 macmini-m4-175.test.releng.mdc1.mozilla.com
 macmini-m4-176.test.releng.mdc1.mozilla.com
@@ -105,6 +144,8 @@ macmini-m4-180.test.releng.mdc1.mozilla.com
 macmini-m4-181.test.releng.mdc1.mozilla.com
 macmini-m4-182.test.releng.mdc1.mozilla.com
 macmini-m4-183.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1500-m4.list
 macmini-m4-197.test.releng.mdc1.mozilla.com
 macmini-m4-198.test.releng.mdc1.mozilla.com
 macmini-m4-199.test.releng.mdc1.mozilla.com
@@ -118,6 +159,8 @@ macmini-m4-206.test.releng.mdc1.mozilla.com
 macmini-m4-207.test.releng.mdc1.mozilla.com
 macmini-m4-208.test.releng.mdc1.mozilla.com
 macmini-m4-209.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-1.test.releng.mdc1.mozilla.com
 macmini-r8-2.test.releng.mdc1.mozilla.com
 macmini-r8-3.test.releng.mdc1.mozilla.com
@@ -169,7 +212,11 @@ macmini-r8-48.test.releng.mdc1.mozilla.com
 macmini-r8-49.test.releng.mdc1.mozilla.com
 macmini-r8-51.test.releng.mdc1.mozilla.com
 macmini-r8-59.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-60.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-61.test.releng.mdc1.mozilla.com
 macmini-r8-62.test.releng.mdc1.mozilla.com
 macmini-r8-63.test.releng.mdc1.mozilla.com
@@ -179,95 +226,193 @@ macmini-r8-66.test.releng.mdc1.mozilla.com
 macmini-r8-67.test.releng.mdc1.mozilla.com
 macmini-r8-68.test.releng.mdc1.mozilla.com
 macmini-r8-69.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-70.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-71.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-72.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-73.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-74.test.releng.mdc1.mozilla.com
 macmini-r8-75.test.releng.mdc1.mozilla.com
 macmini-r8-76.test.releng.mdc1.mozilla.com
 macmini-r8-77.test.releng.mdc1.mozilla.com
 macmini-r8-78.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-79.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-80.test.releng.mdc1.mozilla.com
 macmini-r8-81.test.releng.mdc1.mozilla.com
 macmini-r8-82.test.releng.mdc1.mozilla.com
 macmini-r8-83.test.releng.mdc1.mozilla.com
 macmini-r8-84.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-85.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-86.test.releng.mdc1.mozilla.com
 macmini-r8-87.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-88.test.releng.mdc1.mozilla.com
 macmini-r8-89.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-90.test.releng.mdc1.mozilla.com
 macmini-r8-91.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-92.test.releng.mdc1.mozilla.com
 macmini-r8-93.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-94.test.releng.mdc1.mozilla.com
 macmini-r8-95.test.releng.mdc1.mozilla.com
 macmini-r8-96.test.releng.mdc1.mozilla.com
 macmini-r8-97.test.releng.mdc1.mozilla.com
 macmini-r8-98.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-99.test.releng.mdc1.mozilla.com
 macmini-r8-100.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-101.test.releng.mdc1.mozilla.com
+
+# source: mozillavpn-b-3-osx.list
 macmini-r8-102.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-103.test.releng.mdc1.mozilla.com
 macmini-r8-104.test.releng.mdc1.mozilla.com
 macmini-r8-105.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-106.test.releng.mdc1.mozilla.com
 macmini-r8-107.test.releng.mdc1.mozilla.com
 macmini-r8-108.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8-staging.list
 macmini-r8-109.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-110.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-111.test.releng.mdc1.mozilla.com
 macmini-r8-112.test.releng.mdc1.mozilla.com
 macmini-r8-113.test.releng.mdc1.mozilla.com
 macmini-r8-115.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-116.test.releng.mdc1.mozilla.com
 macmini-r8-117.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-118.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-119.test.releng.mdc1.mozilla.com
+
+# source: applicationservices-1-b-osx-1015.list
 macmini-r8-122.test.releng.mdc1.mozilla.com
+
+# source: nss-3-b-osx-1015.list
 macmini-r8-124.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8-staging.list
 macmini-r8-125.test.releng.mdc1.mozilla.com
 macmini-r8-126.test.releng.mdc1.mozilla.com
 macmini-r8-127.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-128.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-129.test.releng.mdc1.mozilla.com
 macmini-r8-130.test.releng.mdc1.mozilla.com
 macmini-r8-131.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-132.test.releng.mdc1.mozilla.com
 macmini-r8-133.test.releng.mdc1.mozilla.com
 macmini-r8-134.test.releng.mdc1.mozilla.com
 macmini-r8-135.test.releng.mdc1.mozilla.com
 macmini-r8-136.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-137.test.releng.mdc1.mozilla.com
+
+# source: gecko-1-b-osx-1015.list
 macmini-r8-138.test.releng.mdc1.mozilla.com
+
+# source: gecko-3-b-osx-1015.list
 macmini-r8-139.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-140.test.releng.mdc1.mozilla.com
 macmini-r8-141.test.releng.mdc1.mozilla.com
 macmini-r8-142.test.releng.mdc1.mozilla.com
 macmini-r8-143.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-144.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-145.test.releng.mdc1.mozilla.com
 macmini-r8-146.test.releng.mdc1.mozilla.com
 macmini-r8-147.test.releng.mdc1.mozilla.com
 macmini-r8-148.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-149.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-150.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-151.test.releng.mdc1.mozilla.com
 macmini-r8-152.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-153.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8-staging.list
 macmini-r8-154.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-155.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8-staging.list
 macmini-r8-156.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-157.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-158.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-159.test.releng.mdc1.mozilla.com
 macmini-r8-160.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-161.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-162.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-163.test.releng.mdc1.mozilla.com
 macmini-r8-164.test.releng.mdc1.mozilla.com
 macmini-r8-165.test.releng.mdc1.mozilla.com
@@ -282,47 +427,91 @@ macmini-r8-173.test.releng.mdc1.mozilla.com
 macmini-r8-174.test.releng.mdc1.mozilla.com
 macmini-r8-175.test.releng.mdc1.mozilla.com
 macmini-r8-176.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-177.test.releng.mdc1.mozilla.com
 macmini-r8-178.test.releng.mdc1.mozilla.com
 macmini-r8-181.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-186.test.releng.mdc1.mozilla.com
 macmini-r8-187.test.releng.mdc1.mozilla.com
 macmini-r8-188.test.releng.mdc1.mozilla.com
 macmini-r8-190.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-191.test.releng.mdc1.mozilla.com
 macmini-r8-192.test.releng.mdc1.mozilla.com
+
+# source: applicationservices-3-b-osx-1015.list
 macmini-r8-193.test.releng.mdc1.mozilla.com
+
+# source: gecko-1-b-osx-1015.list
 macmini-r8-195.test.releng.mdc1.mozilla.com
 macmini-r8-196.test.releng.mdc1.mozilla.com
 macmini-r8-197.test.releng.mdc1.mozilla.com
+
+# source: gecko-3-b-osx-1015.list
 macmini-r8-198.test.releng.mdc1.mozilla.com
 macmini-r8-199.test.releng.mdc1.mozilla.com
 macmini-r8-200.test.releng.mdc1.mozilla.com
+
+# source: applicationservices-3-b-osx-1015.list
 macmini-r8-201.test.releng.mdc1.mozilla.com
+
+# source: gecko-1-b-osx-1015-staging.list
 macmini-r8-202.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-203.test.releng.mdc1.mozilla.com
 macmini-r8-204.test.releng.mdc1.mozilla.com
 macmini-r8-205.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-206.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-208.test.releng.mdc1.mozilla.com
 macmini-r8-209.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-210.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-211.test.releng.mdc1.mozilla.com
 macmini-r8-212.test.releng.mdc1.mozilla.com
 macmini-r8-213.test.releng.mdc1.mozilla.com
 macmini-r8-214.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-215.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-216.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-217.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-218.test.releng.mdc1.mozilla.com
 macmini-r8-219.test.releng.mdc1.mozilla.com
 macmini-r8-220.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-221.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-222.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-223.test.releng.mdc1.mozilla.com
 macmini-r8-224.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1015-r8.list
 macmini-r8-225.test.releng.mdc1.mozilla.com
 macmini-r8-226.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-227.test.releng.mdc1.mozilla.com
 macmini-r8-228.test.releng.mdc1.mozilla.com
 macmini-r8-229.test.releng.mdc1.mozilla.com
@@ -336,12 +525,20 @@ macmini-r8-237.test.releng.mdc1.mozilla.com
 macmini-r8-238.test.releng.mdc1.mozilla.com
 macmini-r8-239.test.releng.mdc1.mozilla.com
 macmini-r8-240.test.releng.mdc1.mozilla.com
+
+# source: gecko-3-b-osx-1015.list
 macmini-r8-241.test.releng.mdc1.mozilla.com
 macmini-r8-242.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-243.test.releng.mdc1.mozilla.com
 macmini-r8-244.test.releng.mdc1.mozilla.com
 macmini-r8-245.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8-staging.list
 macmini-r8-246.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-247.test.releng.mdc1.mozilla.com
 macmini-r8-248.test.releng.mdc1.mozilla.com
 macmini-r8-249.test.releng.mdc1.mozilla.com
@@ -349,8 +546,12 @@ macmini-r8-250.test.releng.mdc1.mozilla.com
 macmini-r8-251.test.releng.mdc1.mozilla.com
 macmini-r8-252.test.releng.mdc1.mozilla.com
 macmini-r8-253.test.releng.mdc1.mozilla.com
+
+# source: applicationservices-1-b-osx-1015.list
 macmini-r8-254.test.releng.mdc1.mozilla.com
 macmini-r8-255.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-256.test.releng.mdc1.mozilla.com
 macmini-r8-257.test.releng.mdc1.mozilla.com
 macmini-r8-258.test.releng.mdc1.mozilla.com
@@ -368,7 +569,11 @@ macmini-r8-269.test.releng.mdc1.mozilla.com
 macmini-r8-270.test.releng.mdc1.mozilla.com
 macmini-r8-271.test.releng.mdc1.mozilla.com
 macmini-r8-272.test.releng.mdc1.mozilla.com
+
+# source: applicationservices-1-b-osx-1015.list
 macmini-r8-273.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-274.test.releng.mdc1.mozilla.com
 macmini-r8-275.test.releng.mdc1.mozilla.com
 macmini-r8-276.test.releng.mdc1.mozilla.com
@@ -384,16 +589,32 @@ macmini-r8-285.test.releng.mdc1.mozilla.com
 macmini-r8-286.test.releng.mdc1.mozilla.com
 macmini-r8-287.test.releng.mdc1.mozilla.com
 macmini-r8-288.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8-staging.list
 macmini-r8-361.test.releng.mdc1.mozilla.com
+
+# source: mozillavpn-b-1-osx.list
 macmini-r8-362.test.releng.mdc1.mozilla.com
+
+# source: mozillavpn-b-3-osx.list
 macmini-r8-364.test.releng.mdc1.mozilla.com
 macmini-r8-366.test.releng.mdc1.mozilla.com
+
+# source: nss-1-b-osx-1015.list
 macmini-r8-368.test.releng.mdc1.mozilla.com
 macmini-r8-369.test.releng.mdc1.mozilla.com
+
+# source: nss-3-b-osx-1015.list
 macmini-r8-370.test.releng.mdc1.mozilla.com
+
+# source: mozillavpn-b-1-osx.list
 macmini-r8-373.test.releng.mdc1.mozilla.com
 macmini-r8-374.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8-staging.list
 macmini-r8-375.test.releng.mdc1.mozilla.com
+
+# source: gecko-t-osx-1400-r8.list
 macmini-r8-376.test.releng.mdc1.mozilla.com
 macmini-r8-377.test.releng.mdc1.mozilla.com
 macmini-r8-378.test.releng.mdc1.mozilla.com
@@ -403,3 +624,7 @@ macmini-r8-381.test.releng.mdc1.mozilla.com
 macmini-r8-382.test.releng.mdc1.mozilla.com
 macmini-r8-383.test.releng.mdc1.mozilla.com
 macmini-r8-384.test.releng.mdc1.mozilla.com
+
+# source: mac-v3-signing-tb-prod.list
+tb-mac-v3-signing1.srv.releng.mdc1.mozilla.com
+tb-mac-v3-signing3.srv.releng.mdc1.mozilla.com

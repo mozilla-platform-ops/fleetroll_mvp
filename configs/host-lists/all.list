@@ -1,6 +1,6 @@
 # #############################################################
 # THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.
-# Generated: 2026-03-06 08:28 UTC
+# Generated: 2026-03-17 23:24 UTC
 # Source:    configs/host-lists/{linux,mac,windows}/all.list
 # Regenerate: uv run tools/generate_all_host_lists.py
 # #############################################################
@@ -288,6 +288,21 @@ t-linux64-ms-279.test.releng.mdc1.mozilla.com
 t-linux64-ms-280.test.releng.mdc1.mozilla.com
 
 # mac
+dep-mac-v3-signing1.srv.releng.mdc1.mozilla.com
+dep-mac-v3-signing3.srv.releng.mdc1.mozilla.com
+mac-v3-signing1.srv.releng.mdc1.mozilla.com
+mac-v3-signing2.srv.releng.mdc1.mozilla.com
+mac-v3-signing3.srv.releng.mdc1.mozilla.com
+mac-v3-signing7.srv.releng.mdc1.mozilla.com
+mac-v3-signing8.srv.releng.mdc1.mozilla.com
+mac-v3-signing9.srv.releng.mdc1.mozilla.com
+mac-v3-signing14.srv.releng.mdc1.mozilla.com
+mac-v3-signing15.srv.releng.mdc1.mozilla.com
+mac-v3-signing16.srv.releng.mdc1.mozilla.com
+mac-v3-signing17.srv.releng.mdc1.mozilla.com
+mac-v3-signing18.srv.releng.mdc1.mozilla.com
+mac-v3-signing19.srv.releng.mdc1.mozilla.com
+mac-v3-signing20.srv.releng.mdc1.mozilla.com
 macmini-m2-44.test.releng.mdc1.mozilla.com
 macmini-m2-45.test.releng.mdc1.mozilla.com
 macmini-m4-60.test.releng.mdc1.mozilla.com
@@ -685,6 +700,8 @@ macmini-r8-381.test.releng.mdc1.mozilla.com
 macmini-r8-382.test.releng.mdc1.mozilla.com
 macmini-r8-383.test.releng.mdc1.mozilla.com
 macmini-r8-384.test.releng.mdc1.mozilla.com
+tb-mac-v3-signing1.srv.releng.mdc1.mozilla.com
+tb-mac-v3-signing3.srv.releng.mdc1.mozilla.com
 
 # windows
 nuc13-001.wintest2.releng.mdc1.mozilla.com
