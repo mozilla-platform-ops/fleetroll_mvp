@@ -110,6 +110,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                             last_ok=latest_ok.get(h),
                             tc_data=tc_data.get(strip_fqdn(h)),
                             sha_cache=sha_cache,
+                            notes_data=notes_data,
                         )
                         values["_host"] = h
                         row_dicts.append(values)
