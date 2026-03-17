@@ -6,6 +6,7 @@ import contextlib
 import datetime as dt
 import sqlite3
 import time
+import types
 from curses import error as curses_error
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -247,7 +248,7 @@ class MonitorDisplay:
                 self.draw_screen()
         return False
 
-    def _mutate_filter_bar(self, key: int, cm: object, text: str, pos: int) -> None:
+    def _mutate_filter_bar(self, key: int, cm: types.ModuleType, text: str, pos: int) -> None:
         """Apply state mutations for filter bar editing keys (no redraw)."""
         if key == 21:  # Ctrl+U — clear line
             self._filter_history_idx = -1
