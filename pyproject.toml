@@ -25,6 +25,7 @@ audit = ["pip-audit"]
 fleetroll = "fleetroll:main"
 verify-imports = "tools.dev.verify_imports:main"
 natural-sort = "tools.natural_sort:main"
+release-notes = "tools.dev.release_notes:main"
 
 [build-system]
 requires = ["hatchling"]
