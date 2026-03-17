@@ -435,11 +435,19 @@ def build_debug_annotated_commits(ranges: list[VersionRange]) -> list[dict]:
     """Build annotated commit list for debug output by mapping each commit to its version."""
     sha_to_version: dict[str, str] = {}
     for vrange in ranges:
-        if vrange.from_sha is None or vrange.from_sha == vrange.to_sha:
-            rev_range = vrange.to_sha
+        if vrange.from_sha is None:
+            # No lower bound: include all ancestors of to_sha
+            result = _run(["git", "log", "--format=%h", vrange.to_sha], check=False)
+        elif vrange.from_sha == vrange.to_sha:
+            # Single-commit era (newest bump with no further commits yet).
+            # Use -1 to avoid bare SHA returning all ancestors.
+            result = _run(["git", "log", "--format=%h", "-1", vrange.to_sha], check=False)
         else:
-            rev_range = f"{vrange.from_sha}..{vrange.to_sha}"
-        result = _run(["git", "log", "--format=%h", rev_range], check=False)
+            # Check whether from_sha is the repo root (no parents), so we include it.
+            parent_result = _run(["git", "log", "--format=%P", "-1", vrange.from_sha], check=False)
+            is_root = parent_result.returncode == 0 and not parent_result.stdout.strip()
+            rev_range = vrange.to_sha if is_root else f"{vrange.from_sha}..{vrange.to_sha}"
+            result = _run(["git", "log", "--format=%h", rev_range], check=False)
         if result.returncode == 0:
             for sha in result.stdout.splitlines():
                 sha = sha.strip()
