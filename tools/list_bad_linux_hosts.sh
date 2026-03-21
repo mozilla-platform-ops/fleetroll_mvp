@@ -7,7 +7,7 @@ set -x
 #
 # idea: use this as a source of hosts to reset
 
-filter="tc_act>4h data>4h note=-"
+filter="tc_act>4h data>4h note=- sort:host:asc"
 # filter="tc_act>4h note=-"
 
 uv run fleetroll host-monitor  \
