@@ -106,6 +106,17 @@ uv sync
 
 Refer to `--help` for complete usage.
 
+### Quickstart
+
+```bash
+# gather mac data (host data, TC data, and Git data)
+./tools/gather-generic.sh configs/host-lists/mac/all.list
+# you can use `watch` to run this every X minutes
+
+# display data in an interactive TUI
+uv run fleetroll host-monitor  configs/host-lists/mac/all.list
+```
+
 ### Gathering Data
 
 Data has to be gathered before running reports.
