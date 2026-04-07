@@ -14,4 +14,5 @@ uv run fleetroll host-monitor  \
     configs/host-lists/linux/all.list \
     --once \
     --hostname-only \
-    --filter "$filter"
+    --filter "$filter" | \
+    tr '\n' ' '
