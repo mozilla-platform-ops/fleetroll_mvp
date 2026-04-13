@@ -14,7 +14,7 @@ dev = [
 ]
 lint = ["ruff", "ty"]
 test = [
-    "pytest>=7.0",
+    "pytest>=9.0.3",
     "pytest-cov",
     "pytest-mock>=3.10",
     "pytest-watcher>=0.6.3",
