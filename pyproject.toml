@@ -16,7 +16,7 @@ lint = ["ruff", "ty"]
 test = [
     "pytest>=7.0",
     "pytest-cov",
-    "pytest-mock>=3.10",
+    "pytest-mock>=3.15.1",
     "pytest-watcher>=0.6.3",
 ]
 audit = ["pip-audit"]
