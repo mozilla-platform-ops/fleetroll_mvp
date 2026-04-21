@@ -598,3 +598,16 @@ if {b}; then
 fi
 """
     return "sh -c " + shlex.quote(script.strip("\n"))
+
+
+def remote_run_puppet_script() -> str:
+    """Generate remote shell script to run puppet agent on a Linux host.
+
+    Echoes EXIT=N at the end so callers can extract puppet's own exit code
+    even when the outer ssh exit code is also nonzero.  Puppet uses:
+      0 = success, no changes
+      2 = success, changes applied
+      1/4/6 = failure
+    """
+    body = "sudo -n run-puppet.sh 2>&1; echo EXIT=$?"
+    return "sh -c " + shlex.quote(body)

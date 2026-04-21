@@ -115,6 +115,22 @@ class HostUnsetOverrideArgs:
 
 
 @dataclass
+class HostRunPuppetArgs:
+    """Arguments for host-run-puppet command."""
+
+    host: str
+    ssh_option: list[str] | None
+    connect_timeout: int
+    timeout: int
+    audit_log: str | None
+    json: bool
+    workers: int
+    reason: str | None
+    confirm: bool
+    no_audit: bool
+
+
+@dataclass
 class TcFetchArgs:
     """Arguments for tc-fetch command."""
 

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from fleetroll.cli_types import (
     HostAuditArgs,
+    HostRunPuppetArgs,
     HostSetOverrideArgs,
     HostSetVaultArgs,
     HostUnsetOverrideArgs,
@@ -95,6 +96,23 @@ def mock_args_unset(tmp_audit_log: Path) -> HostUnsetOverrideArgs:
         no_backup=False,
         reason="test reason",
         confirm=True,
+    )
+
+
+@pytest.fixture
+def mock_args_run_puppet(tmp_audit_log: Path) -> HostRunPuppetArgs:
+    """Create Args object for host-run-puppet command."""
+    return HostRunPuppetArgs(
+        host="test.example.com",
+        ssh_option=None,
+        connect_timeout=10,
+        timeout=60,
+        audit_log=str(tmp_audit_log),
+        json=False,
+        workers=10,
+        reason="test puppet run",
+        confirm=True,
+        no_audit=True,
     )
 
 

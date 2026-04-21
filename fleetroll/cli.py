@@ -12,6 +12,7 @@ import click
 from .cli_types import (
     HostAuditArgs,
     HostMonitorArgs,
+    HostRunPuppetArgs,
     HostSetOverrideArgs,
     HostSetVaultArgs,
     HostUnsetOverrideArgs,
@@ -24,6 +25,7 @@ from .commands import (
     cmd_gh_fetch,
     cmd_host_audit,
     cmd_host_monitor,
+    cmd_host_run_puppet,
     cmd_host_set,
     cmd_host_set_vault,
     cmd_host_unset,
@@ -569,6 +571,58 @@ def host_unset_override(
         confirm=confirm,
     )
     cmd_host_unset(args)
+
+
+@cli.command("host-run-puppet")
+@click.argument("host", metavar="HOST_OR_FILE")
+@common_options
+@click.option(
+    "--workers",
+    type=int,
+    default=10,
+    show_default=True,
+    help="Number of parallel workers for batch mode.",
+)
+@click.option(
+    "--reason",
+    help="Optional reason string for audit log.",
+)
+@click.option(
+    "--confirm",
+    is_flag=True,
+    help="Apply the changes. Without this flag, a summary is printed and the command exits.",
+)
+@click.option(
+    "--no-audit",
+    is_flag=True,
+    help="Skip the automatic host-audit run after puppet completes.",
+)
+def host_run_puppet(
+    host: str,
+    ssh_option: tuple[str, ...],
+    connect_timeout: int,
+    timeout: int,
+    audit_log: str | None,
+    json_output: bool,
+    workers: int,
+    reason: str | None,
+    confirm: bool,
+    no_audit: bool,
+):
+    """SSH to each host and run sudo run-puppet.sh, then refresh audit data."""
+    args = HostRunPuppetArgs(
+        host=host,
+        ssh_option=list(ssh_option) if ssh_option else None,
+        connect_timeout=connect_timeout,
+        timeout=timeout,
+        audit_log=audit_log,
+        json=json_output,
+        workers=workers,
+        reason=reason,
+        confirm=confirm,
+        no_audit=no_audit,
+    )
+    cmd_host_run_puppet(args)
 
 
 @cli.command("tc-fetch")
