@@ -59,39 +59,48 @@ def setup_logging(debug: bool = False) -> None:
 
 
 # Common options that apply to all commands
-def common_options(func):
-    """Decorator to add common options to all commands."""
-    func = click.option(
-        "--ssh-option",
-        multiple=True,
-        help="Extra ssh options, e.g. '--ssh-option \"-J bastion\"' (repeatable).",
-    )(func)
-    func = click.option(
-        "--connect-timeout",
-        type=int,
-        default=10,
-        show_default=True,
-        help="SSH connect timeout seconds.",
-    )(func)
-    func = click.option(
-        "--timeout",
-        type=int,
-        default=10,
-        show_default=True,
-        help="Overall ssh command timeout seconds.",
-    )(func)
-    func = click.option(
-        "--audit-log",
-        type=click.Path(),
-        help="Path to local JSONL audit log (default: ~/.fleetroll/audit.jsonl).",
-    )(func)
-    func = click.option(
-        "--json",
-        "json_output",
-        is_flag=True,
-        help="Emit machine-readable JSON to stdout.",
-    )(func)
-    return func
+def common_options(_func=None, *, timeout_default: int = 10):
+    """Decorator to add common options to all commands.
+
+    Can be used as @common_options or @common_options(timeout_default=600).
+    """
+
+    def decorator(func):
+        func = click.option(
+            "--ssh-option",
+            multiple=True,
+            help="Extra ssh options, e.g. '--ssh-option \"-J bastion\"' (repeatable).",
+        )(func)
+        func = click.option(
+            "--connect-timeout",
+            type=int,
+            default=10,
+            show_default=True,
+            help="SSH connect timeout seconds.",
+        )(func)
+        func = click.option(
+            "--timeout",
+            type=int,
+            default=timeout_default,
+            show_default=True,
+            help="Overall ssh command timeout seconds.",
+        )(func)
+        func = click.option(
+            "--audit-log",
+            type=click.Path(),
+            help="Path to local JSONL audit log (default: ~/.fleetroll/audit.jsonl).",
+        )(func)
+        func = click.option(
+            "--json",
+            "json_output",
+            is_flag=True,
+            help="Emit machine-readable JSON to stdout.",
+        )(func)
+        return func
+
+    if _func is not None:
+        return decorator(_func)
+    return decorator
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -575,7 +584,7 @@ def host_unset_override(
 
 @cli.command("host-run-puppet")
 @click.argument("host", metavar="HOST_OR_FILE")
-@common_options
+@common_options(timeout_default=600)
 @click.option(
     "--workers",
     type=int,
