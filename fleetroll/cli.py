@@ -632,10 +632,10 @@ def host_unset_override(
     help="Skip the automatic host-audit run after puppet completes.",
 )
 @click.option(
-    "--verbose",
-    "-v",
+    "--quiet",
+    "-q",
     is_flag=True,
-    help="Print puppet output for each host. Suppressed when --json is set.",
+    help="Suppress per-host puppet output; show progress bar + summary only. Implied by --json.",
 )
 def host_run_puppet(
     host: str,
@@ -648,7 +648,7 @@ def host_run_puppet(
     reason: str | None,
     confirm: bool,
     no_audit: bool,
-    verbose: bool,
+    quiet: bool,
 ):
     """SSH to each host and run sudo run-puppet.sh, then refresh audit data."""
     args = HostRunPuppetArgs(
@@ -662,7 +662,7 @@ def host_run_puppet(
         reason=reason,
         confirm=confirm,
         no_audit=no_audit,
-        verbose=verbose,
+        quiet=quiet,
     )
     cmd_host_run_puppet(args)
 

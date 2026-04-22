@@ -22,6 +22,7 @@ from ..ssh import build_ssh_options, is_windows_host, remote_run_puppet_script, 
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
+    expand_hostname,
     format_host_preview,
     infer_actor,
     is_host_file,
@@ -174,8 +175,8 @@ def _run_puppet_batch(
     results: list[dict[str, Any]] = []
     log_lock = threading.Lock()
     print_lock = threading.Lock()
-    show_verbose = args.verbose and not args.json
-    show_progress = not args.json and not args.verbose
+    show_output = not args.quiet and not args.json
+    show_progress = not args.json and args.quiet
 
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         future_to_host = {
@@ -207,7 +208,7 @@ def _run_puppet_batch(
                 try:
                     result = future.result()
                     results.append(result)
-                    if show_verbose:
+                    if show_output:
                         output = _strip_exit_marker(result.get("raw_stdout", ""))
                         with print_lock:
                             print(f"--- [{host}] ---")
@@ -254,7 +255,10 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
         all_hosts = parse_host_list(host_file)
         is_batch = True
     else:
-        all_hosts = [args.host]
+        expanded = expand_hostname(args.host)
+        if expanded != args.host:
+            print(f"Expanding {args.host} → {expanded}")
+        all_hosts = [expanded]
         is_batch = False
 
     windows_hosts = [h for h in all_hosts if is_windows_host(h)]
@@ -298,7 +302,7 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:
-            if args.verbose:
+            if not args.quiet:
                 output = _strip_exit_marker(result.get("raw_stdout", ""))
                 if output:
                     print(output)

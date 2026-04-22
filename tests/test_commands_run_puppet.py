@@ -300,3 +300,109 @@ class TestCmdHostRunPuppet:
         assert "Hosts file:" in output
         assert "host1.example.com" in output
         assert "host2.example.com" in output
+
+
+class TestCmdHostRunPuppetOutput:
+    """Tests for default output-on / -q quiet behavior."""
+
+    def test_default_shows_puppet_output(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        """Puppet stdout is shown by default (quiet=False)."""
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_run_puppet.quiet = False
+        mock_args_run_puppet.json = False
+
+        mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh",
+            return_value=(0, "Notice: Finished catalog run\nEXIT=0\n", ""),
+        )
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
+
+        cmd_host_run_puppet(mock_args_run_puppet)
+
+        output = "\n".join(captured)
+        assert "Notice: Finished catalog run" in output
+
+    def test_quiet_suppresses_puppet_output(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        """Puppet stdout is suppressed when quiet=True; summary line still prints."""
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_run_puppet.quiet = True
+        mock_args_run_puppet.json = False
+
+        mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh",
+            return_value=(0, "Notice: Finished catalog run\nEXIT=0\n", ""),
+        )
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
+
+        cmd_host_run_puppet(mock_args_run_puppet)
+
+        output = "\n".join(captured)
+        assert "Notice: Finished catalog run" not in output
+        assert mock_args_run_puppet.host in output
+
+    def test_json_suppresses_puppet_output_regardless_of_quiet(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        """--json output is unaffected by quiet flag."""
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_run_puppet.quiet = False
+        mock_args_run_puppet.json = True
+
+        mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh",
+            return_value=(0, "Notice: Finished catalog run\nEXIT=0\n", ""),
+        )
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
+
+        cmd_host_run_puppet(mock_args_run_puppet)
+
+        assert len(captured) == 1
+        record = json.loads(captured[0])
+        assert record["ok"] is True
+
+
+class TestCmdHostRunPuppetExpandHostname:
+    """Tests for short-hostname expansion in host-run-puppet."""
+
+    def test_short_hostname_expands_in_dry_run(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs
+    ):
+        """Short hostname is expanded to FQDN and printed before dry-run summary."""
+        mock_args_run_puppet.host = "macmini-r8-42"
+        mock_args_run_puppet.confirm = False
+        mock_args_run_puppet.json = False
+
+        mocker.patch("fleetroll.commands.run_puppet.run_ssh")
+        captured = []
+        mocker.patch(
+            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
+        )
+
+        cmd_host_run_puppet(mock_args_run_puppet)
+
+        expansion_lines = [line for line in captured if "Expanding" in str(line)]
+        assert expansion_lines, "Expected an 'Expanding ...' line in output"
+        assert "macmini-r8-42.test.releng.mdc1.mozilla.com" in str(expansion_lines[0])
+
+    def test_fqdn_not_expanded(self, mocker, mock_args_run_puppet: HostRunPuppetArgs):
+        """A full FQDN passes through without any expansion message."""
+        mock_args_run_puppet.host = "test.example.com"
+        mock_args_run_puppet.confirm = False
+        mock_args_run_puppet.json = False
+
+        mocker.patch("fleetroll.commands.run_puppet.run_ssh")
+        captured = []
+        mocker.patch(
+            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
+        )
+
+        cmd_host_run_puppet(mock_args_run_puppet)
+
+        assert not any("Expanding" in str(line) for line in captured)
