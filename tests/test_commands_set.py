@@ -741,3 +741,53 @@ class TestCmdHostSetAutoAudit:
         cmd_host_set(mock_args_set)
 
         mock_audit.assert_not_called()
+
+
+class TestCmdHostSetExpandHostname:
+    """Tests for short-hostname expansion in host-set-override."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_validation(self, mocker):
+        mocker.patch("fleetroll.commands.set.validate_override_syntax")
+
+    def test_short_hostname_expands_in_dry_run(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Short hostname is expanded to FQDN and printed before dry-run summary."""
+        content_file = tmp_dir / "override.cfg"
+        content_file.write_text("worker_type = test-worker\n")
+        mock_args_set.host = "macmini-r8-42"
+        mock_args_set.from_file = str(content_file)
+        mock_args_set.confirm = False
+        mock_args_set.json = False
+
+        mocker.patch("fleetroll.commands.set.run_ssh")
+        captured = []
+        mocker.patch(
+            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
+        )
+
+        cmd_host_set(mock_args_set)
+
+        expansion_lines = [line for line in captured if "Expanding" in line]
+        assert expansion_lines, "Expected an 'Expanding ...' line in output"
+        assert "macmini-r8-42.test.releng.mdc1.mozilla.com" in expansion_lines[0]
+
+    def test_fqdn_not_expanded(self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path):
+        """A full FQDN passes through without any expansion message."""
+        content_file = tmp_dir / "override.cfg"
+        content_file.write_text("worker_type = test-worker\n")
+        mock_args_set.host = "test.example.com"
+        mock_args_set.from_file = str(content_file)
+        mock_args_set.confirm = False
+        mock_args_set.json = False
+
+        mocker.patch("fleetroll.commands.set.run_ssh")
+        captured = []
+        mocker.patch(
+            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
+        )
+
+        cmd_host_set(mock_args_set)
+
+        assert not any("Expanding" in line for line in captured)

@@ -210,3 +210,13 @@ def ensure_fqdn(hostname: str) -> None:
     host = hostname.rsplit("@", 1)[-1] if "@" in hostname else hostname
     if not _HOSTNAME_RE.match(host) or "." not in host:
         raise UserError(f"Hostname must be a fully-qualified domain name (got {hostname!r})")
+
+
+FQDN_DEFAULT_SUFFIX = ".test.releng.mdc1.mozilla.com"
+
+
+def expand_hostname(hostname: str) -> str:
+    """Expand a short hostname to an FQDN. Pass-through if already dotted."""
+    if "." in hostname:
+        return hostname
+    return hostname + FQDN_DEFAULT_SUFFIX

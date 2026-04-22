@@ -11,6 +11,7 @@ from fleetroll.utils import (
     ensure_fqdn,
     ensure_host_or_file,
     ensure_parent_dir,
+    expand_hostname,
     format_host_preview,
     infer_actor,
     is_host_file,
@@ -484,3 +485,31 @@ class TestFormatHostPreview:
         """Works with single host."""
         result = format_host_preview(["host1"], limit=5)
         assert result == ["  - host1"]
+
+
+class TestExpandHostname:
+    """Tests for expand_hostname()."""
+
+    def test_fqdn_passes_through(self):
+        fqdn = "t-linux64-ms-239.test.releng.mdc1.mozilla.com"
+        assert expand_hostname(fqdn) == fqdn
+
+    def test_moonshot_short_expands(self):
+        assert (
+            expand_hostname("t-linux64-ms-239") == "t-linux64-ms-239.test.releng.mdc1.mozilla.com"
+        )
+
+    def test_macmini_m4_expands(self):
+        assert expand_hostname("macmini-m4-60") == "macmini-m4-60.test.releng.mdc1.mozilla.com"
+
+    def test_macmini_r8_expands(self):
+        assert expand_hostname("macmini-r8-42") == "macmini-r8-42.test.releng.mdc1.mozilla.com"
+
+    def test_unknown_short_expands_with_default_suffix(self):
+        assert (
+            expand_hostname("unknown-host-999") == "unknown-host-999.test.releng.mdc1.mozilla.com"
+        )
+
+    def test_already_dotted_arbitrary_fqdn_passes_through(self):
+        fqdn = "somehost.example.com"
+        assert expand_hostname(fqdn) == fqdn

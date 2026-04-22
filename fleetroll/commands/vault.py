@@ -23,6 +23,7 @@ from ..ssh import build_ssh_options, run_ssh
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
+    expand_hostname,
     format_host_preview,
     infer_actor,
     is_host_file,
@@ -228,7 +229,10 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
         hosts = parse_host_list(host_file)
         is_batch = True
     else:
-        hosts = [args.host]
+        expanded = expand_hostname(args.host)
+        if expanded != args.host:
+            print(f"Expanding {args.host} → {expanded}")
+        hosts = [expanded]
         is_batch = False
 
     if not args.confirm:

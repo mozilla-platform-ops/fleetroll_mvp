@@ -352,3 +352,50 @@ class TestCmdHostSetVaultAutoAudit:
         cmd_host_set_vault(mock_args_vault)
 
         mock_audit.assert_not_called()
+
+
+class TestCmdHostSetVaultExpandHostname:
+    """Tests for short-hostname expansion in host-set-vault."""
+
+    def _make_vault_file(self, tmp_dir: Path) -> Path:
+        p = tmp_dir / "vault.yaml"
+        p.write_text("secret: value\n")
+        return p
+
+    def test_short_hostname_expands_in_dry_run(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
+        """Short hostname is expanded to FQDN and printed before dry-run summary."""
+        mock_args_vault.host = "macmini-m4-60"
+        mock_args_vault.from_file = str(self._make_vault_file(tmp_dir))
+        mock_args_vault.confirm = False
+        mock_args_vault.json = False
+
+        mocker.patch("fleetroll.commands.vault.run_ssh")
+        captured = []
+        mocker.patch(
+            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
+        )
+
+        cmd_host_set_vault(mock_args_vault)
+
+        expansion_lines = [line for line in captured if "Expanding" in line]
+        assert expansion_lines, "Expected an 'Expanding ...' line in output"
+        assert "macmini-m4-60.test.releng.mdc1.mozilla.com" in expansion_lines[0]
+
+    def test_fqdn_not_expanded(self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path):
+        """A full FQDN passes through without any expansion message."""
+        mock_args_vault.host = "test.example.com"
+        mock_args_vault.from_file = str(self._make_vault_file(tmp_dir))
+        mock_args_vault.confirm = False
+        mock_args_vault.json = False
+
+        mocker.patch("fleetroll.commands.vault.run_ssh")
+        captured = []
+        mocker.patch(
+            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
+        )
+
+        cmd_host_set_vault(mock_args_vault)
+
+        assert not any("Expanding" in line for line in captured)
