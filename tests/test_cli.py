@@ -50,7 +50,7 @@ class TestCliHelp:
         """host-set-override --help shows command options."""
         result = runner.invoke(cli, ["host-set-override", "--help"])
         assert result.exit_code == 0
-        assert "--from-file" in result.output
+        assert "-f, --from-file" in result.output
         assert "--confirm" in result.output
         assert "--mode" in result.output
         assert "--owner" in result.output
@@ -69,7 +69,7 @@ class TestCliHelp:
         """host-set-vault --help shows command options."""
         result = runner.invoke(cli, ["host-set-vault", "--help"])
         assert result.exit_code == 0
-        assert "--from-file" in result.output
+        assert "-f, --from-file" in result.output
         assert "--confirm" in result.output
         # --path removed - OS detection automatic
         assert "--mode" in result.output
@@ -130,6 +130,28 @@ class TestCliValidation:
         result = runner.invoke(
             cli,
             ["host-set-override", "test.example.com", "--from-file", str(test_file)],
+        )
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+
+    def test_set_from_file_short_alias(self, runner: CliRunner, tmp_dir: Path):
+        """-f is accepted as a short alias for --from-file on host-set-override."""
+        test_file = tmp_dir / "override.txt"
+        test_file.write_text("test")
+        result = runner.invoke(
+            cli,
+            ["host-set-override", "test.example.com", "-f", str(test_file)],
+        )
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+
+    def test_vault_from_file_short_alias(self, runner: CliRunner, tmp_dir: Path):
+        """-f is accepted as a short alias for --from-file on host-set-vault."""
+        test_file = tmp_dir / "vault.yaml"
+        test_file.write_text("key: value")
+        result = runner.invoke(
+            cli,
+            ["host-set-vault", "test.example.com", "-f", str(test_file)],
         )
         assert result.exit_code == 0
         assert "DRY RUN" in result.output

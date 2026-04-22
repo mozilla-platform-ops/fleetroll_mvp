@@ -330,6 +330,7 @@ def debug_host_script(
     help="Number of parallel workers for batch mode.",
 )
 @click.option(
+    "-f",
     "--from-file",
     type=click.Path(exists=True),
     help="Read override contents from a local file.",
@@ -445,6 +446,7 @@ def host_set_override(
     help="Number of parallel workers for batch mode.",
 )
 @click.option(
+    "-f",
     "--from-file",
     type=click.Path(exists=True),
     help="Read vault contents from a local file.",
