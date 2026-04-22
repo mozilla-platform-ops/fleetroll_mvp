@@ -1,6 +1,15 @@
 # bv (beads viewer) local config and caches
 .bv/
 
+# Frontend
+web/node_modules/
+web/dist/
+web/.playwright/
+web/playwright-report/
+web/tsconfig.tsbuildinfo
+# Un-ignore web/src/lib/ (root lib/ rule would otherwise match it)
+!web/src/lib/
+
 # Local configs (user-specific, not shared)
 configs/local/
 
