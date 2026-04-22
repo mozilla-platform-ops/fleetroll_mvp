@@ -69,7 +69,9 @@ def run_puppet_for_host(
 ) -> dict[str, Any]:
     """Run puppet on a single host and append audit log."""
     start = time.monotonic()
-    rc, out, err = run_ssh(host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout)
+    rc, out, err = run_ssh(
+        host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout, force_tty=True
+    )
     duration_s = round(time.monotonic() - start, 2)
 
     puppet_exit = _parse_puppet_exit(out)
@@ -98,7 +100,7 @@ def run_puppet_for_host(
             append_jsonl(audit_log, result)
     else:
         append_jsonl(audit_log, result)
-    result["raw_stdout"] = out
+    result["raw_stdout"] = out  # added after append_jsonl so audit log never sees raw output
     return result
 
 

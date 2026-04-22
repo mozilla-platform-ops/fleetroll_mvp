@@ -30,13 +30,18 @@ def run_ssh(
     ssh_options: list[str],
     input_bytes: bytes | None = None,
     timeout_s: int = 60,
+    force_tty: bool = False,
 ) -> tuple[int, str, str]:
     """
     Executes: ssh [opts...] host remote_cmd
 
     Returns (returncode, stdout, stderr). Does NOT raise on non-zero rc.
+
+    force_tty allocates a PTY so remote programs see a terminal (e.g. for
+    color output). Captured stdout will have \\r stripped.
     """
-    cmd = ["ssh", "-o", "BatchMode=yes"] + ssh_options + [host, remote_cmd]
+    tty_flags = ["-t"] if force_tty else []
+    cmd = ["ssh", "-o", "BatchMode=yes"] + tty_flags + ssh_options + [host, remote_cmd]
     logger.debug("SSH command: ssh %s %s '<script>'", " ".join(ssh_options), host)
     logger.debug("SSH timeout: %ds", timeout_s)
 
@@ -63,9 +68,12 @@ def run_ssh(
 
     elapsed = time.time() - start_time
     logger.debug("SSH completed in %.2fs (rc=%d)", elapsed, p.returncode)
+    stdout = p.stdout.decode("utf-8", "replace")
+    if force_tty:
+        stdout = stdout.replace("\r\n", "\n").replace("\r", "")
     return (
         p.returncode,
-        p.stdout.decode("utf-8", "replace"),
+        stdout,
         p.stderr.decode("utf-8", "replace"),
     )
 
