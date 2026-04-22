@@ -128,6 +128,7 @@ class HostRunPuppetArgs:
     reason: str | None
     confirm: bool
     no_audit: bool
+    verbose: bool
 
 
 @dataclass

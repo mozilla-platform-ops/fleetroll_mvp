@@ -40,6 +40,11 @@ _PUPPET_SUCCESS_EXITS = frozenset({0, 2})
 _EXIT_RE = re.compile(r"(?m)^EXIT=(\d+)")
 
 
+def _strip_exit_marker(stdout: str) -> str:
+    """Remove the internal EXIT=N sentinel line from puppet output."""
+    return _EXIT_RE.sub("", stdout).strip()
+
+
 def _parse_puppet_exit(stdout: str) -> int | None:
     """Extract puppet exit code from the trailing EXIT=N marker."""
     m = _EXIT_RE.search(stdout)
@@ -92,6 +97,7 @@ def run_puppet_for_host(
             append_jsonl(audit_log, result)
     else:
         append_jsonl(audit_log, result)
+    result["raw_stdout"] = out
     return result
 
 
@@ -167,7 +173,9 @@ def _run_puppet_batch(
     """Run puppet on all hosts in parallel and return result dicts."""
     results: list[dict[str, Any]] = []
     log_lock = threading.Lock()
-    show_progress = not args.json
+    print_lock = threading.Lock()
+    show_verbose = args.verbose and not args.json
+    show_progress = not args.json and not args.verbose
 
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         future_to_host = {
@@ -197,7 +205,14 @@ def _run_puppet_batch(
             for future in as_completed(future_to_host):
                 host = future_to_host[future]
                 try:
-                    results.append(future.result())
+                    result = future.result()
+                    results.append(result)
+                    if show_verbose:
+                        output = _strip_exit_marker(result.get("raw_stdout", ""))
+                        with print_lock:
+                            print(f"--- [{host}] ---")
+                            if output:
+                                print(output)
                 except Exception as e:
                     result = {
                         "ts": utc_now_iso(),
@@ -297,6 +312,10 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:
+            if args.verbose:
+                output = _strip_exit_marker(result.get("raw_stdout", ""))
+                if output:
+                    print(output)
             print(format_puppet_line(result))
             if not result["ok"]:
                 print(

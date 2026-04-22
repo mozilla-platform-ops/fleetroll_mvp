@@ -113,6 +113,7 @@ def mock_args_run_puppet(tmp_audit_log: Path) -> HostRunPuppetArgs:
         reason="test puppet run",
         confirm=True,
         no_audit=True,
+        verbose=False,
     )
 
 
