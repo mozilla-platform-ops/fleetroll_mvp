@@ -11,12 +11,19 @@ The existing architecture has a clean seam: `db.py` separates scanners from disp
 ```
  Before:  [Each User] → host-audit/tc-fetch/gh-fetch → local SQLite → host-monitor TUI
 
- After:   [Server *]  → host-audit/tc-fetch/gh-fetch → PostgreSQL → REST API + SSE
-          [Clients]   → host-monitor TUI → HTTP/SSE → server
-          [Clients]   → set-override/set-vault → SSH directly (unchanged)
+ After:   [Server pods *] → host-audit/tc-fetch/gh-fetch → PostgreSQL → REST + SSE
+                                                                       │
+                                       ┌───────────────────────────────┤
+                                       ▼                               ▼
+                            [Central read-only UI]         [host-monitor TUI clients]
+                                                                       ▲
+          [Operator] → fleetroll web (loopback) → [Local write-capable UI]
+                                                  ↳ reads:  central API (or local SQLite)
+                                                  ↳ writes: SSH direct to hosts
 
-          * All pods serve the API; only the elected leader runs scanning.
+          * All pods serve the read API; only the elected leader runs scanning.
             Leader election via PostgreSQL advisory lock (pg_try_advisory_lock).
+            Server pods carry a read-only SSH key; write routes are never mounted.
 ```
 
 ### Server (read-only scanning + API)
@@ -37,6 +44,21 @@ The existing architecture has a clean seam: `db.py` separates scanners from disp
 - **Write ops**: Clients SSH directly (unchanged) — keeps write SSH keys with operators
 - **Vault content inspection**: Client-side only — operator SSHes directly to the host using their privileged key; the server never holds vault file content
 
+### Web UI topology — split by capability
+
+One SPA codebase, two deployment surfaces with different capabilities:
+
+- **Central dashboard (read-only)** — served from the server pods. Shared URL any team member hits. Reads via REST + SSE. `enable_writes=false` at startup; write routes are never mounted. Vault content is shown only as SHA256 with an "open locally" hint, never as file bytes.
+- **Local operator UI (write-capable)** — `fleetroll web` on the operator's machine, bound to `127.0.0.1:<port>`. Reuses the same SPA assets; runs with `enable_writes=true`. Reads either proxy to the central server (`--server`) or come from local SQLite. Writes shell out through the existing CLI code paths using the operator's SSH key. Vault content inspection happens here, never on the server.
+
+Invariants:
+- Write routes exist **only** on the local surface. The server's `enable_writes` flag is `false` and non-overridable in the deployed image.
+- The local UI refuses to start with `enable_writes=true` on any bind other than a loopback address.
+- Loopback binding is the auth story for the local UI — it matches the existing trust model for the CLI (anyone on the operator's machine can already run the CLI). No token.
+- Central server authenticates with a bearer token (see Key Decisions); the two surfaces' auth models are independent.
+
+The SPA feature-detects capabilities at load time via `GET /api/v1/capabilities` so write-action components render only where they can function.
+
 ### Key API Endpoints
 ```
 GET  /api/v1/snapshot?hosts=...            # All data for initial TUI load
@@ -53,6 +75,15 @@ GET  /api/v1/overrides/{sha_prefix}        # Override file content
 POST /api/v1/notes                         # Add operator note
 DELETE /api/v1/notes/{hostname}            # Clear notes for host
 GET  /api/v1/status                        # Server health + scan status
+GET  /api/v1/capabilities                  # {"writes": bool, "vault_content": bool} — SPA feature detection
+
+# Local-only routes (mounted only when enable_writes=true — i.e. `fleetroll web`
+# on loopback). Never mounted on the central server deployment.
+POST   /api/v1/hosts/{hostname}/override       # host-set-override
+DELETE /api/v1/hosts/{hostname}/override       # host-unset-override
+POST   /api/v1/hosts/{hostname}/vault          # host-set-vault
+POST   /api/v1/hosts/{hostname}/puppet-run     # host-run-puppet
+GET    /api/v1/hosts/{hostname}/vault-content  # inspect vault via operator SSH key
 ```
 
 ### Key Decisions
@@ -66,8 +97,10 @@ GET  /api/v1/status                        # Server health + scan status
 | Deployment | K8s, multiple replicas | All pods serve API; only leader scans |
 | Host list | Baked into image | `configs/host-lists/all.list`; redeploy to update (acceptable for now) |
 | HTTP client | httpx | Async, SSE support, modern |
-| Write ops | Client-side SSH (unchanged) | Server SSH key stays read-only; can centralize later |
+| Write ops | Separate process, separate machine, separate key | Writes run from the operator's machine with the operator's privileged SSH key; the server pod's SSH key is read-only. This is a security boundary enforced by key material, not just by convention. Centralizing later would require a new key/delegation story. |
 | Vault content | Client-side only, never stored on server | Vault files contain sensitive secrets; SHA256 is sufficient for the TUI; content inspection uses operator's privileged SSH key |
+| Web UI topology | Split: central read-only + local write-capable | Keeps the server's read-only invariant intact; loopback binding is sufficient auth for the local UI; vault content never leaves the operator machine |
+| Local UI auth | Loopback-only bind, no token | Matches existing CLI trust model (operator's machine, operator's account); refuses to start on non-loopback bind when writes are enabled |
 | Notes | Server-managed | Notes are shared state, makes sense on server |
 
 ## Incremental Migration (4 Phases)
@@ -97,6 +130,28 @@ GET  /api/v1/status                        # Server health + scan status
 - `fleetroll/server/scanner.py` — Background scan loops
 - `fleetroll/server/events.py` — In-process event bus for SSE
 - `fleetroll/server/config.py` — Server config loading
+
+### Phase 2.5: Local write-capable web UI
+
+Once the central read-only server and `DataProvider` exist, promote the existing
+`fleetroll/commands/web/` app from hello/health into the operator's write-capable
+UI. Central deployment stays read-only.
+
+- Add `enable_writes: bool` to the web app factory in `fleetroll/commands/web/`
+- Mount the write routes (see API section) conditionally on `enable_writes`
+- Default bind `127.0.0.1:<port>`; hard-refuse to start with `enable_writes=true`
+  on any non-loopback address
+- Add `GET /api/v1/capabilities` so the SPA can feature-detect
+- SPA gains write-action components (set/unset override, set vault, run puppet,
+  view vault content) — all gated on `capabilities.writes`
+- Write route handlers wrap the existing command functions
+  (`fleetroll/commands/set.py`, `vault.py`, `puppet.py`) — no duplicated SSH logic
+
+**Files to create/modify:**
+- `fleetroll/commands/web/app.py` — add `enable_writes` to the factory, write-route mounting
+- `fleetroll/commands/web/routes_write.py` — new; thin wrappers around existing command functions
+- `fleetroll/commands/web/routes_read.py` — new; shared read routes (same module mounted on both central and local)
+- SPA under `web/` — capability-gated write-action components
 
 ### Phase 3: Notes + Shared State
 - Notes CRUD endpoints on server
