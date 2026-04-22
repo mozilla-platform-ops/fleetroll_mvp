@@ -394,31 +394,30 @@ def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
                 )
             )
 
-    # Also handle HEAD (unreleased commits after the latest version bump)
+    # Always insert an IN_PROGRESS range for the current version, even when
+    # HEAD == latest bump (zero commits). This makes the active version visible.
     if bump_commits:
         latest_bump = bump_commits[0]
         head_result = _run(["git", "rev-parse", "HEAD"])
         head_sha = head_result.stdout.strip()
-        if head_sha != latest_bump["sha"]:
-            # There are commits after the latest version bump
-            head_date_result = _run(["git", "log", "-1", "--format=%aI", "HEAD"])
-            head_date = head_date_result.stdout.strip()
-            ranges.insert(
-                0,
-                VersionRange(
-                    version=f"{latest_bump['version']}-IN_PROGRESS",
-                    from_sha=latest_bump["sha"],
-                    to_sha=head_sha,
-                    from_date=latest_bump["date"],
-                    to_date=head_date,
-                ),
-            )
+        head_date_result = _run(["git", "log", "-1", "--format=%aI", "HEAD"])
+        head_date = head_date_result.stdout.strip()
+        ranges.insert(
+            0,
+            VersionRange(
+                version=f"{latest_bump['version']}-IN_PROGRESS",
+                from_sha=latest_bump["sha"],
+                to_sha=head_sha,
+                from_date=latest_bump["date"],
+                to_date=head_date,
+            ),
+        )
 
-    # When IN_PROGRESS exists, drop the redundant newest-bump era (from_sha==to_sha).
-    unreleased_bases = {
-        r.version.removesuffix("-IN_PROGRESS") for r in ranges if r.version.endswith("-IN_PROGRESS")
-    }
-    ranges = [r for r in ranges if not (r.from_sha == r.to_sha and r.version in unreleased_bases)]
+    # The newest-bump era has from_sha==to_sha (zero commits by construction).
+    # The IN_PROGRESS range covers that same span (or beyond), so drop the
+    # degenerate era to avoid double-counting. Keep IN_PROGRESS ranges even
+    # when from_sha==to_sha (zero commits — still want them visible).
+    ranges = [r for r in ranges if r.from_sha != r.to_sha or r.version.endswith("-IN_PROGRESS")]
 
     # Sort: unreleased first, then newest version first (descending)
     def sort_key(r: VersionRange):
@@ -455,8 +454,11 @@ def fetch_closed_beads() -> list[dict]:
 
 def fetch_git_commits(from_sha: str | None, to_sha: str) -> list[dict]:
     """Fetch git commits in the given range."""
-    if from_sha is None or from_sha == to_sha:
-        # No lower bound (initial version whose bump IS the root commit).
+    if from_sha == to_sha:
+        # Zero-commit span (e.g. IN_PROGRESS right after a version bump).
+        return []
+    if from_sha is None:
+        # No lower bound: initial version whose bump IS the root commit.
         rev_range = to_sha
     else:
         rev_range = f"{from_sha}..{to_sha}"

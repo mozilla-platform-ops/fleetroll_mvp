@@ -474,15 +474,14 @@ class TestDetectVersionRangesRollingMain:
             ranges = detect_version_ranges(rolling_main=True)
 
         version_map = {r.version: r for r in ranges}
+
+        # 0.2.0 era is degenerate (from_sha==to_sha, HEAD==latest bump) — dropped
+        assert "0.2.0" not in version_map
         r010 = version_map["0.1.0"]
-        r020 = version_map["0.2.0"]
 
         # 0.1.0 era: from=root, to=0.2.0 bump
         assert r010.from_sha == sha_root
         assert r010.to_sha == sha_020
-        # 0.2.0 era (newest): from=0.2.0 bump, to=0.2.0 bump (HEAD == latest bump)
-        assert r020.from_sha == sha_020
-        assert r020.to_sha == sha_020
 
     def test_no_rolling_main_traditional_semantics(self):
         """Traditional mode: each version's to_sha is its own bump."""
