@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: "DM Mono", ui-monospace, monospace;
+  }
+}
