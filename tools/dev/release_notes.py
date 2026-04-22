@@ -443,7 +443,8 @@ def fetch_closed_beads() -> list[dict]:
                 file=sys.stderr,
             )
             return []
-        return json.loads(result.stdout)
+        data = json.loads(result.stdout)
+        return data.get("issues", data) if isinstance(data, dict) else data
     except FileNotFoundError:
         print("Warning: br not found on PATH. Skipping bead data.", file=sys.stderr)
         return []
