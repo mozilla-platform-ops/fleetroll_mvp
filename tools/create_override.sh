@@ -35,8 +35,8 @@ cat <<EOF > "$override_file"
 #   user: $user
 
 # puppet overrides
-# PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
-PUPPET_REPO="https://github.com/$user/ronin_puppet.git"
+PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+# PUPPET_REPO="https://github.com/$user/ronin_puppet.git"
 PUPPET_BRANCH="$branch_name"
 PUPPET_MAIL="$user@mozilla.com"
 
@@ -46,5 +46,5 @@ EOF
 
 echo "Created override file: $override_file"
 echo "  PUPPET_BRANCH: $branch_name"
-echo "  PUPPET_REPO: https://github.com/$user/ronin_puppet.git"
+echo "  PUPPET_REPO: https://github.com/mozilla-platform-ops/ronin_puppet.git"
 echo "  PUPPET_MAIL: $user@mozilla.com"
