@@ -27,6 +27,7 @@ from ..utils import (
     parse_host_list,
     utc_now_iso,
 )
+from ._auto_audit import _maybe_auto_audit
 
 if TYPE_CHECKING:
     from ..cli_types import HostUnsetOverrideArgs
@@ -163,6 +164,7 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
             print(json.dumps(result, indent=2, sort_keys=True))
             if rc != 0:
                 raise CommandFailureError
+            _maybe_auto_audit([args.host], args, audit_log)
             return
 
         if rc != 0:
@@ -182,6 +184,7 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")
+        _maybe_auto_audit([args.host], args, audit_log)
         return
 
     results: list[dict[str, Any]] = []
@@ -258,6 +261,8 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
             f"duration={duration_s:.1f}s"
         )
         print(f"Audit log: {audit_log}")
+
+    _maybe_auto_audit([r["host"] for r in results], args, audit_log)
 
     if any(not r.get("ok") for r in results):
         raise CommandFailureError

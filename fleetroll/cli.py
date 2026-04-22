@@ -20,6 +20,7 @@ from .cli_types import (
     OverrideShowArgs,
     TcFetchArgs,
     VaultShowArgs,
+    WebArgs,
 )
 from .commands import (
     cmd_gh_fetch,
@@ -36,6 +37,7 @@ from .commands import (
     cmd_show_notes,
     cmd_tc_fetch,
     cmd_vault_show,
+    cmd_web,
 )
 from .exceptions import CommandFailureError, FleetRollError, UserError
 from .ssh import audit_script_body, remote_windows_audit_script, windows_audit_script_body
@@ -380,6 +382,11 @@ def debug_host_script(
     is_flag=True,
     help="Overwrite existing override even if one already exists on the host.",
 )
+@click.option(
+    "--no-audit",
+    is_flag=True,
+    help="Skip the automatic host-audit run after the override is written.",
+)
 def host_set_override(
     host: str,
     ssh_option: tuple[str, ...],
@@ -398,6 +405,7 @@ def host_set_override(
     confirm: bool,
     ignore_state: bool,
     force: bool,
+    no_audit: bool,
 ):
     """Set the override file on a host (atomic write).
 
@@ -421,6 +429,7 @@ def host_set_override(
         confirm=confirm,
         ignore_state=ignore_state,
         force=force,
+        no_audit=no_audit,
     )
     cmd_host_set(args)
 
@@ -488,6 +497,11 @@ def host_set_override(
     is_flag=True,
     help="Overwrite existing vault even if one already exists on the host.",
 )
+@click.option(
+    "--no-audit",
+    is_flag=True,
+    help="Skip the automatic host-audit run after the vault is written.",
+)
 def host_set_vault(
     host: str,
     ssh_option: tuple[str, ...],
@@ -506,6 +520,7 @@ def host_set_vault(
     confirm: bool,
     ignore_state: bool,
     force: bool,
+    no_audit: bool,
 ):
     """Set the vault.yaml file on a host (atomic write)."""
     args = HostSetVaultArgs(
@@ -526,6 +541,7 @@ def host_set_vault(
         confirm=confirm,
         ignore_state=ignore_state,
         force=force,
+        no_audit=no_audit,
     )
     cmd_host_set_vault(args)
 
@@ -554,6 +570,11 @@ def host_set_vault(
     is_flag=True,
     help="Apply the changes. Without this flag, a summary is printed and the command exits.",
 )
+@click.option(
+    "--no-audit",
+    is_flag=True,
+    help="Skip the automatic host-audit run after the override is removed.",
+)
 def host_unset_override(
     host: str,
     ssh_option: tuple[str, ...],
@@ -565,6 +586,7 @@ def host_unset_override(
     no_backup: bool,
     reason: str | None,
     confirm: bool,
+    no_audit: bool,
 ):
     """Remove the override file from a host."""
     args = HostUnsetOverrideArgs(
@@ -578,6 +600,7 @@ def host_unset_override(
         no_backup=no_backup,
         reason=reason,
         confirm=confirm,
+        no_audit=no_audit,
     )
     cmd_host_unset(args)
 
@@ -795,6 +818,16 @@ def show_notes(
         json_output=json_output,
         include_cleared=include_cleared,
     )
+
+
+@cli.command("web")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Bind address.")
+@click.option("--port", default=8765, show_default=True, help="TCP port.")
+@click.option("--dev", is_flag=True, help="Enable CORS for Vite dev server.")
+def web(host: str, port: int, dev: bool) -> None:
+    """Start the fleetroll web interface."""
+    args = WebArgs(host=host, port=port, dev=dev)
+    cmd_web(host=args.host, port=args.port, dev=args.dev)
 
 
 def main():

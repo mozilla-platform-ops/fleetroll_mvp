@@ -270,3 +270,85 @@ config:
 
         mock_run_ssh.assert_not_called()
         assert any("DRY RUN" in str(line) for line in captured)
+
+
+class TestCmdHostSetVaultAutoAudit:
+    """Tests for auto-audit behaviour after host-set-vault."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_validation(self, mocker):
+        mocker.patch("fleetroll.commands.vault.validate_vault_yaml")
+
+    def _make_vault_file(self, tmp_dir: Path) -> Path:
+        p = tmp_dir / "vault.yaml"
+        p.write_text("secret: test_value\n")
+        return p
+
+    def test_no_audit_flag_skips_audit(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
+        """Does not call _run_auto_audit when --no-audit is set."""
+        mock_args_vault.from_file = str(self._make_vault_file(tmp_dir))
+        mock_args_vault.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_vault.no_audit = True
+        mock_args_vault.json = True
+
+        mocker.patch("fleetroll.commands.vault.run_ssh").return_value = (0, "", "")
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
+        mocker.patch("builtins.print")
+
+        cmd_host_set_vault(mock_args_vault)
+
+        mock_audit.assert_not_called()
+
+    def test_audit_called_by_default(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
+        """Calls _run_auto_audit when --no-audit is not set."""
+        mock_args_vault.from_file = str(self._make_vault_file(tmp_dir))
+        mock_args_vault.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_vault.no_audit = False
+        mock_args_vault.json = True
+
+        mocker.patch("fleetroll.commands.vault.run_ssh").return_value = (0, "", "")
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
+        mocker.patch("builtins.print")
+
+        cmd_host_set_vault(mock_args_vault)
+
+        mock_audit.assert_called_once()
+
+    def test_audit_failure_does_not_raise(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
+        """Auto-audit failures are swallowed and do not propagate."""
+        mock_args_vault.from_file = str(self._make_vault_file(tmp_dir))
+        mock_args_vault.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_vault.no_audit = False
+        mock_args_vault.json = True
+
+        mocker.patch("fleetroll.commands.vault.run_ssh").return_value = (0, "", "")
+        mocker.patch(
+            "fleetroll.commands._auto_audit._run_auto_audit",
+            side_effect=RuntimeError("db unreachable"),
+        )
+        mocker.patch("builtins.print")
+
+        # Must not raise
+        cmd_host_set_vault(mock_args_vault)
+
+    def test_dry_run_does_not_call_audit(
+        self, mocker, mock_args_vault: HostSetVaultArgs, tmp_dir: Path
+    ):
+        """Dry-run (no --confirm) never triggers audit."""
+        mock_args_vault.from_file = str(self._make_vault_file(tmp_dir))
+        mock_args_vault.confirm = False
+        mock_args_vault.no_audit = False
+        mock_args_vault.json = False
+
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
+        mocker.patch("builtins.print")
+
+        cmd_host_set_vault(mock_args_vault)
+
+        mock_audit.assert_not_called()

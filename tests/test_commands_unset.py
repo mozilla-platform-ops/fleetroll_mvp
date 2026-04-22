@@ -216,3 +216,72 @@ class TestCmdHostUnset:
         assert "  - host5.example.com" in output
         assert "  - host6.example.com" not in output
         assert "5 more hosts" in output
+
+
+class TestCmdHostUnsetAutoAudit:
+    """Tests for auto-audit behaviour after host-unset-override."""
+
+    def test_no_audit_flag_skips_audit(
+        self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path
+    ):
+        """Does not call _run_auto_audit when --no-audit is set."""
+        mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_unset.no_audit = True
+        mock_args_unset.json = True
+
+        mocker.patch("fleetroll.commands.unset.run_ssh").return_value = (0, "REMOVED=1\n", "")
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
+        mocker.patch("builtins.print")
+
+        cmd_host_unset(mock_args_unset)
+
+        mock_audit.assert_not_called()
+
+    def test_audit_called_by_default(
+        self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path
+    ):
+        """Calls _run_auto_audit when --no-audit is not set."""
+        mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_unset.no_audit = False
+        mock_args_unset.json = True
+
+        mocker.patch("fleetroll.commands.unset.run_ssh").return_value = (0, "REMOVED=1\n", "")
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
+        mocker.patch("builtins.print")
+
+        cmd_host_unset(mock_args_unset)
+
+        mock_audit.assert_called_once()
+
+    def test_audit_failure_does_not_raise(
+        self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path
+    ):
+        """Auto-audit failures are swallowed and do not propagate."""
+        mock_args_unset.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_unset.no_audit = False
+        mock_args_unset.json = True
+
+        mocker.patch("fleetroll.commands.unset.run_ssh").return_value = (0, "REMOVED=1\n", "")
+        mocker.patch(
+            "fleetroll.commands._auto_audit._run_auto_audit",
+            side_effect=RuntimeError("db unreachable"),
+        )
+        mocker.patch("builtins.print")
+
+        # Must not raise
+        cmd_host_unset(mock_args_unset)
+
+    def test_dry_run_does_not_call_audit(
+        self, mocker, mock_args_unset: HostUnsetOverrideArgs, tmp_dir: Path
+    ):
+        """Dry-run (no --confirm) never triggers audit."""
+        mock_args_unset.confirm = False
+        mock_args_unset.no_audit = False
+        mock_args_unset.json = False
+
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
+        mocker.patch("builtins.print")
+
+        cmd_host_unset(mock_args_unset)
+
+        mock_audit.assert_not_called()

@@ -659,3 +659,85 @@ PUPPET_MAIL="test@mozilla.com"
 
         assert exc_info.value.code == 1
         mock_run_ssh.assert_not_called()
+
+
+class TestCmdHostSetAutoAudit:
+    """Tests for auto-audit behaviour after host-set-override."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_validation(self, mocker):
+        mocker.patch("fleetroll.commands.set.validate_override_syntax")
+
+    def _make_content_file(self, tmp_dir: Path) -> Path:
+        p = tmp_dir / "override.cfg"
+        p.write_text("worker_type = test-worker\n")
+        return p
+
+    def test_no_audit_flag_skips_audit(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Does not call _run_auto_audit when --no-audit is set."""
+        mock_args_set.from_file = str(self._make_content_file(tmp_dir))
+        mock_args_set.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_set.no_audit = True
+        mock_args_set.json = True
+
+        mocker.patch("fleetroll.commands.set.run_ssh").return_value = (0, "", "")
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
+        mocker.patch("builtins.print")
+
+        cmd_host_set(mock_args_set)
+
+        mock_audit.assert_not_called()
+
+    def test_audit_called_by_default(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Calls _run_auto_audit when --no-audit is not set."""
+        mock_args_set.from_file = str(self._make_content_file(tmp_dir))
+        mock_args_set.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_set.no_audit = False
+        mock_args_set.json = True
+
+        mocker.patch("fleetroll.commands.set.run_ssh").return_value = (0, "", "")
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
+        mocker.patch("builtins.print")
+
+        cmd_host_set(mock_args_set)
+
+        mock_audit.assert_called_once()
+
+    def test_audit_failure_does_not_raise(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Auto-audit failures are swallowed and do not propagate."""
+        mock_args_set.from_file = str(self._make_content_file(tmp_dir))
+        mock_args_set.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_set.no_audit = False
+        mock_args_set.json = True
+
+        mocker.patch("fleetroll.commands.set.run_ssh").return_value = (0, "", "")
+        mocker.patch(
+            "fleetroll.commands._auto_audit._run_auto_audit",
+            side_effect=RuntimeError("db unreachable"),
+        )
+        mocker.patch("builtins.print")
+
+        # Must not raise
+        cmd_host_set(mock_args_set)
+
+    def test_dry_run_does_not_call_audit(
+        self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
+    ):
+        """Dry-run (no --confirm) never triggers audit."""
+        mock_args_set.from_file = str(self._make_content_file(tmp_dir))
+        mock_args_set.confirm = False
+        mock_args_set.no_audit = False
+        mock_args_set.json = False
+
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
+        mocker.patch("builtins.print")
+
+        cmd_host_set(mock_args_set)
+
+        mock_audit.assert_not_called()

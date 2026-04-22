@@ -73,6 +73,7 @@ class HostSetOverrideArgs:
     confirm: bool
     ignore_state: bool
     force: bool
+    no_audit: bool = False
 
 
 @dataclass
@@ -96,6 +97,7 @@ class HostSetVaultArgs:
     confirm: bool
     ignore_state: bool
     force: bool
+    no_audit: bool = False
 
 
 @dataclass
@@ -112,6 +114,7 @@ class HostUnsetOverrideArgs:
     no_backup: bool
     reason: str | None
     confirm: bool
+    no_audit: bool = False
 
 
 @dataclass
@@ -147,6 +150,15 @@ class MaintainArgs:
     audit_log: str | None
     confirm: bool
     force: bool
+
+
+@dataclass
+class WebArgs:
+    """Arguments for web command."""
+
+    host: str
+    port: int
+    dev: bool
 
 
 class HasSshOptions(Protocol):

@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Any
 import click
 
 from ..audit import append_jsonl
-from ..cli_types import HostAuditArgs
 from ..constants import DRY_RUN_PREVIEW_LIMIT
 from ..exceptions import CommandFailureError
 from ..ssh import build_ssh_options, is_windows_host, remote_run_puppet_script, run_ssh
@@ -29,6 +28,7 @@ from ..utils import (
     parse_host_list,
     utc_now_iso,
 )
+from ._auto_audit import _maybe_auto_audit
 
 if TYPE_CHECKING:
     from ..cli_types import HostRunPuppetArgs
@@ -241,20 +241,6 @@ def _run_puppet_batch(
     return results
 
 
-def _maybe_auto_audit(hosts: list[str], args: HostRunPuppetArgs, audit_log: Path) -> None:
-    """Run auto-audit if not suppressed; log warnings on failure."""
-    if args.no_audit:
-        return
-    try:
-        _run_auto_audit(hosts, args, audit_log)
-    except Exception as exc:
-        logger.warning("Auto-audit failed: %s", exc)
-        click.echo(
-            click.style(f"Warning: auto-audit failed: {exc}", fg="yellow"),
-            file=sys.stderr,
-        )
-
-
 def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
     """SSH to each host and run puppet, then refresh audit data."""
     ensure_host_or_file(args.host)
@@ -356,24 +342,3 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
 
     if any(not r.get("ok") for r in results):
         raise CommandFailureError
-
-
-def _run_auto_audit(hosts: list[str], args: HostRunPuppetArgs, audit_log: Path) -> None:
-    """Run host-audit on the given hosts to refresh DB observations."""
-    from .audit import cmd_host_audit_batch
-
-    audit_args = HostAuditArgs(
-        host=args.host,
-        ssh_option=args.ssh_option,
-        connect_timeout=args.connect_timeout,
-        timeout=args.timeout,
-        audit_log=str(audit_log),
-        json=False,
-        no_content=False,
-        workers=args.workers,
-        batch_timeout=600,
-        verbose=False,
-        quiet=True,
-    )
-    cmd_host_audit_batch(hosts, audit_args)
-    print(f"Audit refreshed for {len(hosts)} host(s).")

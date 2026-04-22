@@ -13,6 +13,7 @@ from .set import cmd_host_set
 from .tc_fetch import cmd_tc_fetch
 from .unset import cmd_host_unset
 from .vault import cmd_host_set_vault, cmd_vault_show
+from .web import cmd_web
 
 __all__ = [
     "cmd_gh_fetch",
@@ -29,4 +30,5 @@ __all__ = [
     "cmd_show_notes",
     "cmd_tc_fetch",
     "cmd_vault_show",
+    "cmd_web",
 ]

@@ -176,7 +176,7 @@ class TestCmdHostRunPuppet:
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
         mock_run_ssh.return_value = (0, "EXIT=0\n", "")
-        mock_audit = mocker.patch("fleetroll.commands.run_puppet._run_auto_audit")
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
 
         mocker.patch("builtins.print")
 
@@ -193,7 +193,7 @@ class TestCmdHostRunPuppet:
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
         mock_run_ssh.return_value = (0, "EXIT=0\n", "")
-        mock_audit = mocker.patch("fleetroll.commands.run_puppet._run_auto_audit")
+        mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
 
         mocker.patch("builtins.print")
 
@@ -270,7 +270,7 @@ class TestCmdHostRunPuppet:
         mock_run_ssh.return_value = (0, "EXIT=0\n", "")
 
         mocker.patch(
-            "fleetroll.commands.run_puppet._run_auto_audit",
+            "fleetroll.commands._auto_audit._run_auto_audit",
             side_effect=RuntimeError("db unreachable"),
         )
         mocker.patch("builtins.print")

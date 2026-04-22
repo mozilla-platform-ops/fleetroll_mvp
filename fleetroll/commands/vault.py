@@ -30,6 +30,7 @@ from ..utils import (
     sha256_hex,
     utc_now_iso,
 )
+from ._auto_audit import _maybe_auto_audit
 
 if TYPE_CHECKING:
     from ..cli_types import HostSetVaultArgs, VaultShowArgs
@@ -344,6 +345,7 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
             print(json.dumps(result, indent=2, sort_keys=True))
             if rc != 0:
                 raise CommandFailureError
+            _maybe_auto_audit([args.host], args, audit_log)
             return
 
         if rc != 0:
@@ -361,6 +363,7 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")
+        _maybe_auto_audit([args.host], args, audit_log)
         return
 
     results: list[dict[str, Any]] = []
@@ -476,6 +479,8 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
             f"no_change={no_change} failed={failed} duration={duration_s:.1f}s"
         )
         print(f"Audit log: {audit_log}")
+
+    _maybe_auto_audit([r["host"] for r in results], args, audit_log)
 
     if any(not r.get("ok") for r in results):
         raise CommandFailureError
