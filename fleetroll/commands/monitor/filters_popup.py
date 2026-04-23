@@ -92,6 +92,16 @@ def filter_rows(rows: list[PopupRow], search: str) -> list[PopupRow]:
     return [r for r in rows if needle in r.match_text().lower()]
 
 
+def find_active_row_index(rows: list[PopupRow], active_query: str) -> int:
+    """Return the index of the first row whose query matches, or -1."""
+    if not active_query:
+        return -1
+    for i, row in enumerate(rows):
+        if row.query == active_query:
+            return i
+    return -1
+
+
 def build_saved_rows(filters: list[NamedFilter]) -> list[PopupRow]:
     return [PopupRow(label=f.name, query=f.query) for f in filters]
 
@@ -109,6 +119,7 @@ def draw_filters_popup(
     saved_rows: list[PopupRow],
     recent_rows: list[PopupRow],
     color_enabled: bool,
+    active_query: str = "",
 ) -> None:
     """Draw the picker popup centered on-screen.
 
@@ -189,7 +200,10 @@ def draw_filters_popup(
             break
         row = filtered[idx]
         is_sel = idx == tab_state.cursor
-        prefix = "› " if is_sel else "  "  # noqa: RUF001
+        is_active = bool(active_query) and row.query == active_query
+        cursor_glyph = "›" if is_sel else " "  # noqa: RUF001
+        active_glyph = "●" if is_active else " "
+        prefix = f"{cursor_glyph}{active_glyph}"
         if label_w > 0:
             label = row.label[:label_w].ljust(label_w)
             text = f"{prefix}{label}  {row.query}"

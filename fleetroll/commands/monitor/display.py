@@ -36,6 +36,7 @@ from .filters_popup import (
     build_saved_rows,
     draw_filters_popup,
     filter_rows,
+    find_active_row_index,
 )
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
@@ -428,11 +429,25 @@ class MonitorDisplay:
         """Open the filters picker popup.
 
         Reloads named filters from disk so filters added while the monitor was
-        running show up without a restart.
+        running show up without a restart. If the currently-active query
+        matches a saved or recent entry, lands the cursor on it (preferring
+        Saved).
         """
         if self._filters_configs_dir is not None:
             self.named_filters = load_named_filters(self._filters_configs_dir)
-        self._filters_popup_state = FiltersPopupState()
+        state = FiltersPopupState()
+        if self._query_text:
+            saved_rows = build_saved_rows(self.named_filters)
+            saved_idx = find_active_row_index(saved_rows, self._query_text)
+            if saved_idx >= 0:
+                state.saved_state.cursor = saved_idx
+            else:
+                recent_rows = build_recent_rows(self._filter_history)
+                recent_idx = find_active_row_index(recent_rows, self._query_text)
+                if recent_idx >= 0:
+                    state.active_tab = TAB_RECENT
+                    state.recent_state.cursor = recent_idx
+        self._filters_popup_state = state
 
     def _close_filters_popup(self) -> None:
         self._filters_popup_state = None
@@ -1050,6 +1065,7 @@ class MonitorDisplay:
                 saved_rows=build_saved_rows(self.named_filters),
                 recent_rows=build_recent_rows(self._filter_history),
                 color_enabled=self.colors.color_enabled,
+                active_query=self._query_text,
             )
             self.curses_mod.doupdate()
         else:

@@ -11,6 +11,7 @@ from fleetroll.commands.monitor.filters_popup import (
     build_saved_rows,
     compute_popup_viewport,
     filter_rows,
+    find_active_row_index,
 )
 from fleetroll.commands.monitor.named_filters import NamedFilter
 
@@ -99,6 +100,31 @@ class TestBuildRows:
     def test_build_recent_rows_skips_empty(self) -> None:
         rows = build_recent_rows(["", "x", ""])
         assert [r.query for r in rows] == ["x"]
+
+
+class TestFindActiveRowIndex:
+    def _rows(self) -> list[PopupRow]:
+        return [
+            PopupRow(label="a", query="os=L"),
+            PopupRow(label="b", query="os=M"),
+            PopupRow(label="c", query="os=W"),
+        ]
+
+    def test_empty_active_query_returns_minus_one(self) -> None:
+        assert find_active_row_index(self._rows(), "") == -1
+
+    def test_no_match_returns_minus_one(self) -> None:
+        assert find_active_row_index(self._rows(), "role=foo") == -1
+
+    def test_returns_first_match(self) -> None:
+        assert find_active_row_index(self._rows(), "os=M") == 1
+
+    def test_returns_first_of_duplicates(self) -> None:
+        rows = [
+            PopupRow(label="a", query="os=L"),
+            PopupRow(label="b", query="os=L"),
+        ]
+        assert find_active_row_index(rows, "os=L") == 0
 
 
 class TestPopupStatePerTabCursor:
