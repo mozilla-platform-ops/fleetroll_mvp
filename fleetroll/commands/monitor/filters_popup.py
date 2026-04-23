@@ -18,6 +18,15 @@ if TYPE_CHECKING:
 TAB_SAVED = "saved"
 TAB_RECENT = "recent"
 
+# Size caps — keep the popup dialog-sized even on wide/tall terminals.
+MAX_POPUP_WIDTH = 100
+MAX_POPUP_HEIGHT = 25
+MIN_POPUP_WIDTH = 30
+MIN_POPUP_HEIGHT = 6
+# Margins subtracted from terminal dimensions before capping.
+H_MARGIN = 4
+V_MARGIN = 6
+
 
 @dataclass
 class PopupRow:
@@ -114,8 +123,8 @@ def draw_filters_popup(
         _draw_resize_message(stdscr, curses_mod, color_enabled=color_enabled)
         return
 
-    popup_h = max(height - 6, 6)
-    popup_w = max(width - 4, 30)
+    popup_h = max(min(height - V_MARGIN, MAX_POPUP_HEIGHT), MIN_POPUP_HEIGHT)
+    popup_w = max(min(width - H_MARGIN, MAX_POPUP_WIDTH), MIN_POPUP_WIDTH)
 
     start_y = max((height - popup_h) // 2, 0)
     start_x = max((width - popup_w) // 2, 0)
