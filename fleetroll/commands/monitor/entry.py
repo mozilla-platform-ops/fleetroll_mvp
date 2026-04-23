@@ -32,6 +32,7 @@ from .formatting import (
     format_monitor_row,
     render_monitor_lines,
 )
+from .named_filters import load_named_filters
 from .query import apply_query, parse_query_safe
 
 if TYPE_CHECKING:
@@ -206,6 +207,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     )
             return
 
+        named_filters = load_named_filters(Path("configs/filters"))
+
         display_ref: list[MonitorDisplay] = []
 
         def curses_main(stdscr) -> None:
@@ -223,6 +226,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 sha_cache=sha_cache,
                 notes_data=notes_data,
                 notes_path=notes_path,
+                named_filters=named_filters,
             )
             display_ref.append(display)
             display.load_history(filter_history_path())
@@ -241,7 +245,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 redrew = False
 
                 if key != -1:
-                    if display.filter_bar_active:
+                    if display.filter_bar_active or display.filters_popup_active:
                         # Drain any remaining buffered keys before redrawing so that
                         # paste (all chars arrive at once) causes one redraw, not one per char.
                         # Use timeout(0) so the drain is non-blocking — otherwise each

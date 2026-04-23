@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ...data_provider import DataProvider
     from .cache import ShaInfoCache
+    from .named_filters import NamedFilter
 
 from ...constants import STALE_DATA_THRESHOLD_SECONDS
 from ...utils import get_log_file_size
@@ -27,6 +28,15 @@ from .data import (
     strip_fqdn,
 )
 from .filter_history import dedupe_append, load_filter_history, save_filter_history
+from .filters_popup import (
+    TAB_RECENT,
+    TAB_SAVED,
+    FiltersPopupState,
+    build_recent_rows,
+    build_saved_rows,
+    draw_filters_popup,
+    filter_rows,
+)
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
 from .query import Query, apply_query, parse_query_safe, tokenize_for_highlight, validate_query
@@ -125,6 +135,7 @@ class MonitorDisplay:
         sha_cache: ShaInfoCache | None = None,
         notes_data: dict[str, str] | None = None,
         notes_path: Path | None = None,
+        named_filters: list[NamedFilter] | None = None,
     ) -> None:
         self.stdscr = stdscr
         self.hosts = hosts
@@ -168,6 +179,8 @@ class MonitorDisplay:
         self.last_updated = max(timestamps, default=None) if timestamps else None
         self.fqdn_suffix = detect_common_fqdn_suffix(hosts)
         self.show_help = False
+        self.named_filters: list[NamedFilter] = named_filters or []
+        self._filters_popup_state: FiltersPopupState | None = None
         self.sort_field = "host"  # Current sort field: "host" or "role"
         self.show_only_overrides = False  # Filter to show only hosts with overrides
         self.os_filter: str | None = None  # OS filter: None=all, "L"=Linux, "M"=macOS
@@ -199,6 +212,10 @@ class MonitorDisplay:
     @property
     def filter_bar_active(self) -> bool:
         return self._filter_bar_active
+
+    @property
+    def filters_popup_active(self) -> bool:
+        return self._filters_popup_state is not None
 
     def set_query(self, text: str) -> None:
         """Set the active filter query (e.g. from --filter CLI arg)."""
@@ -299,35 +316,43 @@ class MonitorDisplay:
             self._filter_bar_text = text[:pos] + chr(key) + text[pos:]
             self._filter_bar_cursor = pos + 1
 
-    def handle_key(self, key: int, *, draw: bool = True) -> bool:
-        """Handle a keypress. Returns True if we should exit.
+    def _dispatch_overlay_key(self, key: int, *, draw: bool) -> bool | None:
+        """Route keypresses to help/popup/filter-bar overlays.
 
-        Args:
-            key: The key code from getch()
-            draw: Whether to redraw immediately (default True)
+        Returns:
+            True/False if the key was consumed by an overlay (same semantics as
+            handle_key's return value). None if no overlay is active and the
+            caller should handle the key normally.
         """
-        # Handle help popup dismissal - any key closes help (except '?' which opens it)
         if self.show_help:
-            # Don't dismiss on '?' to avoid immediate close when opening
-            # Don't dismiss on -1 (timeout/no key pressed)
             if key != ord("?") and key != -1:
                 self.show_help = False
                 if draw:
-                    # Fast refresh from cached screen instead of expensive redraw
                     self.stdscr.touchwin()
                     self.stdscr.refresh()
-            return False  # Don't process the key that closed help
-
-        # Route all keypresses to filter bar when active
+            return False
+        if self._filters_popup_state is not None:
+            self._handle_filters_popup_key(key, draw=draw)
+            return False
         if self._filter_bar_active:
             return self._handle_filter_bar_key(key, draw=draw)
+        return None
 
+    def handle_key(self, key: int, *, draw: bool = True) -> bool:
+        """Handle a keypress. Returns True if we should exit."""
+        dispatched = self._dispatch_overlay_key(key, draw=draw)
+        if dispatched is not None:
+            return dispatched
         if key in (ord("q"), ord("Q")):
             return True
         if not self.curses_mod:
             return False
         if key == ord("?"):
             self.show_help = True
+            self.draw_screen()
+            return False
+        if key == ord("F"):
+            self._open_filters_popup()
             self.draw_screen()
             return False
         if key in (self.curses_mod.KEY_ENTER, ord("\n"), ord("\r")):
@@ -396,6 +421,97 @@ class MonitorDisplay:
             self.offset = 0  # Reset to first page on filter change
             self.draw_screen()
         return False
+
+    def _open_filters_popup(self) -> None:
+        """Open the filters picker popup."""
+        self._filters_popup_state = FiltersPopupState()
+
+    def _close_filters_popup(self) -> None:
+        self._filters_popup_state = None
+
+    def _apply_filters_popup_selection(self, query_text: str) -> None:
+        """Apply a query selected from the picker and close the popup."""
+        query_text = query_text.strip()
+        if not query_text:
+            return
+        self._query_text = query_text
+        self._query = parse_query_safe(query_text)
+        self._filter_bar_text = query_text
+        self._filter_bar_cursor = len(query_text)
+        dedupe_append(self._filter_history, query_text)
+        self.offset = 0
+        err = validate_query(self._query, query_text)
+        if err:
+            self._status_msg = err
+            self._status_msg_expiry = time.monotonic() + 2.0
+        self._close_filters_popup()
+
+    def _handle_filters_popup_key(self, key: int, *, draw: bool = True) -> None:
+        state = self._filters_popup_state
+        if state is None or not self.curses_mod:
+            return
+        cm = self.curses_mod
+        saved_rows = build_saved_rows(self.named_filters)
+        recent_rows = build_recent_rows(self._filter_history)
+        active_rows = saved_rows if state.active_tab == TAB_SAVED else recent_rows
+        filtered = filter_rows(active_rows, state.search)
+        total = len(filtered)
+        tab_state = state.tab_state()
+
+        enter_keys = (cm.KEY_ENTER, ord("\n"), ord("\r"))
+
+        if key == 27 or key == ord("F"):  # Esc or F — close
+            self._close_filters_popup()
+        elif key in enter_keys:
+            if total == 0:
+                state.flash_msg = "no matches"
+                state.flash_expiry = time.monotonic() + 2.0
+            else:
+                selected = filtered[tab_state.cursor]
+                self._apply_filters_popup_selection(selected.query)
+        elif key == cm.KEY_LEFT:
+            state.active_tab = TAB_SAVED
+        elif key == cm.KEY_RIGHT:
+            state.active_tab = TAB_RECENT
+        elif key in (cm.KEY_UP, ord("k")):
+            if total > 0:
+                tab_state.cursor = max(tab_state.cursor - 1, 0)
+        elif key in (cm.KEY_DOWN, ord("j")):
+            if total > 0:
+                tab_state.cursor = min(tab_state.cursor + 1, total - 1)
+        elif key == cm.KEY_PPAGE:
+            if total > 0:
+                tab_state.cursor = max(tab_state.cursor - 10, 0)
+        elif key == cm.KEY_NPAGE:
+            if total > 0:
+                tab_state.cursor = min(tab_state.cursor + 10, total - 1)
+        elif key == cm.KEY_HOME:
+            tab_state.cursor = 0
+        elif key == ord("G"):
+            if total > 0:
+                tab_state.cursor = total - 1
+        elif key == 21:  # Ctrl-U
+            state.search = ""
+            state.saved_state.cursor = 0
+            state.saved_state.viewport_start = 0
+            state.recent_state.cursor = 0
+            state.recent_state.viewport_start = 0
+        elif key in (cm.KEY_BACKSPACE, 127, 8):
+            if state.search:
+                state.search = state.search[:-1]
+                state.saved_state.cursor = 0
+                state.saved_state.viewport_start = 0
+                state.recent_state.cursor = 0
+                state.recent_state.viewport_start = 0
+        elif 32 <= key < 127:
+            state.search = state.search + chr(key)
+            state.saved_state.cursor = 0
+            state.saved_state.viewport_start = 0
+            state.recent_state.cursor = 0
+            state.recent_state.viewport_start = 0
+
+        if draw:
+            self.draw_screen()
 
     def _check_log_sizes(self) -> list[str]:
         """Check log file sizes and return warnings for files over threshold.
@@ -916,6 +1032,17 @@ class MonitorDisplay:
         if self.show_help:
             self.stdscr.noutrefresh()
             draw_help_popup(self.stdscr, self.curses_mod, color_enabled=self.colors.color_enabled)
+            self.curses_mod.doupdate()
+        elif self._filters_popup_state is not None:
+            self.stdscr.noutrefresh()
+            draw_filters_popup(
+                self.stdscr,
+                self.curses_mod,
+                self._filters_popup_state,
+                saved_rows=build_saved_rows(self.named_filters),
+                recent_rows=build_recent_rows(self._filter_history),
+                color_enabled=self.colors.color_enabled,
+            )
             self.curses_mod.doupdate()
         else:
             self.stdscr.refresh()
