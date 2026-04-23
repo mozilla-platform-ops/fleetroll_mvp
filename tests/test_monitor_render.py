@@ -1483,6 +1483,8 @@ def _make_header_renderer() -> tuple[HeaderRenderer, list[tuple]]:
     colors.attrs.column_attr = 0
     colors.attrs.warning_attr = 0
     colors.attrs.stale_attr = 99
+    colors.attrs.overrides_badge_attr = 77
+    colors.attrs.overrides_hosts_attr = 88
     renderer = HeaderRenderer(safe_addstr=safe_addstr, colors=colors)
     return renderer, calls
 
@@ -1549,3 +1551,55 @@ def test_draw_top_header_stale_uses_stale_attr() -> None:
     stale_calls = [(row, col, text, attr) for row, col, text, attr in calls if "[stale]" in text]
     assert stale_calls, "No call containing [stale] found"
     assert stale_calls[0][3] == 99, f"Expected stale_attr=99, got {stale_calls[0][3]}"
+
+
+def test_draw_top_header_overrides_badge_replaces_inline_filter_label() -> None:
+    renderer, calls = _make_header_renderer()
+    info = _make_header_info(show_only_overrides=True)
+    renderer.draw_top_header(
+        header_info=info,
+        total_pages=1,
+        current_page=1,
+        scroll_indicator="",
+        updated="2m ago",
+        usable_width=160,
+        filtered_host_count=2,
+    )
+    texts = [text for _, _, text, _ in calls]
+    joined = " ".join(texts)
+    assert "filter=overrides" not in joined, f"Old inline label still rendered: {joined}"
+    badge_calls = [c for c in calls if c[2] == "[OVERRIDES]" and c[3] == 77]
+    assert badge_calls, f"Expected [OVERRIDES] overlay with badge attr 77, got: {calls}"
+
+
+def test_draw_top_header_overrides_tints_hosts_count() -> None:
+    renderer, calls = _make_header_renderer()
+    info = _make_header_info(show_only_overrides=True, total_hosts=280)
+    renderer.draw_top_header(
+        header_info=info,
+        total_pages=1,
+        current_page=1,
+        scroll_indicator="",
+        updated="1m",
+        usable_width=160,
+        filtered_host_count=2,
+    )
+    hosts_calls = [c for c in calls if c[2] == "hosts=2/280" and c[3] == 88]
+    assert hosts_calls, f"Expected hosts=2/280 overlay with attr 88, got: {calls}"
+
+
+def test_draw_top_header_no_badge_when_overrides_off() -> None:
+    renderer, calls = _make_header_renderer()
+    info = _make_header_info(show_only_overrides=False)
+    renderer.draw_top_header(
+        header_info=info,
+        total_pages=1,
+        current_page=1,
+        scroll_indicator="",
+        updated="1m",
+        usable_width=160,
+    )
+    texts = [text for _, _, text, _ in calls]
+    assert not any("[OVERRIDES]" in t for t in texts), f"Unexpected badge in: {texts}"
+    assert not any(attr == 77 for _, _, _, attr in calls)
+    assert not any(attr == 88 for _, _, _, attr in calls)

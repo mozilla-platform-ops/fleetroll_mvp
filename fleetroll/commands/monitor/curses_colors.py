@@ -30,6 +30,8 @@ class CursesAttrs:
         column_attr: Attribute for column headers
         warning_attr: Attribute for warning messages
         stale_attr: Attribute for the [stale] data indicator
+        overrides_badge_attr: Attribute for the [OVERRIDES] badge (reverse video, yellow)
+        overrides_hosts_attr: Attribute for the hosts= count when overrides filter is active
     """
 
     fleetroll_attr: int
@@ -37,6 +39,8 @@ class CursesAttrs:
     column_attr: int
     warning_attr: int
     stale_attr: int
+    overrides_badge_attr: int
+    overrides_hosts_attr: int
 
 
 class CursesColors:
@@ -63,6 +67,8 @@ class CursesColors:
             column_attr=0,
             warning_attr=0,
             stale_attr=0,
+            overrides_badge_attr=0,
+            overrides_hosts_attr=0,
         )
         self._init_curses()
 
@@ -131,6 +137,14 @@ class CursesColors:
                 column_attr=curses.A_BOLD | (curses.color_pair(3) if self.color_enabled else 0),
                 warning_attr=curses.color_pair(5) if self.color_enabled else 0,
                 stale_attr=(curses.color_pair(6) | curses.A_BOLD) if self.color_enabled else 0,
+                overrides_badge_attr=(
+                    curses.A_REVERSE | curses.A_BOLD | curses.color_pair(5)
+                    if self.color_enabled
+                    else curses.A_REVERSE | curses.A_BOLD
+                ),
+                overrides_hosts_attr=(
+                    curses.A_BOLD | curses.color_pair(5) if self.color_enabled else curses.A_BOLD
+                ),
             )
         except curses_error:
             return

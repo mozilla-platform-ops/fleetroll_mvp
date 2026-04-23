@@ -15,6 +15,7 @@ from .types import os_filter_label
 
 _SORT_INDICATORS = (" ↑", " ↓", " *")
 _STALE_SUFFIX = " [stale]"
+_OVERRIDES_BADGE = "[OVERRIDES]"
 
 
 def _split_stale_suffix(text: str) -> tuple[str, str]:
@@ -256,13 +257,20 @@ class HeaderRenderer:
             ver = get_version("fleetroll")
         except Exception:
             ver = "?"
+        # Fixed-position OVERRIDES badge right after "[? for help]" so it pops
+        # consistently when combined with queries or other filters.
+        base = f"fleetroll {ver} [? for help]"
+        if header_info.show_only_overrides:
+            base_with_badge = f"{base} {_OVERRIDES_BADGE}"
+            badge_col = len(base) + 1
+        else:
+            base_with_badge = base
+            badge_col = -1
         # Suppress sort= when the /query has its own sort clause
         if "sort:" in header_info.query_text.lower():
-            left = f"fleetroll {ver} [? for help]"
+            left = base_with_badge
         else:
-            left = f"fleetroll {ver} [? for help] sort={header_info.sort_field}"
-        if header_info.show_only_overrides:
-            left = f"{left}, filter=overrides"
+            left = f"{base_with_badge} sort={header_info.sort_field}"
         os_label = os_filter_label(header_info.os_filter)
         if os_label is not None:
             left = f"{left}, os={os_label}"
@@ -315,6 +323,16 @@ class HeaderRenderer:
                 start_col=right_start_col,
                 log_size_warnings=header_info.log_size_warnings,
             )
+            self._apply_overrides_overlay(
+                show=header_info.show_only_overrides,
+                badge_col=badge_col,
+                left_text=left,
+                right_text=right,
+                right_row=1,
+                right_start_col=right_start_col,
+                hosts_display=hosts_display,
+                usable_width=usable_width,
+            )
             return 2
 
         # Single-line mode: fit both on one line
@@ -322,6 +340,7 @@ class HeaderRenderer:
             padding = max(usable_width - len(left) - len(right), 1)
             header = f"{left}{' ' * padding}{right}"
         else:
+            padding = 0
             header = left
 
         # Render single-line header on row 0
@@ -383,4 +402,49 @@ class HeaderRenderer:
                     self.safe_addstr(0, header_offset, header[header_offset:], 0)
         else:
             self.safe_addstr(0, 0, header, 0)
+        self._apply_overrides_overlay(
+            show=header_info.show_only_overrides,
+            badge_col=badge_col,
+            left_text=left,
+            right_text=right if usable_width > 0 else "",
+            right_row=0,
+            right_start_col=len(left) + padding,
+            hosts_display=hosts_display,
+            usable_width=usable_width,
+        )
         return 1
+
+    def _apply_overrides_overlay(
+        self,
+        *,
+        show: bool,
+        badge_col: int,
+        left_text: str,
+        right_text: str,
+        right_row: int,
+        right_start_col: int,
+        hosts_display: str,
+        usable_width: int,
+    ) -> None:
+        """Recolor the [OVERRIDES] badge and hosts= count when overrides filter is active.
+
+        The base rendering writes [OVERRIDES] and hosts=N/M with default attributes; this
+        pass overwrites those exact spans with the reverse-video badge attr and the
+        yellow hosts attr so the visual cue is consistent no matter what other filters or
+        queries are combined with the overrides toggle.
+        """
+        if not show:
+            return
+        # Badge overlay — only draw if it fully fits in the visible left text.
+        if badge_col >= 0 and badge_col + len(_OVERRIDES_BADGE) <= len(left_text):
+            self.safe_addstr(0, badge_col, _OVERRIDES_BADGE, self.colors.attrs.overrides_badge_attr)
+        # Hosts count overlay — tint the "hosts=N/M" span yellow on the right-hand text.
+        hosts_needle = f"hosts={hosts_display}"
+        pos = right_text.find(hosts_needle)
+        if pos < 0:
+            return
+        abs_col = right_start_col + pos
+        end_col = abs_col + len(hosts_needle)
+        if usable_width > 0 and end_col > usable_width:
+            return
+        self.safe_addstr(right_row, abs_col, hosts_needle, self.colors.attrs.overrides_hosts_attr)
