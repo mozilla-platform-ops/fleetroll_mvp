@@ -1,0 +1,2 @@
+query: healthy=n pp_last>20h sort:pp_last:desc
+description: Unhealthy hosts whose last puppet run is older than 20h, worst first

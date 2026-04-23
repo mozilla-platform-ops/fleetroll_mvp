@@ -1,0 +1,2 @@
+query: tc_quar=yes sort:tc_act:desc
+description: TaskCluster-quarantined hosts, longest-quarantined first
