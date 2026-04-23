@@ -21,7 +21,7 @@ import click
 from ..audit import append_jsonl
 from ..constants import BACKUP_TIME_FORMAT, DRY_RUN_PREVIEW_LIMIT
 from ..exceptions import CommandFailureError, UserError
-from ..ssh import build_ssh_options, remote_set_script, run_ssh
+from ..ssh import build_ssh_options, parse_backup_path, remote_set_script, run_ssh
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
@@ -70,6 +70,10 @@ def set_override_for_host(
         "ok": (rc == 0),
         "ssh_rc": rc,
         "stderr": err.strip(),
+        "observed": {
+            "content_changed": "CONTENT_CHANGED=1" in out,
+            "backup_path": parse_backup_path(out),
+        },
         "parameters": {
             "source": source,
             "sha256": content_hash,
@@ -423,8 +427,9 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
 
         print(f"[{host}] override written")
         print(f"sha256={content_hash}")
-        if not args.no_backup:
-            print("backup created (if file existed)")
+        backup_path = result.get("observed", {}).get("backup_path", "")
+        if backup_path:
+            print(f"backup: {backup_path}")
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")

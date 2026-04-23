@@ -23,6 +23,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger("fleetroll")
 
 
+def parse_backup_path(out: str) -> str:
+    """Return the backup path from remote script output, or '' if none was created."""
+    for line in out.splitlines():
+        if line.startswith("BACKUP_CREATED="):
+            return line.split("=", 1)[1].strip()
+    return ""
+
+
 def run_ssh(
     host: str,
     remote_cmd: str,
@@ -478,15 +486,19 @@ if [ "$content_changed" = "0" ]; then
   sudo -n chmod {m} "$op"
   sudo -n chown "$own:$grp" "$op"
   echo "CONTENT_CHANGED=0"
+  echo "BACKUP_CREATED="
 else
   # Content changed - backup if requested, then replace
+  backup_path=""
   if {b}; then
     if sudo -n test -e "$op" 2>/dev/null; then
       sudo -n cp -a "$op" "$op.bak.{suf}"
+      backup_path="$op.bak.{suf}"
     fi
   fi
   sudo -n mv -f "$tmp" "$op"
   echo "CONTENT_CHANGED=1"
+  echo "BACKUP_CREATED=$backup_path"
 fi
 
 # Cleanup old backups (keep 30 most recent)
@@ -557,15 +569,19 @@ if [ "$content_changed" = "0" ]; then
   sudo -n chmod {m} "$vp"
   sudo -n chown "$own:$grp" "$vp"
   echo "CONTENT_CHANGED=0"
+  echo "BACKUP_CREATED="
 else
   # Content changed - backup if requested, then replace
+  backup_path=""
   if {b}; then
     if sudo -n test -e "$vp" 2>/dev/null; then
       sudo -n cp -a "$vp" "$vp.bak.{suf}"
+      backup_path="$vp.bak.{suf}"
     fi
   fi
   sudo -n mv -f "$tmp" "$vp"
   echo "CONTENT_CHANGED=1"
+  echo "BACKUP_CREATED=$backup_path"
 fi
 
 # Cleanup old backups (keep 30 most recent)
@@ -591,13 +607,17 @@ else
   op="/etc/puppet/ronin_settings"
 fi
 if sudo -n test -e "$op" 2>/dev/null; then
+  backup_path=""
   if {b}; then
     sudo -n cp -a "$op" "$op.bak.{suf}"
+    backup_path="$op.bak.{suf}"
   fi
   sudo -n rm -f "$op"
   echo "REMOVED=1"
+  echo "BACKUP_CREATED=$backup_path"
 else
   echo "REMOVED=0"
+  echo "BACKUP_CREATED="
 fi
 
 # Cleanup old backups (keep 30 most recent)

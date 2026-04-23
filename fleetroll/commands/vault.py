@@ -19,7 +19,7 @@ from ..audit import append_jsonl, store_content_file
 from ..constants import BACKUP_TIME_FORMAT, DRY_RUN_PREVIEW_LIMIT, VAULT_YAMLS_DIR_NAME
 from ..exceptions import CommandFailureError, UserError
 from ..humanhash import humanize
-from ..ssh import build_ssh_options, run_ssh
+from ..ssh import build_ssh_options, parse_backup_path, run_ssh
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
@@ -129,6 +129,10 @@ def set_vault_for_host(
         "ok": (rc == 0),
         "ssh_rc": rc,
         "stderr": err.strip(),
+        "observed": {
+            "content_changed": "CONTENT_CHANGED=1" in out,
+            "backup_path": parse_backup_path(out),
+        },
         "parameters": {
             "source": source,
             "sha256": content_hash,
@@ -363,8 +367,9 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
         print(f"[{host}] vault written")
         print(f"sha256={content_hash}")
         print(f"stored: {stored_path}")
-        if not args.no_backup:
-            print("backup created (if file existed)")
+        backup_path = result.get("observed", {}).get("backup_path", "")
+        if backup_path:
+            print(f"backup: {backup_path}")
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")

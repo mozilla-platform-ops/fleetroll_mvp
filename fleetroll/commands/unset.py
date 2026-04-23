@@ -17,7 +17,7 @@ import click
 from ..audit import append_jsonl
 from ..constants import BACKUP_TIME_FORMAT, DRY_RUN_PREVIEW_LIMIT
 from ..exceptions import CommandFailureError
-from ..ssh import build_ssh_options, remote_unset_script, run_ssh
+from ..ssh import build_ssh_options, parse_backup_path, remote_unset_script, run_ssh
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
@@ -61,6 +61,7 @@ def unset_override_for_host(
             "removed": removed,
             "backup": (not args.no_backup),
             "backup_suffix": backup_suffix,
+            "backup_path": parse_backup_path(out),
         },
         "parameters": {
             "reason": args.reason,
@@ -181,8 +182,9 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
 
         if removed:
             print(f"[{host}] override removed")
-            if not args.no_backup:
-                print("backup created")
+            backup_path = result.get("observed", {}).get("backup_path", "")
+            if backup_path:
+                print(f"backup: {backup_path}")
         else:
             print(f"[{host}] override did not exist (no change)")
 
