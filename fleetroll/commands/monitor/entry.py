@@ -10,6 +10,7 @@ from curses import wrapper as curses_wrapper
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ...data_provider import LocalProvider
 from ...exceptions import FleetRollError
 from ...notes import default_notes_path, load_latest_notes
 from ...utils import (
@@ -19,12 +20,8 @@ from ...utils import (
 )
 from .cache import ShaInfoCache
 from .data import (
-    AuditLogTailer,
     build_row_values,
     get_host_sort_key,
-    load_github_refs_from_db,
-    load_latest_records,
-    load_tc_worker_data_from_db,
     strip_fqdn,
     tail_audit_log,
 )
@@ -66,18 +63,16 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         raise FleetRollError(f"Database not found: {db_path}")
 
     db_conn = get_connection(db_path)
+    provider = LocalProvider(db_conn)
 
     try:
-        latest, latest_ok = load_latest_records(
-            db_conn,
-            hosts=hosts,
-        )
+        latest, latest_ok = provider.load_latest_records(hosts=hosts)
 
         # Load TaskCluster worker data
-        tc_data = load_tc_worker_data_from_db(db_conn, hosts=hosts)
+        tc_data = provider.load_tc_workers(hosts=hosts)
 
         # Load GitHub refs data
-        github_refs = load_github_refs_from_db(db_conn)
+        github_refs = provider.load_github_refs()
 
         # Load SHA info cache
         fleetroll_dir = Path.home() / ".fleetroll"
@@ -220,7 +215,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 latest=latest,
                 latest_ok=latest_ok,
                 tc_data=tc_data,
-                db_conn=db_conn,
+                provider=provider,
                 github_refs=github_refs,
                 sha_cache=sha_cache,
                 notes_data=notes_data,
@@ -229,10 +224,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
             if args.filter:
                 display.set_query(args.filter)
             display.draw_screen()
-            tailer = AuditLogTailer(
-                db_conn,
-                hosts=hosts,
-            )
+            tailer = provider.make_tailer(hosts=hosts)
             last_redraw_time = time.monotonic()
             while True:
                 key = stdscr.getch()

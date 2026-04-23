@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
-import sqlite3
 import time
 import types
 from curses import error as curses_error
@@ -12,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from ...data_provider import DataProvider
     from .cache import ShaInfoCache
 
 from ...utils import get_log_file_size
@@ -22,9 +22,6 @@ from .data import (
     detect_common_fqdn_suffix,
     get_host_sort_key,
     humanize_duration,
-    load_github_refs_from_db,
-    load_tc_worker_data_from_db,
-    load_windows_pools_from_db,
     strip_fqdn,
 )
 from .header_renderer import HeaderInfo, HeaderRenderer
@@ -120,7 +117,7 @@ class MonitorDisplay:
         latest: dict[str, dict[str, Any]],
         latest_ok: dict[str, dict[str, Any]],
         tc_data: dict[str, dict[str, Any]],
-        db_conn: sqlite3.Connection,
+        provider: DataProvider,
         github_refs: dict[str, dict[str, Any]],
         sha_cache: ShaInfoCache | None = None,
         notes_data: dict[str, str] | None = None,
@@ -148,7 +145,7 @@ class MonitorDisplay:
         self.latest = latest
         self.latest_ok = latest_ok
         self.tc_data = tc_data
-        self.db_conn = db_conn
+        self.provider = provider
         self.github_refs = github_refs
         self.sha_cache = sha_cache
         self.notes_data: dict[str, str] = notes_data or {}
@@ -158,7 +155,7 @@ class MonitorDisplay:
         self._windows_pools_poll_time = 0.0
         self._sha_cache_poll_time = 0.0
         self._notes_poll_time = 0.0
-        self.windows_pools: dict[str, dict[str, Any]] = load_windows_pools_from_db(self.db_conn)
+        self.windows_pools: dict[str, dict[str, Any]] = self.provider.load_windows_pools()
         self.offset = 0
         self.col_offset = 0
         self.page_step = 1
@@ -433,9 +430,7 @@ class MonitorDisplay:
         if now - self._tc_poll_time < 5.0:
             return False
         self._tc_poll_time = now
-        # Commit to end any stale read transaction and see latest writes
-        self.db_conn.commit()
-        new_data = load_tc_worker_data_from_db(self.db_conn, hosts=self.hosts)
+        new_data = self.provider.load_tc_workers(hosts=self.hosts)
         if new_data != self.tc_data:
             self.tc_data = new_data
             self._touch_updated()
@@ -448,9 +443,7 @@ class MonitorDisplay:
         if now - self._github_poll_time < 5.0:
             return False
         self._github_poll_time = now
-        # Commit to end any stale read transaction and see latest writes
-        self.db_conn.commit()
-        new_data = load_github_refs_from_db(self.db_conn)
+        new_data = self.provider.load_github_refs()
         if new_data != self.github_refs:
             self.github_refs = new_data
             self._touch_updated()
@@ -463,8 +456,7 @@ class MonitorDisplay:
         if now - self._windows_pools_poll_time < 5.0:
             return False
         self._windows_pools_poll_time = now
-        self.db_conn.commit()
-        new_data = load_windows_pools_from_db(self.db_conn)
+        new_data = self.provider.load_windows_pools()
         if new_data != self.windows_pools:
             self.windows_pools = new_data
             self._touch_updated()

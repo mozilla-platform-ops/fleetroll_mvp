@@ -13,6 +13,9 @@ All public functions are re-exported from this module for backward compatibility
 
 from __future__ import annotations
 
+# Re-export DataProvider types
+from ...data_provider import DataProvider, LocalProvider, Tailer
+
 # Re-export from data module
 from .data import (
     AuditLogTailer,
@@ -55,8 +58,11 @@ from .query import Query, apply_query, parse_query, parse_query_safe
 
 __all__ = [
     "AuditLogTailer",
+    "DataProvider",
+    "LocalProvider",
     "MonitorDisplay",
     "Query",
+    "Tailer",
     "age_seconds",
     "apply_query",
     "build_ok_row_values",

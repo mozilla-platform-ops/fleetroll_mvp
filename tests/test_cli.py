@@ -366,22 +366,17 @@ class TestHostMonitorHostnameOnly:
         db_path = tmp_path / "test.db"
         db_path.touch()
 
+        mock_provider = MagicMock()
+        mock_provider.load_latest_records.return_value = ({}, {})
+        mock_provider.load_tc_workers.return_value = {}
+        mock_provider.load_github_refs.return_value = {}
+        mock_provider.load_windows_pools.return_value = {}
+
         with (
             patch("fleetroll.db.get_db_path", return_value=db_path),
             patch("fleetroll.db.init_db"),
             patch("fleetroll.db.get_connection", return_value=MagicMock()),
-            patch(
-                "fleetroll.commands.monitor.entry.load_latest_records",
-                return_value=({}, {}),
-            ),
-            patch(
-                "fleetroll.commands.monitor.entry.load_tc_worker_data_from_db",
-                return_value={},
-            ),
-            patch(
-                "fleetroll.commands.monitor.entry.load_github_refs_from_db",
-                return_value={},
-            ),
+            patch("fleetroll.data_provider.LocalProvider", return_value=mock_provider),
             patch("fleetroll.commands.monitor.entry.load_latest_notes", return_value={}),
         ):
             result = runner.invoke(
