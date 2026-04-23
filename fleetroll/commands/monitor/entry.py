@@ -26,6 +26,7 @@ from .data import (
     tail_audit_log,
 )
 from .display import MonitorDisplay
+from .filter_history import filter_history_path
 from .formatting import (
     compute_columns_and_widths,
     format_monitor_row,
@@ -205,6 +206,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     )
             return
 
+        display_ref: list[MonitorDisplay] = []
+
         def curses_main(stdscr) -> None:
             stdscr.nodelay(True)
             stdscr.timeout(200)
@@ -221,6 +224,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 notes_data=notes_data,
                 notes_path=notes_path,
             )
+            display_ref.append(display)
+            display.load_history(filter_history_path())
             if args.filter:
                 display.set_query(args.filter)
             display.draw_screen()
@@ -287,6 +292,10 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 if redrew:
                     last_redraw_time = now
 
-        curses_wrapper(curses_main)
+        try:
+            curses_wrapper(curses_main)
+        finally:
+            if display_ref:
+                display_ref[0].save_history(filter_history_path())
     finally:
         db_conn.close()

@@ -24,6 +24,7 @@ from .data import (
     humanize_duration,
     strip_fqdn,
 )
+from .filter_history import dedupe_append, load_filter_history, save_filter_history
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
 from .query import Query, apply_query, parse_query_safe, tokenize_for_highlight, validate_query
@@ -203,8 +204,8 @@ class MonitorDisplay:
         self._query = parse_query_safe(text)
         self._filter_bar_text = text
         self._filter_bar_cursor = len(text)
-        if text and (not self._filter_history or self._filter_history[-1] != text):
-            self._filter_history.append(text)
+        if text:
+            dedupe_append(self._filter_history, text)
 
     def _handle_filter_bar_key(self, key: int, *, draw: bool = True) -> bool:
         """Handle keypresses while the filter bar is active. Returns True to exit monitor."""
@@ -215,8 +216,8 @@ class MonitorDisplay:
         pos = self._filter_bar_cursor
         enter_keys = (cm.KEY_ENTER, ord("\n"), ord("\r"))
         if key in enter_keys:
-            if text and (not self._filter_history or self._filter_history[-1] != text):
-                self._filter_history.append(text)
+            if text:
+                dedupe_append(self._filter_history, text)
             self._filter_history_idx = -1
             self._filter_history_saved = ""
             self._query_text = text
@@ -374,10 +375,8 @@ class MonitorDisplay:
                 self.curses_mod.curs_set(1)
             self.draw_screen()
         elif key == ord("\\"):
-            if self._query_text and (
-                not self._filter_history or self._filter_history[-1] != self._query_text
-            ):
-                self._filter_history.append(self._query_text)
+            if self._query_text:
+                dedupe_append(self._filter_history, self._query_text)
             self._query_text = ""
             self._query = Query()
             self._filter_bar_text = ""
@@ -504,6 +503,12 @@ class MonitorDisplay:
             self._touch_updated()
             return True
         return False
+
+    def load_history(self, path: Path) -> None:
+        self._filter_history = load_filter_history(path)
+
+    def save_history(self, path: Path) -> None:
+        save_filter_history(path, self._filter_history)
 
     def update_record(self, record: dict[str, Any]) -> None:
         self.latest[record["host"]] = record

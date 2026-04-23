@@ -40,6 +40,8 @@ DEFAULT_GITHUB_REPO = "mozilla-platform-ops/ronin_puppet"
 
 CONFIG_FILE_NAME = "config.toml"
 NOTES_FILE_NAME = "notes.jsonl"
+FILTER_HISTORY_FILE_NAME = "filter_history"
+FILTER_HISTORY_MAX = 100
 DATA_DIR_NAME = "data"
 
 # SQLite database settings

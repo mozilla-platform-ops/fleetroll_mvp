@@ -232,3 +232,49 @@ class TestQuit:
                 return not any("HOST" in ln and "ROLE" in ln for ln in screen_lines)
 
             assert sess.wait_until(_exited, timeout=5.0), "TUI did not exit after q"
+
+
+# ---------------------------------------------------------------------------
+# Filter history persistence
+# ---------------------------------------------------------------------------
+
+
+class TestFilterHistoryPersistence:
+    """Verify that filter queries are saved to disk and reloaded on restart."""
+
+    def test_history_recalled_after_restart(
+        self,
+        tmux_monitor_env: dict[str, Any],
+    ) -> None:
+        """A query entered in one session is recallable with Up after restart."""
+        home_dir = tmux_monitor_env["home"]
+        hosts_file = tmux_monitor_env["hosts_file"]
+        cmd = f"{_UV_PATH} run fleetroll host-monitor {hosts_file}"
+        env = _session_env(home_dir)
+
+        # Session 1: launch with --filter so the query is pre-applied without
+        # using the interactive filter bar (avoids a timing edge case in the
+        # key-drain loop). set_query() appends to history; save_history() fires
+        # in the finally block on clean q-exit.
+        cmd_filtered = f"{_UV_PATH} run fleetroll host-monitor {hosts_file} --filter role=nomatch"
+        with TmuxSession(cmd=cmd_filtered, cols=160, rows=40, env=env, cwd=_PROJECT_ROOT) as sess:
+            assert sess.wait_for("hosts=0/5", timeout=15.0), "Filtered TUI did not render"
+            sess.send_keys("q")
+
+            def _exited() -> bool:
+                lines = [ln for ln in sess.capture().splitlines() if ln.strip()]
+                return not any("HOST" in ln and "ROLE" in ln for ln in lines)
+
+            assert sess.wait_until(_exited, timeout=5.0), "TUI did not exit (session 1)"
+
+        # Verify the history file was written on clean exit.
+        hist_file = home_dir / ".fleetroll" / "filter_history"
+        assert hist_file.exists(), "filter_history file was not created"
+        assert "role=nomatch" in hist_file.read_text()
+
+        # Session 2: relaunch without --filter and verify Up recalls the query.
+        with TmuxSession(cmd=cmd, cols=160, rows=40, env=env, cwd=_PROJECT_ROOT) as sess:
+            assert sess.wait_for("HOST", timeout=15.0), "TUI did not render (session 2)"
+            sess.send_keys("/")
+            sess.send_keys("Up")
+            assert sess.wait_for("role=nomatch", timeout=3.0), "History not recalled with Up"
