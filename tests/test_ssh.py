@@ -9,6 +9,7 @@ from fleetroll.constants import CONTENT_SENTINEL
 from fleetroll.ssh import (
     build_ssh_options,
     is_windows_host,
+    parse_backup_path,
     remote_audit_script,
     remote_set_script,
     remote_unset_script,
@@ -579,3 +580,67 @@ class TestAuditScriptJsonCollection:
         assert json_check_pos > 0, "JSON file check not found"
         assert else_pos > 0, "YAML fallback else clause not found"
         assert json_check_pos < else_pos, "JSON check should appear before YAML fallback"
+
+
+class TestParseBackupPath:
+    """Tests for parse_backup_path helper."""
+
+    def test_returns_path_when_marker_present(self):
+        out = "CONTENT_CHANGED=1\nBACKUP_CREATED=/etc/puppet/ronin_settings.bak.20240101T000000Z\n"
+        assert parse_backup_path(out) == "/etc/puppet/ronin_settings.bak.20240101T000000Z"
+
+    def test_returns_empty_string_when_no_backup(self):
+        out = "CONTENT_CHANGED=1\nBACKUP_CREATED=\n"
+        assert parse_backup_path(out) == ""
+
+    def test_returns_empty_string_when_marker_absent(self):
+        out = "CONTENT_CHANGED=1\n"
+        assert parse_backup_path(out) == ""
+
+    def test_returns_empty_string_on_empty_output(self):
+        assert parse_backup_path("") == ""
+
+
+class TestBackupCreatedMarkerInSetScript:
+    """remote_set_script emits BACKUP_CREATED= in its output."""
+
+    def test_emits_backup_created_marker(self):
+        script = remote_set_script(
+            mode="0644",
+            owner="root",
+            group="root",
+            backup=True,
+            backup_suffix="20240101T000000Z",
+        )
+        assert "BACKUP_CREATED=" in script
+
+    def test_backup_path_variable_set_after_cp(self):
+        script = remote_set_script(
+            mode="0644",
+            owner="root",
+            group="root",
+            backup=True,
+            backup_suffix="20240101T000000Z",
+        )
+        cp_pos = script.find("cp -a")
+        backup_path_assign_pos = script.find('backup_path="$op.bak.')
+        assert cp_pos > 0
+        assert backup_path_assign_pos > cp_pos
+
+
+class TestBackupCreatedMarkerInUnsetScript:
+    """remote_unset_script emits BACKUP_CREATED= in its output."""
+
+    def test_emits_backup_created_marker(self):
+        script = remote_unset_script(
+            backup=True,
+            backup_suffix="20240101T000000Z",
+        )
+        assert "BACKUP_CREATED=" in script
+
+    def test_no_backup_still_emits_empty_marker(self):
+        script = remote_unset_script(
+            backup=False,
+            backup_suffix="suffix",
+        )
+        assert "BACKUP_CREATED=" in script
