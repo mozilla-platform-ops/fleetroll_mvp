@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from fleetroll.commands.monitor import load_tc_worker_data_from_db
+from fleetroll.commands.monitor import load_tc_worker_data_from_db, most_recent_ok_ts
 from fleetroll.db import get_connection, init_db, insert_tc_worker
 
 
@@ -129,3 +129,34 @@ def test_load_tc_worker_data_from_db_latest_only(db_conn) -> None:
     # Should return only the latest record
     assert result["host1"]["state"] == "running"
     assert result["host1"]["ts"] == "2026-02-10T10:00:00+00:00"
+
+
+def test_most_recent_ok_ts_empty() -> None:
+    assert most_recent_ok_ts({}) is None
+
+
+def test_most_recent_ok_ts_no_ts_field() -> None:
+    latest_ok = {"host1": {"ok": 1}, "host2": {"ok": 1}}
+    assert most_recent_ok_ts(latest_ok) is None
+
+
+def test_most_recent_ok_ts_single_host() -> None:
+    latest_ok = {"host1": {"ok": 1, "ts": "2026-04-23T10:00:00+00:00"}}
+    assert most_recent_ok_ts(latest_ok) == "2026-04-23T10:00:00+00:00"
+
+
+def test_most_recent_ok_ts_picks_latest() -> None:
+    latest_ok = {
+        "host1": {"ok": 1, "ts": "2026-04-23T08:00:00+00:00"},
+        "host2": {"ok": 1, "ts": "2026-04-23T10:30:00+00:00"},
+        "host3": {"ok": 1, "ts": "2026-04-23T09:00:00+00:00"},
+    }
+    assert most_recent_ok_ts(latest_ok) == "2026-04-23T10:30:00+00:00"
+
+
+def test_most_recent_ok_ts_mixed_ts_presence() -> None:
+    latest_ok = {
+        "host1": {"ok": 1},
+        "host2": {"ok": 1, "ts": "2026-04-23T10:00:00+00:00"},
+    }
+    assert most_recent_ok_ts(latest_ok) == "2026-04-23T10:00:00+00:00"

@@ -29,12 +29,14 @@ class CursesAttrs:
         header_data_attr: Attribute for header data sections
         column_attr: Attribute for column headers
         warning_attr: Attribute for warning messages
+        stale_attr: Attribute for the [stale] data indicator
     """
 
     fleetroll_attr: int
     header_data_attr: int
     column_attr: int
     warning_attr: int
+    stale_attr: int
 
 
 class CursesColors:
@@ -60,6 +62,7 @@ class CursesColors:
             header_data_attr=0,
             column_attr=0,
             warning_attr=0,
+            stale_attr=0,
         )
         self._init_curses()
 
@@ -127,6 +130,7 @@ class CursesColors:
                 header_data_attr=curses.color_pair(2) if self.color_enabled else 0,
                 column_attr=curses.A_BOLD | (curses.color_pair(3) if self.color_enabled else 0),
                 warning_attr=curses.color_pair(5) if self.color_enabled else 0,
+                stale_attr=(curses.color_pair(6) | curses.A_BOLD) if self.color_enabled else 0,
             )
         except curses_error:
             return

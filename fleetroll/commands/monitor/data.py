@@ -169,6 +169,12 @@ def humanize_age(ts_value: str) -> str:
         return ts_value
 
 
+def most_recent_ok_ts(latest_ok: dict[str, dict]) -> str | None:
+    """Return the most recent ok=1 timestamp across all hosts, or None if none exist."""
+    timestamps = [r.get("ts") for r in latest_ok.values() if r.get("ts")]
+    return max(timestamps, default=None) if timestamps else None
+
+
 def age_seconds(ts_value: str) -> int | None:
     """Return age in seconds for an ISO timestamp."""
     if not ts_value or ts_value == "?":

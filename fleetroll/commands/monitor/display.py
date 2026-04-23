@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from ...data_provider import DataProvider
     from .cache import ShaInfoCache
 
+from ...constants import STALE_DATA_THRESHOLD_SECONDS
 from ...utils import get_log_file_size
 from .curses_colors import CursesColors
 from .data import (
@@ -22,6 +23,7 @@ from .data import (
     detect_common_fqdn_suffix,
     get_host_sort_key,
     humanize_duration,
+    most_recent_ok_ts,
     strip_fqdn,
 )
 from .filter_history import dedupe_append, load_filter_history, save_filter_history
@@ -545,6 +547,10 @@ class MonitorDisplay:
         updated_age = age_seconds(self.last_updated) if self.last_updated else None
         updated = humanize_duration(updated_age) if updated_age is not None else "never"
 
+        most_recent_ok = most_recent_ok_ts(self.latest_ok)
+        ok_age = age_seconds(most_recent_ok) if most_recent_ok else None
+        data_is_stale = ok_age is None or ok_age > STALE_DATA_THRESHOLD_SECONDS
+
         return {
             "height": height,
             "width": width,
@@ -553,6 +559,7 @@ class MonitorDisplay:
             "total_pages": total_pages,
             "current_page": current_page,
             "updated": updated,
+            "data_is_stale": data_is_stale,
         }
 
     def _compute_column_widths(
@@ -790,6 +797,7 @@ class MonitorDisplay:
             updated=metrics["updated"],
             usable_width=metrics["usable_width"],
             filtered_host_count=filtered_count,
+            data_is_stale=metrics["data_is_stale"],
         )
         self.header_renderer.draw_column_header(
             labels=labels, columns=columns, widths=widths, header_row=header_rows

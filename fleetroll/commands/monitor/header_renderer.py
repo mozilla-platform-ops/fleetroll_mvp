@@ -14,6 +14,14 @@ from .formatting import clip_cell, render_row_cells
 from .types import os_filter_label
 
 _SORT_INDICATORS = (" ↑", " ↓", " *")
+_STALE_SUFFIX = " [stale]"
+
+
+def _split_stale_suffix(text: str) -> tuple[str, str]:
+    """Split off _STALE_SUFFIX from text end. Returns (main, stale_text)."""
+    if text.endswith(_STALE_SUFFIX):
+        return text[: -len(_STALE_SUFFIX)], _STALE_SUFFIX
+    return text, ""
 
 
 def _find_sort_indicator(text: str) -> tuple[int, int] | None:
@@ -182,9 +190,13 @@ class HeaderRenderer:
                                 row, col, right_start, self.colors.attrs.header_data_attr
                             )
                             col += len(right_start)
+                            main_after, stale_text = _split_stale_suffix(after_data)
                             self.safe_addstr(
-                                row, col, after_data, self.colors.attrs.header_data_attr
+                                row, col, main_after, self.colors.attrs.header_data_attr
                             )
+                            if stale_text:
+                                col += len(main_after)
+                                self.safe_addstr(row, col, stale_text, self.colors.attrs.stale_attr)
                         else:
                             self.safe_addstr(row, col, data_part, 0)
                     else:
@@ -192,19 +204,15 @@ class HeaderRenderer:
                 else:
                     # No warning, just color the data section
                     left_part, right_part = text.rsplit(right_start, 1)
+                    main_data, stale_text = _split_stale_suffix(right_part)
                     self.safe_addstr(row, start_col, left_part, 0)
-                    self.safe_addstr(
-                        row,
-                        start_col + len(left_part),
-                        right_start,
-                        self.colors.attrs.header_data_attr,
-                    )
-                    self.safe_addstr(
-                        row,
-                        start_col + len(left_part) + len(right_start),
-                        right_part,
-                        self.colors.attrs.header_data_attr,
-                    )
+                    col = start_col + len(left_part)
+                    self.safe_addstr(row, col, right_start, self.colors.attrs.header_data_attr)
+                    col += len(right_start)
+                    self.safe_addstr(row, col, main_data, self.colors.attrs.header_data_attr)
+                    if stale_text:
+                        col += len(main_data)
+                        self.safe_addstr(row, col, stale_text, self.colors.attrs.stale_attr)
             else:
                 self.safe_addstr(row, start_col, text, 0)
         # Left side: color "fleetroll X.Y.Z" — end at " [" to avoid matching colons in query text
@@ -228,6 +236,7 @@ class HeaderRenderer:
         updated: str,
         usable_width: int,
         filtered_host_count: int | None = None,
+        data_is_stale: bool = False,
     ) -> int:
         """Render the top information banner with metadata.
 
@@ -283,6 +292,8 @@ class HeaderRenderer:
         if header_info.log_size_warnings:
             warnings_text = ", ".join(header_info.log_size_warnings)
             right = f"⚠ Large logs: {warnings_text} (run 'fleetroll maintain') | {right}"
+        if data_is_stale:
+            right = f"{right}{_STALE_SUFFIX}"
         # Determine if we need two-line mode
         use_two_lines = usable_width > 0 and len(left) + 1 + len(right) > usable_width
 
@@ -345,7 +356,11 @@ class HeaderRenderer:
                         # Write data part in header color
                         self.safe_addstr(0, col, right_start, self.colors.attrs.header_data_attr)
                         col += len(right_start)
-                        self.safe_addstr(0, col, after_data, self.colors.attrs.header_data_attr)
+                        main_after, stale_text = _split_stale_suffix(after_data)
+                        self.safe_addstr(0, col, main_after, self.colors.attrs.header_data_attr)
+                        if stale_text:
+                            col += len(main_after)
+                            self.safe_addstr(0, col, stale_text, self.colors.attrs.stale_attr)
                     else:
                         self.safe_addstr(0, header_offset, middle, 0)
                 else:
@@ -355,19 +370,15 @@ class HeaderRenderer:
                 right_start = "fqdn=" if "fqdn=" in header else "source="
                 if right_start in header:
                     left_part, right_part = header[header_offset:].rsplit(right_start, 1)
+                    main_data, stale_text = _split_stale_suffix(right_part)
                     self.safe_addstr(0, header_offset, left_part, 0)
-                    self.safe_addstr(
-                        0,
-                        header_offset + len(left_part),
-                        right_start,
-                        self.colors.attrs.header_data_attr,
-                    )
-                    self.safe_addstr(
-                        0,
-                        header_offset + len(left_part) + len(right_start),
-                        right_part,
-                        self.colors.attrs.header_data_attr,
-                    )
+                    col = header_offset + len(left_part)
+                    self.safe_addstr(0, col, right_start, self.colors.attrs.header_data_attr)
+                    col += len(right_start)
+                    self.safe_addstr(0, col, main_data, self.colors.attrs.header_data_attr)
+                    if stale_text:
+                        col += len(main_data)
+                        self.safe_addstr(0, col, stale_text, self.colors.attrs.stale_attr)
                 else:
                     self.safe_addstr(0, header_offset, header[header_offset:], 0)
         else:

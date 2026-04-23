@@ -48,6 +48,9 @@ DATA_DIR_NAME = "data"
 DB_FILE_NAME = "fleetroll.db"
 DB_RETENTION_LIMIT = 10  # Keep latest N records per key in SQLite tables
 
+# Monitor display settings
+STALE_DATA_THRESHOLD_SECONDS = 3600  # 1 hour — show [stale] if no ok checks within this window
+
 # TaskCluster role to (provisioner, workerType) mapping
 ROLE_TO_TASKCLUSTER = {
     "gecko_t_linux_talos": ("releng-hardware", "gecko-t-linux-talos-1804"),

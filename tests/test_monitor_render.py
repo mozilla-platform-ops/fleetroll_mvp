@@ -14,6 +14,11 @@ from fleetroll.commands.monitor import (
     render_monitor_lines,
     render_row_cells,
 )
+from fleetroll.commands.monitor.header_renderer import (
+    HeaderInfo,
+    HeaderRenderer,
+    _split_stale_suffix,
+)
 from fleetroll.commands.monitor.row_renderer import RowRenderer
 from fleetroll.humanhash import humanize
 
@@ -1443,3 +1448,104 @@ def test_windows_host_puppet_fields_suppressed():
     assert values["pp_exp"] == "-"
     assert values["pp_match"] == "-"
     assert values["healthy"] == "-"
+
+
+def test_split_stale_suffix_with_suffix() -> None:
+    main, stale = _split_stale_suffix("source=file, hosts=5, updated=2m ago [stale]")
+    assert main == "source=file, hosts=5, updated=2m ago"
+    assert stale == " [stale]"
+
+
+def test_split_stale_suffix_without_suffix() -> None:
+    main, stale = _split_stale_suffix("source=file, hosts=5, updated=2m ago")
+    assert main == "source=file, hosts=5, updated=2m ago"
+    assert stale == ""
+
+
+def test_split_stale_suffix_empty_string() -> None:
+    main, stale = _split_stale_suffix("")
+    assert main == ""
+    assert stale == ""
+
+
+def _make_header_renderer() -> tuple[HeaderRenderer, list[tuple]]:
+    """Build a HeaderRenderer with a recording safe_addstr."""
+    calls: list[tuple] = []
+
+    def safe_addstr(row: int, col: int, text: str, attr: int) -> None:
+        calls.append((row, col, text, attr))
+
+    colors = MagicMock()
+    colors.color_enabled = False
+    colors.curses_mod = MagicMock()
+    colors.attrs.fleetroll_attr = 0
+    colors.attrs.header_data_attr = 0
+    colors.attrs.column_attr = 0
+    colors.attrs.warning_attr = 0
+    colors.attrs.stale_attr = 99
+    renderer = HeaderRenderer(safe_addstr=safe_addstr, colors=colors)
+    return renderer, calls
+
+
+def _make_header_info(**kwargs) -> HeaderInfo:
+    defaults: dict = {
+        "sort_field": "host",
+        "show_only_overrides": False,
+        "os_filter": None,
+        "fqdn_suffix": None,
+        "host_source": "hosts.txt",
+        "total_hosts": 10,
+        "log_size_warnings": [],
+        "query_text": "",
+    }
+    defaults.update(kwargs)
+    return HeaderInfo(**defaults)
+
+
+def test_draw_top_header_stale_indicator_in_output() -> None:
+    renderer, calls = _make_header_renderer()
+    info = _make_header_info()
+    renderer.draw_top_header(
+        header_info=info,
+        total_pages=1,
+        current_page=1,
+        scroll_indicator="",
+        updated="2m ago",
+        usable_width=160,
+        data_is_stale=True,
+    )
+    texts = [text for _, _, text, _ in calls]
+    assert any("[stale]" in t for t in texts), f"[stale] not found in: {texts}"
+
+
+def test_draw_top_header_no_stale_indicator_when_fresh() -> None:
+    renderer, calls = _make_header_renderer()
+    info = _make_header_info()
+    renderer.draw_top_header(
+        header_info=info,
+        total_pages=1,
+        current_page=1,
+        scroll_indicator="",
+        updated="2m ago",
+        usable_width=160,
+        data_is_stale=False,
+    )
+    texts = [text for _, _, text, _ in calls]
+    assert not any("[stale]" in t for t in texts), f"Unexpected [stale] in: {texts}"
+
+
+def test_draw_top_header_stale_uses_stale_attr() -> None:
+    renderer, calls = _make_header_renderer()
+    info = _make_header_info()
+    renderer.draw_top_header(
+        header_info=info,
+        total_pages=1,
+        current_page=1,
+        scroll_indicator="",
+        updated="2m ago",
+        usable_width=160,
+        data_is_stale=True,
+    )
+    stale_calls = [(row, col, text, attr) for row, col, text, attr in calls if "[stale]" in text]
+    assert stale_calls, "No call containing [stale] found"
+    assert stale_calls[0][3] == 99, f"Expected stale_attr=99, got {stale_calls[0][3]}"
