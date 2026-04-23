@@ -331,8 +331,9 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
     )
 
     if not is_batch:
+        host = hosts[0]
         result = set_vault_for_host(
-            args.host,
+            host,
             args=args,
             ssh_opts=ssh_opts,
             remote_cmd=remote_cmd,
@@ -349,17 +350,17 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
             print(json.dumps(result, indent=2, sort_keys=True))
             if rc != 0:
                 raise CommandFailureError
-            _maybe_auto_audit([args.host], args, audit_log)
+            _maybe_auto_audit([host], args, audit_log)
             return
 
         if rc != 0:
             print(
-                f"[{args.host}] set vault FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
+                f"[{host}] set vault FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
                 file=sys.stderr,
             )
             raise CommandFailureError
 
-        print(f"[{args.host}] vault written")
+        print(f"[{host}] vault written")
         print(f"sha256={content_hash}")
         print(f"stored: {stored_path}")
         if not args.no_backup:
@@ -367,7 +368,7 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")
-        _maybe_auto_audit([args.host], args, audit_log)
+        _maybe_auto_audit([host], args, audit_log)
         return
 
     results: list[dict[str, Any]] = []

@@ -386,8 +386,9 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
     )
 
     if not is_batch:
+        host = hosts[0]
         result = set_override_for_host(
-            args.host,
+            host,
             args=args,
             ssh_opts=ssh_opts,
             remote_cmd=remote_cmd,
@@ -403,31 +404,31 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
             print(json.dumps(result, indent=2, sort_keys=True))
             if rc != 0:
                 raise CommandFailureError
-            _maybe_auto_audit([args.host], args, audit_log)
+            _maybe_auto_audit([host], args, audit_log)
             return
 
         if rc == 2:
             print(
-                f"[{args.host}] BLOCKED — override already exists. Use --force to overwrite.",
+                f"[{host}] BLOCKED — override already exists. Use --force to overwrite.",
                 file=sys.stderr,
             )
             raise CommandFailureError
 
         if rc != 0:
             print(
-                f"[{args.host}] set override FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
+                f"[{host}] set override FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
                 file=sys.stderr,
             )
             raise CommandFailureError
 
-        print(f"[{args.host}] override written")
+        print(f"[{host}] override written")
         print(f"sha256={content_hash}")
         if not args.no_backup:
             print("backup created (if file existed)")
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")
-        _maybe_auto_audit([args.host], args, audit_log)
+        _maybe_auto_audit([host], args, audit_log)
         return
 
     results: list[dict[str, Any]] = []

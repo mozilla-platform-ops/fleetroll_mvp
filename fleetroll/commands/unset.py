@@ -21,6 +21,7 @@ from ..ssh import build_ssh_options, remote_unset_script, run_ssh
 from ..utils import (
     default_audit_log_path,
     ensure_host_or_file,
+    expand_hostname,
     format_host_preview,
     infer_actor,
     is_host_file,
@@ -101,7 +102,10 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
         hosts = parse_host_list(host_file)
         is_batch = True
     else:
-        hosts = [args.host]
+        expanded = expand_hostname(args.host)
+        if expanded != args.host:
+            print(f"Expanding {args.host} → {expanded}")
+        hosts = [expanded]
         is_batch = False
 
     if not args.confirm:
@@ -148,8 +152,9 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
     )
 
     if not is_batch:
+        host = hosts[0]
         result = unset_override_for_host(
-            args.host,
+            host,
             args=args,
             ssh_opts=ssh_opts,
             remote_cmd=remote_cmd,
@@ -164,27 +169,27 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
             print(json.dumps(result, indent=2, sort_keys=True))
             if rc != 0:
                 raise CommandFailureError
-            _maybe_auto_audit([args.host], args, audit_log)
+            _maybe_auto_audit([host], args, audit_log)
             return
 
         if rc != 0:
             print(
-                f"[{args.host}] unset override FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
+                f"[{host}] unset override FAILED (rc={rc}). stderr:\n{result.get('stderr', '')}",
                 file=sys.stderr,
             )
             raise CommandFailureError
 
         if removed:
-            print(f"[{args.host}] override removed")
+            print(f"[{host}] override removed")
             if not args.no_backup:
                 print("backup created")
         else:
-            print(f"[{args.host}] override did not exist (no change)")
+            print(f"[{host}] override did not exist (no change)")
 
         if args.reason:
             print(f"reason: {args.reason}")
         print(f"Audit log: {audit_log}")
-        _maybe_auto_audit([args.host], args, audit_log)
+        _maybe_auto_audit([host], args, audit_log)
         return
 
     results: list[dict[str, Any]] = []
