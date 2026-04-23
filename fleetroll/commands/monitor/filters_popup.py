@@ -201,14 +201,15 @@ def draw_filters_popup(
         with contextlib.suppress(curses_error):
             win.addstr(rows_bottom, arrow_col, "▼", popup_attr)
 
-    # Bottom border status: left = find/flash, right = m/n
-    status_left = ""
+    # Bottom border status: left = find/flash/hint, right = m/n
     import time as _time
 
     if state.flash_msg and _time.monotonic() < state.flash_expiry:
         status_left = f" {state.flash_msg} "
     elif state.search:
-        status_left = f" find: {state.search} "
+        status_left = f" find: {state.search}_ "
+    else:
+        status_left = " type to filter · ↑↓ nav · ←→ tabs · ↵ apply · esc close "
 
     m = total
     n = len(all_rows)

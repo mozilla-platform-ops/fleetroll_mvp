@@ -32,7 +32,6 @@ from .formatting import (
     format_monitor_row,
     render_monitor_lines,
 )
-from .named_filters import load_named_filters
 from .query import apply_query, parse_query_safe
 
 if TYPE_CHECKING:
@@ -207,7 +206,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     )
             return
 
-        named_filters = load_named_filters(Path("configs/filters"))
+        filters_configs_dir = Path("configs/filters")
 
         display_ref: list[MonitorDisplay] = []
 
@@ -226,7 +225,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 sha_cache=sha_cache,
                 notes_data=notes_data,
                 notes_path=notes_path,
-                named_filters=named_filters,
+                filters_configs_dir=filters_configs_dir,
             )
             display_ref.append(display)
             display.load_history(filter_history_path())

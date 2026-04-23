@@ -166,6 +166,29 @@ class TestFiltersPopup:
         finally:
             sess.kill()
 
+    def test_reloads_filters_on_open(self, tmp_path: Path) -> None:
+        """Filters added to configs/filters/ while the monitor is running show up
+        on the next popup open — no restart required."""
+        ws = _prepare_workspace(
+            tmp_path,
+            filter_yaml={"initial": "query: os=L\n"},
+        )
+        sess = _launch(ws)
+        try:
+            sess.send_keys("F")
+            assert sess.wait_for("initial", timeout=5.0)
+            sess.send_keys("Escape")
+            assert sess.wait_until(lambda: "initial" not in sess.capture(), timeout=5.0)
+
+            # Add a new filter on disk while the monitor is running.
+            (tmp_path / "configs" / "filters" / "late-added.yaml").write_text("query: os=M\n")
+
+            sess.send_keys("F")
+            assert sess.wait_for("late-added", timeout=5.0), sess.capture()
+            assert "initial" in sess.capture()
+        finally:
+            sess.kill()
+
     def test_empty_search_flashes_no_matches(self, tmp_path: Path) -> None:
         ws = _prepare_workspace(
             tmp_path,

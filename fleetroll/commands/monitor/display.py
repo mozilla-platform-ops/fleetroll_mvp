@@ -39,6 +39,7 @@ from .filters_popup import (
 )
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
+from .named_filters import load_named_filters
 from .query import Query, apply_query, parse_query_safe, tokenize_for_highlight, validate_query
 from .row_renderer import RowRenderer
 from .types import cycle_os_filter
@@ -135,7 +136,7 @@ class MonitorDisplay:
         sha_cache: ShaInfoCache | None = None,
         notes_data: dict[str, str] | None = None,
         notes_path: Path | None = None,
-        named_filters: list[NamedFilter] | None = None,
+        filters_configs_dir: Path | None = None,
     ) -> None:
         self.stdscr = stdscr
         self.hosts = hosts
@@ -179,7 +180,8 @@ class MonitorDisplay:
         self.last_updated = max(timestamps, default=None) if timestamps else None
         self.fqdn_suffix = detect_common_fqdn_suffix(hosts)
         self.show_help = False
-        self.named_filters: list[NamedFilter] = named_filters or []
+        self._filters_configs_dir: Path | None = filters_configs_dir
+        self.named_filters: list[NamedFilter] = []
         self._filters_popup_state: FiltersPopupState | None = None
         self.sort_field = "host"  # Current sort field: "host" or "role"
         self.show_only_overrides = False  # Filter to show only hosts with overrides
@@ -423,7 +425,13 @@ class MonitorDisplay:
         return False
 
     def _open_filters_popup(self) -> None:
-        """Open the filters picker popup."""
+        """Open the filters picker popup.
+
+        Reloads named filters from disk so filters added while the monitor was
+        running show up without a restart.
+        """
+        if self._filters_configs_dir is not None:
+            self.named_filters = load_named_filters(self._filters_configs_dir)
         self._filters_popup_state = FiltersPopupState()
 
     def _close_filters_popup(self) -> None:
