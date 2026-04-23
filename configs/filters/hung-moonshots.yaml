@@ -1,0 +1,2 @@
+query: tc_act>4h data>4h note=- sort:host:asc
+description: find hung moonshot workers
