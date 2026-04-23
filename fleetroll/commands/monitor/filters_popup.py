@@ -203,7 +203,7 @@ def draw_filters_popup(
         is_active = bool(active_query) and row.query == active_query
         cursor_glyph = "›" if is_sel else " "  # noqa: RUF001
         active_glyph = "●" if is_active else " "
-        prefix = f"{cursor_glyph}{active_glyph}"
+        prefix = f"{cursor_glyph} {active_glyph} "
         if label_w > 0:
             label = row.label[:label_w].ljust(label_w)
             text = f"{prefix}{label}  {row.query}"
