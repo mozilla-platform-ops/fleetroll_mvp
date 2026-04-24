@@ -58,6 +58,8 @@ def _parse_filter_file(path: Path) -> NamedFilter | None:
     except yaml.YAMLError as exc:
         log.warning("skipping malformed filter YAML %s: %s", path, exc)
         return None
+    if data is None:
+        return None  # empty file — skip silently
     if not isinstance(data, dict):
         log.warning("skipping filter file %s: top-level must be a mapping", path)
         return None

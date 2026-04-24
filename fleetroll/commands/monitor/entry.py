@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import curses
 import json
+import logging
 import sys
 import time
 from curses import wrapper as curses_wrapper
@@ -295,9 +296,29 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 if redrew:
                     last_redraw_time = now
 
+        fleetroll_logger = logging.getLogger("fleetroll")
+        stderr_handlers = [
+            h
+            for h in fleetroll_logger.handlers
+            if isinstance(h, logging.StreamHandler)
+            and getattr(h, "stream", None) in (sys.stderr, sys.stdout)
+        ]
+        log_path = Path.home() / ".fleetroll" / "monitor.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        for h in stderr_handlers:
+            fleetroll_logger.removeHandler(h)
+        fleetroll_logger.addHandler(file_handler)
         try:
             curses_wrapper(curses_main)
         finally:
+            fleetroll_logger.removeHandler(file_handler)
+            file_handler.close()
+            for h in stderr_handlers:
+                fleetroll_logger.addHandler(h)
             if display_ref:
                 display_ref[0].save_history(filter_history_path())
     finally:
