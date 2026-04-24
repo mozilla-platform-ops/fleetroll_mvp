@@ -1,2 +1,2 @@
-query: os=L role~talos sort:role
+query: os=L role~netperf sort:role
 description: Linux talos workers, sorted by hostname
