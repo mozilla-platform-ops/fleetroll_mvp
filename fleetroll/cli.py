@@ -613,7 +613,7 @@ def host_unset_override(
 
 
 @cli.command("host-run-puppet")
-@click.argument("host", metavar="HOST_OR_FILE")
+@click.argument("host", metavar="HOST_OR_FILE", nargs=-1, required=True)
 @common_options(timeout_default=600)
 @click.option(
     "--workers",
@@ -643,7 +643,7 @@ def host_unset_override(
     help="Suppress per-host puppet output; show progress bar + summary only. Implied by --json.",
 )
 def host_run_puppet(
-    host: str,
+    host: tuple[str, ...],
     ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
@@ -656,8 +656,13 @@ def host_run_puppet(
     quiet: bool,
 ):
     """SSH to each host and run sudo run-puppet.sh, then refresh audit data."""
+    if len(host) > 1:
+        raise click.UsageError(
+            "Only a single HOST_OR_FILE may be specified. "
+            "To target multiple hosts, pass a file containing one host per line."
+        )
     args = HostRunPuppetArgs(
-        host=host,
+        host=host[0],
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
         timeout=timeout,
