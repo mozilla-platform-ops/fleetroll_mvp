@@ -292,6 +292,8 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
     remote_cmd = remote_run_puppet_script()
 
     if not is_batch:
+        if not args.json:
+            print(f"Connecting to {hosts[0]} and running puppet...", flush=True)
         result = run_puppet_for_host(
             hosts[0],
             args=args,
