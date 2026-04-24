@@ -321,7 +321,7 @@ def debug_host_script(
 
 
 @cli.command("host-set-override")
-@click.argument("host", metavar="HOST_OR_FILE", nargs=-1, required=True)
+@click.argument("host", metavar="HOST_OR_FILE...", nargs=-1, required=True)
 @common_options
 @click.option(
     "--workers",
@@ -409,9 +409,10 @@ def host_set_override(
     force: bool,
     no_audit: bool,
 ):
-    """Set the override file on a host (atomic write).
+    """Set the override file on one or more hosts (atomic write).
 
-    Contents must be provided via --from-file.
+    HOST_OR_FILE can be one or more hostnames, user@hostname values, or a file
+    containing hosts (one per line). Contents must be provided via --from-file.
     """
     hosts, host_file = resolve_host_args(host)
     args = HostSetOverrideArgs(
@@ -439,7 +440,7 @@ def host_set_override(
 
 
 @cli.command("host-set-vault")
-@click.argument("host", metavar="HOST_OR_FILE", nargs=-1, required=True)
+@click.argument("host", metavar="HOST_OR_FILE...", nargs=-1, required=True)
 @common_options
 @click.option(
     "--workers",
@@ -527,7 +528,11 @@ def host_set_vault(
     force: bool,
     no_audit: bool,
 ):
-    """Set the vault.yaml file on a host (atomic write)."""
+    """Set the vault.yaml file on one or more hosts (atomic write).
+
+    HOST_OR_FILE can be one or more hostnames, user@hostname values, or a file
+    containing hosts (one per line).
+    """
     hosts, host_file = resolve_host_args(host)
     args = HostSetVaultArgs(
         hosts=hosts,
@@ -554,7 +559,7 @@ def host_set_vault(
 
 
 @cli.command("host-unset-override")
-@click.argument("host", metavar="HOST_OR_FILE", nargs=-1, required=True)
+@click.argument("host", metavar="HOST_OR_FILE...", nargs=-1, required=True)
 @common_options
 @click.option(
     "--workers",
@@ -595,7 +600,11 @@ def host_unset_override(
     confirm: bool,
     no_audit: bool,
 ):
-    """Remove the override file from a host."""
+    """Remove the override file from one or more hosts.
+
+    HOST_OR_FILE can be one or more hostnames, user@hostname values, or a file
+    containing hosts (one per line).
+    """
     hosts, host_file = resolve_host_args(host)
     args = HostUnsetOverrideArgs(
         hosts=hosts,
@@ -615,7 +624,7 @@ def host_unset_override(
 
 
 @cli.command("host-run-puppet")
-@click.argument("host", metavar="HOST_OR_FILE", nargs=-1, required=True)
+@click.argument("host", metavar="HOST_OR_FILE...", nargs=-1, required=True)
 @common_options(timeout_default=600)
 @click.option(
     "--workers",
@@ -657,7 +666,11 @@ def host_run_puppet(
     no_audit: bool,
     quiet: bool,
 ):
-    """SSH to each host and run sudo run-puppet.sh, then refresh audit data."""
+    """SSH to one or more hosts and run sudo run-puppet.sh, then refresh audit data.
+
+    HOST_OR_FILE can be one or more hostnames, user@hostname values, or a file
+    containing hosts (one per line).
+    """
     hosts, host_file = resolve_host_args(host)
     args = HostRunPuppetArgs(
         hosts=hosts,
