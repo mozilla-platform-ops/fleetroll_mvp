@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -e
-set -x
 
 # lists hosts that havne't talked to tc and have been unreachable for awhile
 #
@@ -16,3 +15,4 @@ uv run fleetroll host-monitor  \
     --hostname-only \
     --filter "$filter" | \
     tr '\n' ' '
+echo
