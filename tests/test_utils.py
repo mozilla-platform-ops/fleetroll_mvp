@@ -19,6 +19,7 @@ from fleetroll.utils import (
     natural_sort_key,
     parse_host_list,
     parse_kv_lines,
+    resolve_host_args,
     sha256_hex,
     utc_now_iso,
 )
@@ -513,3 +514,47 @@ class TestExpandHostname:
     def test_already_dotted_arbitrary_fqdn_passes_through(self):
         fqdn = "somehost.example.com"
         assert expand_hostname(fqdn) == fqdn
+
+
+class TestResolveHostArgs:
+    """Tests for resolve_host_args() — the CLI positional-arg resolver."""
+
+    def test_single_fqdn(self):
+        hosts, host_file = resolve_host_args(("host.example.com",))
+        assert hosts == ["host.example.com"]
+        assert host_file is None
+
+    def test_multiple_fqdns(self):
+        hosts, host_file = resolve_host_args(("a.example.com", "b.example.com"))
+        assert hosts == ["a.example.com", "b.example.com"]
+        assert host_file is None
+
+    def test_short_hostname_expanded(self):
+        hosts, host_file = resolve_host_args(("macmini-r8-42",))
+        assert hosts == ["macmini-r8-42.test.releng.mdc1.mozilla.com"]
+        assert host_file is None
+
+    def test_single_file(self, tmp_path: Path):
+        hosts_file = tmp_path / "hosts.list"
+        hosts_file.write_text("host1.example.com\nhost2.example.com\n")
+        hosts, host_file = resolve_host_args((str(hosts_file),))
+        assert hosts == ["host1.example.com", "host2.example.com"]
+        assert host_file == hosts_file
+
+    def test_file_mixed_with_hostname_raises(self, tmp_path: Path):
+        hosts_file = tmp_path / "hosts.list"
+        hosts_file.write_text("host1.example.com\n")
+        with pytest.raises(UserError, match="Cannot mix"):
+            resolve_host_args((str(hosts_file), "host2.example.com"))
+
+    def test_empty_raises(self):
+        with pytest.raises(UserError):
+            resolve_host_args(())
+
+    def test_two_files_raises(self, tmp_path: Path):
+        f1 = tmp_path / "a.list"
+        f2 = tmp_path / "b.list"
+        f1.write_text("host1.example.com\n")
+        f2.write_text("host2.example.com\n")
+        with pytest.raises(UserError):
+            resolve_host_args((str(f1), str(f2)))

@@ -207,7 +207,8 @@ class TestCmdHostSet:
 
         hosts_file = tmp_dir / "hosts.txt"
         hosts_file.write_text("host1.example.com\nhost2.example.com\nhost3.example.com\n")
-        mock_args_set.host = str(hosts_file)
+        mock_args_set.hosts = ["host1.example.com", "host2.example.com", "host3.example.com"]
+        mock_args_set.host_file = hosts_file
 
         mock_run_ssh = mocker.patch("fleetroll.commands.set.run_ssh")
         captured = []
@@ -237,7 +238,8 @@ class TestCmdHostSet:
         hosts_file = tmp_dir / "hosts.txt"
         hosts = [f"host{i}.example.com" for i in range(1, 11)]
         hosts_file.write_text("\n".join(hosts) + "\n")
-        mock_args_set.host = str(hosts_file)
+        mock_args_set.hosts = hosts
+        mock_args_set.host_file = hosts_file
 
         mock_run_ssh = mocker.patch("fleetroll.commands.set.run_ssh")
         captured = []
@@ -366,7 +368,8 @@ class TestOverrideExistsCheck:
         content_file.write_text("test content")
         hosts_file = tmp_dir / "hosts.txt"
         hosts_file.write_text("host1.example.com\nhost2.example.com\n")
-        mock_args_set.host = str(hosts_file)
+        mock_args_set.hosts = ["host1.example.com", "host2.example.com"]
+        mock_args_set.host_file = hosts_file
         mock_args_set.from_file = str(content_file)
         mock_args_set.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_set.force = False
@@ -750,13 +753,14 @@ class TestCmdHostSetExpandHostname:
     def _disable_validation(self, mocker):
         mocker.patch("fleetroll.commands.set.validate_override_syntax")
 
-    def test_short_hostname_expands_in_dry_run(
+    def test_expanded_hostname_used_in_dry_run(
         self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path
     ):
-        """Short hostname is expanded to FQDN and printed before dry-run summary."""
+        """Pre-expanded FQDN is shown in dry-run summary (expansion done by CLI layer)."""
         content_file = tmp_dir / "override.cfg"
         content_file.write_text("worker_type = test-worker\n")
-        mock_args_set.host = "macmini-r8-42"
+        mock_args_set.hosts = ["macmini-r8-42.test.releng.mdc1.mozilla.com"]
+        mock_args_set.host_file = None
         mock_args_set.from_file = str(content_file)
         mock_args_set.confirm = False
         mock_args_set.json = False
@@ -769,15 +773,15 @@ class TestCmdHostSetExpandHostname:
 
         cmd_host_set(mock_args_set)
 
-        expansion_lines = [line for line in captured if "Expanding" in line]
-        assert expansion_lines, "Expected an 'Expanding ...' line in output"
-        assert "macmini-r8-42.test.releng.mdc1.mozilla.com" in expansion_lines[0]
+        output = "\n".join(str(line) for line in captured)
+        assert "macmini-r8-42.test.releng.mdc1.mozilla.com" in output
 
-    def test_fqdn_not_expanded(self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path):
-        """A full FQDN passes through without any expansion message."""
+    def test_fqdn_shown_in_dry_run(self, mocker, mock_args_set: HostSetOverrideArgs, tmp_dir: Path):
+        """FQDN hostname is shown in dry-run summary."""
         content_file = tmp_dir / "override.cfg"
         content_file.write_text("worker_type = test-worker\n")
-        mock_args_set.host = "test.example.com"
+        mock_args_set.hosts = ["test.example.com"]
+        mock_args_set.host_file = None
         mock_args_set.from_file = str(content_file)
         mock_args_set.confirm = False
         mock_args_set.json = False
@@ -790,4 +794,5 @@ class TestCmdHostSetExpandHostname:
 
         cmd_host_set(mock_args_set)
 
-        assert not any("Expanding" in line for line in captured)
+        output = "\n".join(str(line) for line in captured)
+        assert "test.example.com" in output

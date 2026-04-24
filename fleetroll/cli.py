@@ -41,6 +41,7 @@ from .commands import (
 )
 from .exceptions import CommandFailureError, FleetRollError, UserError
 from .ssh import audit_script_body, remote_windows_audit_script, windows_audit_script_body
+from .utils import resolve_host_args
 
 # Module logger
 logger = logging.getLogger("fleetroll")
@@ -412,13 +413,10 @@ def host_set_override(
 
     Contents must be provided via --from-file.
     """
-    if len(host) > 1:
-        raise click.UsageError(
-            "Only a single HOST_OR_FILE may be specified. "
-            "To target multiple hosts, pass a file containing one host per line."
-        )
+    hosts, host_file = resolve_host_args(host)
     args = HostSetOverrideArgs(
-        host=host[0],
+        hosts=hosts,
+        host_file=host_file,
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
         timeout=timeout,
@@ -441,7 +439,7 @@ def host_set_override(
 
 
 @cli.command("host-set-vault")
-@click.argument("host", metavar="HOST_OR_FILE")
+@click.argument("host", metavar="HOST_OR_FILE", nargs=-1, required=True)
 @common_options
 @click.option(
     "--workers",
@@ -510,7 +508,7 @@ def host_set_override(
     help="Skip the automatic host-audit run after the vault is written.",
 )
 def host_set_vault(
-    host: str,
+    host: tuple[str, ...],
     ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
@@ -530,8 +528,10 @@ def host_set_vault(
     no_audit: bool,
 ):
     """Set the vault.yaml file on a host (atomic write)."""
+    hosts, host_file = resolve_host_args(host)
     args = HostSetVaultArgs(
-        host=host,
+        hosts=hosts,
+        host_file=host_file,
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
         timeout=timeout,
@@ -554,7 +554,7 @@ def host_set_vault(
 
 
 @cli.command("host-unset-override")
-@click.argument("host", metavar="HOST_OR_FILE")
+@click.argument("host", metavar="HOST_OR_FILE", nargs=-1, required=True)
 @common_options
 @click.option(
     "--workers",
@@ -583,7 +583,7 @@ def host_set_vault(
     help="Skip the automatic host-audit run after the override is removed.",
 )
 def host_unset_override(
-    host: str,
+    host: tuple[str, ...],
     ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
@@ -596,8 +596,10 @@ def host_unset_override(
     no_audit: bool,
 ):
     """Remove the override file from a host."""
+    hosts, host_file = resolve_host_args(host)
     args = HostUnsetOverrideArgs(
-        host=host,
+        hosts=hosts,
+        host_file=host_file,
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
         timeout=timeout,
@@ -656,13 +658,10 @@ def host_run_puppet(
     quiet: bool,
 ):
     """SSH to each host and run sudo run-puppet.sh, then refresh audit data."""
-    if len(host) > 1:
-        raise click.UsageError(
-            "Only a single HOST_OR_FILE may be specified. "
-            "To target multiple hosts, pass a file containing one host per line."
-        )
+    hosts, host_file = resolve_host_args(host)
     args = HostRunPuppetArgs(
-        host=host[0],
+        hosts=hosts,
+        host_file=host_file,
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
         timeout=timeout,

@@ -205,6 +205,43 @@ def ensure_host_or_file(host_arg: str) -> None:
         )
 
 
+def resolve_host_args(args: tuple[str, ...]) -> tuple[list[str], Path | None]:
+    """Resolve positional HOST_OR_FILE args to (expanded_hosts, host_file).
+
+    Rules:
+    - 1 arg, resolves to a file → parse it; return (hosts, path).
+    - ≥1 args, none are files → expand each; return (expanded, None).
+    - Mix of file + hostnames → raise UserError.
+    """
+    if not args:
+        raise UserError("At least one HOST or file argument is required.")
+
+    file_args = [a for a in args if is_host_file(a)]
+    host_args = [a for a in args if not is_host_file(a)]
+
+    if file_args and host_args:
+        raise UserError(
+            f"Cannot mix host file ({file_args[0]!r}) with bare hostnames. "
+            "Pass either a file or one or more hostnames, not both."
+        )
+
+    if file_args:
+        if len(file_args) > 1:
+            raise UserError("Only one host list file may be specified.")
+        host_file = Path(file_args[0])
+        hosts = parse_host_list(host_file)
+        return hosts, host_file
+
+    expanded: list[str] = []
+    for h in args:
+        ensure_host_or_file(h)
+        e = expand_hostname(h)
+        if e != h:
+            print(f"Expanding {h} → {e}")
+        expanded.append(e)
+    return expanded, None
+
+
 def ensure_fqdn(hostname: str) -> None:
     """Raise UserError if hostname is not a valid FQDN (requires at least one dot)."""
     host = hostname.rsplit("@", 1)[-1] if "@" in hostname else hostname

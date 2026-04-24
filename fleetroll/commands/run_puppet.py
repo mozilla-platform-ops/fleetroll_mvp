@@ -21,12 +21,8 @@ from ..exceptions import CommandFailureError
 from ..ssh import build_ssh_options, is_windows_host, remote_run_puppet_script, run_ssh
 from ..utils import (
     default_audit_log_path,
-    ensure_host_or_file,
-    expand_hostname,
     format_host_preview,
     infer_actor,
-    is_host_file,
-    parse_host_list,
     utc_now_iso,
 )
 from ._auto_audit import _maybe_auto_audit
@@ -137,7 +133,7 @@ def _print_dry_run(
             "host_count": len(hosts),
             "skipped_windows": len(windows_hosts),
             "host": None if is_batch else hosts[0] if hosts else None,
-            "host_file": str(host_file) if is_batch else None,
+            "host_file": str(host_file) if host_file is not None else None,
             "reason": args.reason,
             "auto_audit": not args.no_audit,
             "audit_log": str(audit_log),
@@ -147,7 +143,8 @@ def _print_dry_run(
 
     print(click.style("DRY RUN: --confirm not provided; no changes will be made.", fg="yellow"))
     if is_batch:
-        print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
+        if host_file is not None:
+            print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
         print(f"{click.style('Host count:', fg='cyan')} {len(hosts)}")
         if windows_hosts:
             print(f"{click.style('Skipped (Windows):', fg='cyan')} {len(windows_hosts)}")
@@ -246,27 +243,18 @@ def _run_puppet_batch(
 
 def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
     """SSH to each host and run puppet, then refresh audit data."""
-    ensure_host_or_file(args.host)
     actor = infer_actor()
     ssh_opts = build_ssh_options(args)
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
 
-    host_file = None
-    if is_host_file(args.host):
-        host_file = Path(args.host)
-        all_hosts = parse_host_list(host_file)
-        is_batch = True
-    else:
-        expanded = expand_hostname(args.host)
-        if expanded != args.host:
-            print(f"Expanding {args.host} → {expanded}")
-        all_hosts = [expanded]
-        is_batch = False
+    all_hosts = args.hosts
+    host_file = args.host_file
+    is_batch = host_file is not None or len(all_hosts) > 1
 
     windows_hosts = [h for h in all_hosts if is_windows_host(h)]
     hosts = [h for h in all_hosts if not is_windows_host(h)]
 
-    is_non_staging = is_batch and "staging" not in host_file.name.lower()
+    is_non_staging = is_batch and host_file is not None and "staging" not in host_file.name.lower()
 
     def _staging_warn() -> None:
         if is_non_staging:

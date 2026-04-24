@@ -24,12 +24,8 @@ from ..exceptions import CommandFailureError, UserError
 from ..ssh import build_ssh_options, parse_backup_path, remote_set_script, run_ssh
 from ..utils import (
     default_audit_log_path,
-    ensure_host_or_file,
-    expand_hostname,
     format_host_preview,
     infer_actor,
-    is_host_file,
-    parse_host_list,
     sha256_hex,
     utc_now_iso,
 )
@@ -238,7 +234,6 @@ def validate_override_semantics(data: bytes) -> None:
 
 def cmd_host_set(args: HostSetOverrideArgs) -> None:
     """Set the override file on a host."""
-    ensure_host_or_file(args.host)
     actor = infer_actor()
     ssh_opts = build_ssh_options(args)
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
@@ -253,17 +248,9 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
 
     content_hash = sha256_hex(data)
 
-    host_file = None
-    if is_host_file(args.host):
-        host_file = Path(args.host)
-        hosts = parse_host_list(host_file)
-        is_batch = True
-    else:
-        expanded = expand_hostname(args.host)
-        if expanded != args.host:
-            print(f"Expanding {args.host} → {expanded}")
-        hosts = [expanded]
-        is_batch = False
+    hosts = args.hosts
+    host_file = args.host_file
+    is_batch = host_file is not None or len(hosts) > 1
 
     if not args.confirm:
         if args.json:
@@ -272,7 +259,7 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                 "action": "host.set_override",
                 "host_count": len(hosts),
                 "host": None if is_batch else hosts[0],
-                "host_file": str(host_file) if is_batch else None,
+                "host_file": str(host_file) if host_file is not None else None,
                 "source": source,
                 "sha256": content_hash,
                 "mode": args.mode,
@@ -292,7 +279,8 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                 )
             )
             if is_batch:
-                print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
+                if host_file is not None:
+                    print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
                 print(f"{click.style('Host count:', fg='cyan')} {len(hosts)}")
                 print(f"{click.style('Hosts:', fg='cyan')}")
                 for line in format_host_preview(hosts, limit=DRY_RUN_PREVIEW_LIMIT):

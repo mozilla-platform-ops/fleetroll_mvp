@@ -22,12 +22,8 @@ from ..humanhash import humanize
 from ..ssh import build_ssh_options, parse_backup_path, run_ssh
 from ..utils import (
     default_audit_log_path,
-    ensure_host_or_file,
-    expand_hostname,
     format_host_preview,
     infer_actor,
-    is_host_file,
-    parse_host_list,
     sha256_hex,
     utc_now_iso,
 )
@@ -214,7 +210,6 @@ def validate_vault_yaml(data: bytes) -> None:
 
 def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
     """Set the vault file on a host."""
-    ensure_host_or_file(args.host)
     actor = infer_actor()
     ssh_opts = build_ssh_options(args)
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
@@ -227,17 +222,9 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
     source = f"file:{p}"
     content_hash = sha256_hex(data)
 
-    host_file = None
-    if is_host_file(args.host):
-        host_file = Path(args.host)
-        hosts = parse_host_list(host_file)
-        is_batch = True
-    else:
-        expanded = expand_hostname(args.host)
-        if expanded != args.host:
-            print(f"Expanding {args.host} → {expanded}")
-        hosts = [expanded]
-        is_batch = False
+    hosts = args.hosts
+    host_file = args.host_file
+    is_batch = host_file is not None or len(hosts) > 1
 
     if not args.confirm:
         if args.json:
@@ -246,7 +233,7 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
                 "action": "host.set_vault",
                 "host_count": len(hosts),
                 "host": None if is_batch else hosts[0],
-                "host_file": str(host_file) if is_batch else None,
+                "host_file": str(host_file) if host_file is not None else None,
                 "source": source,
                 "sha256": content_hash,
                 "mode": args.mode,
@@ -267,7 +254,8 @@ def cmd_host_set_vault(args: HostSetVaultArgs) -> None:
                 )
             )
             if is_batch:
-                print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
+                if host_file is not None:
+                    print(f"{click.style('Hosts file:', fg='cyan')} {host_file}")
                 print(f"{click.style('Host count:', fg='cyan')} {len(hosts)}")
                 print(f"{click.style('Hosts:', fg='cyan')}")
                 for line in format_host_preview(hosts, limit=DRY_RUN_PREVIEW_LIMIT):

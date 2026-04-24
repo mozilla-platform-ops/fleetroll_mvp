@@ -170,7 +170,8 @@ class TestCmdHostUnset:
 
         hosts_file = tmp_dir / "hosts.txt"
         hosts_file.write_text("host1.example.com\nhost2.example.com\nhost3.example.com\n")
-        mock_args_unset.host = str(hosts_file)
+        mock_args_unset.hosts = ["host1.example.com", "host2.example.com", "host3.example.com"]
+        mock_args_unset.host_file = hosts_file
 
         mock_run_ssh = mocker.patch("fleetroll.commands.unset.run_ssh")
         captured = []
@@ -197,7 +198,8 @@ class TestCmdHostUnset:
         hosts_file = tmp_dir / "hosts.txt"
         hosts = [f"host{i}.example.com" for i in range(1, 11)]
         hosts_file.write_text("\n".join(hosts) + "\n")
-        mock_args_unset.host = str(hosts_file)
+        mock_args_unset.hosts = hosts
+        mock_args_unset.host_file = hosts_file
 
         mock_run_ssh = mocker.patch("fleetroll.commands.unset.run_ssh")
         captured = []

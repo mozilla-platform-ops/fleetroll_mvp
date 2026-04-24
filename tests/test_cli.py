@@ -185,6 +185,65 @@ class TestCliValidation:
         result = runner.invoke(cli, ["host-unset-override", "--confirm"])
         assert result.exit_code != 0
 
+    def test_set_override_multi_hostname_dry_run(self, runner: CliRunner, tmp_dir: Path):
+        """host-set-override accepts multiple hostnames and prints dry-run batch summary."""
+        test_file = tmp_dir / "override.txt"
+        test_file.write_text("test")
+        result = runner.invoke(
+            cli,
+            [
+                "host-set-override",
+                "host1.example.com",
+                "host2.example.com",
+                "--from-file",
+                str(test_file),
+            ],
+        )
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+        assert "host1.example.com" in result.output
+        assert "host2.example.com" in result.output
+
+    def test_set_override_file_plus_hostname_errors(self, runner: CliRunner, tmp_dir: Path):
+        """host-set-override rejects mixing a file and a bare hostname."""
+        test_file = tmp_dir / "override.txt"
+        test_file.write_text("test")
+        hosts_file = tmp_dir / "hosts.list"
+        hosts_file.write_text("host1.example.com\n")
+        result = runner.invoke(
+            cli,
+            [
+                "host-set-override",
+                str(hosts_file),
+                "host2.example.com",
+                "--from-file",
+                str(test_file),
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_unset_override_multi_hostname_dry_run(self, runner: CliRunner):
+        """host-unset-override accepts multiple hostnames and prints dry-run batch summary."""
+        result = runner.invoke(
+            cli,
+            ["host-unset-override", "host1.example.com", "host2.example.com"],
+        )
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+        assert "host1.example.com" in result.output
+        assert "host2.example.com" in result.output
+
+    def test_run_puppet_multi_hostname_dry_run(self, runner: CliRunner):
+        """host-run-puppet accepts multiple hostnames and requires --confirm for batch."""
+        result = runner.invoke(
+            cli,
+            ["host-run-puppet", "host1.example.com", "host2.example.com"],
+        )
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+        assert "host1.example.com" in result.output
+        assert "host2.example.com" in result.output
+
 
 class TestCliDebugFlag:
     """Tests for --debug flag."""

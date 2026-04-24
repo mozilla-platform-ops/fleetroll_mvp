@@ -62,7 +62,8 @@ def mock_args_audit(tmp_audit_log: Path) -> HostAuditArgs:
 def mock_args_set(tmp_audit_log: Path) -> HostSetOverrideArgs:
     """Create Args object for set command."""
     return HostSetOverrideArgs(
-        host="test.example.com",
+        hosts=["test.example.com"],
+        host_file=None,
         ssh_option=None,
         connect_timeout=10,
         timeout=60,
@@ -86,7 +87,8 @@ def mock_args_set(tmp_audit_log: Path) -> HostSetOverrideArgs:
 def mock_args_unset(tmp_audit_log: Path) -> HostUnsetOverrideArgs:
     """Create Args object for unset command."""
     return HostUnsetOverrideArgs(
-        host="test.example.com",
+        hosts=["test.example.com"],
+        host_file=None,
         ssh_option=None,
         connect_timeout=10,
         timeout=60,
@@ -103,7 +105,8 @@ def mock_args_unset(tmp_audit_log: Path) -> HostUnsetOverrideArgs:
 def mock_args_run_puppet(tmp_audit_log: Path) -> HostRunPuppetArgs:
     """Create Args object for host-run-puppet command."""
     return HostRunPuppetArgs(
-        host="test.example.com",
+        hosts=["test.example.com"],
+        host_file=None,
         ssh_option=None,
         connect_timeout=10,
         timeout=60,
@@ -121,7 +124,8 @@ def mock_args_run_puppet(tmp_audit_log: Path) -> HostRunPuppetArgs:
 def mock_args_vault(tmp_audit_log: Path) -> HostSetVaultArgs:
     """Create Args object for vault set command."""
     return HostSetVaultArgs(
-        host="test.example.com",
+        hosts=["test.example.com"],
+        host_file=None,
         ssh_option=None,
         connect_timeout=10,
         timeout=60,

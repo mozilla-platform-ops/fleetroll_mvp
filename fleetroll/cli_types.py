@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 
@@ -56,7 +57,8 @@ class VaultShowArgs:
 class HostSetOverrideArgs:
     """Arguments for host-set-override command."""
 
-    host: str
+    hosts: list[str]
+    host_file: Path | None
     ssh_option: list[str] | None
     connect_timeout: int
     timeout: int
@@ -80,7 +82,8 @@ class HostSetOverrideArgs:
 class HostSetVaultArgs:
     """Arguments for host-set-vault command."""
 
-    host: str
+    hosts: list[str]
+    host_file: Path | None
     ssh_option: list[str] | None
     connect_timeout: int
     timeout: int
@@ -104,7 +107,8 @@ class HostSetVaultArgs:
 class HostUnsetOverrideArgs:
     """Arguments for host-unset-override command."""
 
-    host: str
+    hosts: list[str]
+    host_file: Path | None
     ssh_option: list[str] | None
     connect_timeout: int
     timeout: int
@@ -121,7 +125,8 @@ class HostUnsetOverrideArgs:
 class HostRunPuppetArgs:
     """Arguments for host-run-puppet command."""
 
-    host: str
+    hosts: list[str]
+    host_file: Path | None
     ssh_option: list[str] | None
     connect_timeout: int
     timeout: int

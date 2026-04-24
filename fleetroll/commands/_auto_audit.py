@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 class HasAutoAuditArgs(Protocol):
     """Protocol for args objects that support auto-audit."""
 
-    host: str
     ssh_option: list[str] | None
     connect_timeout: int
     timeout: int
@@ -29,7 +28,7 @@ def _run_auto_audit(hosts: list[str], args: HasAutoAuditArgs, audit_log: Path) -
     from .audit import cmd_host_audit_batch
 
     audit_args = HostAuditArgs(
-        host=args.host,
+        host="",
         ssh_option=args.ssh_option,
         connect_timeout=args.connect_timeout,
         timeout=args.timeout,

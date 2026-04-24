@@ -22,7 +22,8 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.json = False
         hosts_file = tmp_dir / "staging.list"
         hosts_file.write_text("host1.example.com\nhost2.example.com\n")
-        mock_args_run_puppet.host = str(hosts_file)
+        mock_args_run_puppet.hosts = ["host1.example.com", "host2.example.com"]
+        mock_args_run_puppet.host_file = hosts_file
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
@@ -154,7 +155,8 @@ class TestCmdHostRunPuppet:
         """Runs puppet on all hosts in a batch file."""
         hosts_file = tmp_dir / "staging.list"
         hosts_file.write_text("host1.example.com\nhost2.example.com\nhost3.example.com\n")
-        mock_args_run_puppet.host = str(hosts_file)
+        mock_args_run_puppet.hosts = ["host1.example.com", "host2.example.com", "host3.example.com"]
+        mock_args_run_puppet.host_file = hosts_file
         mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_run_puppet.json = False
 
@@ -212,7 +214,11 @@ class TestCmdHostRunPuppet:
         """Windows hosts are skipped; no SSH is attempted for them."""
         hosts_file = tmp_dir / "staging.list"
         hosts_file.write_text("linux-host.example.com\nwin-host.wintest2.releng.mdc1.mozilla.com\n")
-        mock_args_run_puppet.host = str(hosts_file)
+        mock_args_run_puppet.hosts = [
+            "linux-host.example.com",
+            "win-host.wintest2.releng.mdc1.mozilla.com",
+        ]
+        mock_args_run_puppet.host_file = hosts_file
         mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_run_puppet.json = False
 
@@ -234,7 +240,8 @@ class TestCmdHostRunPuppet:
         """Prints a warning to stderr when the host file lacks 'staging' in the name."""
         hosts_file = tmp_dir / "prod.list"
         hosts_file.write_text("host1.example.com\n")
-        mock_args_run_puppet.host = str(hosts_file)
+        mock_args_run_puppet.hosts = ["host1.example.com"]
+        mock_args_run_puppet.host_file = hosts_file
         mock_args_run_puppet.confirm = False
         mock_args_run_puppet.json = False
 
@@ -252,7 +259,8 @@ class TestCmdHostRunPuppet:
         """No warning is emitted for host files that contain 'staging' in the name."""
         hosts_file = tmp_dir / "staging.list"
         hosts_file.write_text("host1.example.com\n")
-        mock_args_run_puppet.host = str(hosts_file)
+        mock_args_run_puppet.hosts = ["host1.example.com"]
+        mock_args_run_puppet.host_file = hosts_file
         mock_args_run_puppet.confirm = False
         mock_args_run_puppet.json = False
 
@@ -292,7 +300,8 @@ class TestCmdHostRunPuppet:
 
         hosts_file = tmp_dir / "staging.list"
         hosts_file.write_text("host1.example.com\nhost2.example.com\n")
-        mock_args_run_puppet.host = str(hosts_file)
+        mock_args_run_puppet.hosts = ["host1.example.com", "host2.example.com"]
+        mock_args_run_puppet.host_file = hosts_file
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
         captured = []
@@ -349,7 +358,7 @@ class TestCmdHostRunPuppetOutput:
 
         output = "\n".join(captured)
         assert "Notice: Finished catalog run" not in output
-        assert mock_args_run_puppet.host in output
+        assert mock_args_run_puppet.hosts[0] in output
 
     def test_json_suppresses_puppet_output_regardless_of_quiet(
         self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
@@ -376,36 +385,36 @@ class TestCmdHostRunPuppetOutput:
 class TestCmdHostRunPuppetExpandHostname:
     """Tests for short-hostname expansion in host-run-puppet."""
 
-    def test_short_hostname_expands(self, mocker, mock_args_run_puppet: HostRunPuppetArgs):
-        """Short hostname is expanded to FQDN and printed."""
-        mock_args_run_puppet.host = "macmini-r8-42"
+    def test_expanded_hostname_used(self, mocker, mock_args_run_puppet: HostRunPuppetArgs):
+        """Pre-expanded FQDN is used by the command (expansion done by CLI layer)."""
+        mock_args_run_puppet.hosts = ["macmini-r8-42.test.releng.mdc1.mozilla.com"]
+        mock_args_run_puppet.host_file = None
         mock_args_run_puppet.json = False
 
-        mocker.patch("fleetroll.commands.run_puppet.run_ssh", return_value=(0, "EXIT=0\n", ""))
-        mocker.patch("fleetroll.commands.run_puppet.append_jsonl")
-        captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
+        mock_run_ssh = mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh", return_value=(0, "EXIT=0\n", "")
         )
+        mocker.patch("fleetroll.commands.run_puppet.append_jsonl")
+        mocker.patch("builtins.print")
 
         cmd_host_run_puppet(mock_args_run_puppet)
 
-        expansion_lines = [line for line in captured if "Expanding" in str(line)]
-        assert expansion_lines, "Expected an 'Expanding ...' line in output"
-        assert "macmini-r8-42.test.releng.mdc1.mozilla.com" in str(expansion_lines[0])
+        called_host = mock_run_ssh.call_args[0][0]
+        assert called_host == "macmini-r8-42.test.releng.mdc1.mozilla.com"
 
-    def test_fqdn_not_expanded(self, mocker, mock_args_run_puppet: HostRunPuppetArgs):
-        """A full FQDN passes through without any expansion message."""
-        mock_args_run_puppet.host = "test.example.com"
+    def test_fqdn_used_as_is(self, mocker, mock_args_run_puppet: HostRunPuppetArgs):
+        """FQDN hostname is passed straight through to SSH."""
+        mock_args_run_puppet.hosts = ["test.example.com"]
+        mock_args_run_puppet.host_file = None
         mock_args_run_puppet.json = False
 
-        mocker.patch("fleetroll.commands.run_puppet.run_ssh", return_value=(0, "EXIT=0\n", ""))
-        mocker.patch("fleetroll.commands.run_puppet.append_jsonl")
-        captured = []
-        mocker.patch(
-            "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
+        mock_run_ssh = mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh", return_value=(0, "EXIT=0\n", "")
         )
+        mocker.patch("fleetroll.commands.run_puppet.append_jsonl")
+        mocker.patch("builtins.print")
 
         cmd_host_run_puppet(mock_args_run_puppet)
 
-        assert not any("Expanding" in str(line) for line in captured)
+        called_host = mock_run_ssh.call_args[0][0]
+        assert called_host == "test.example.com"
