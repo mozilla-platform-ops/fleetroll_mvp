@@ -1,0 +1,2 @@
+query: tc_act<1h host~ms sort:host:asc
+description: Moonshot workers with recent TaskCluster activity
