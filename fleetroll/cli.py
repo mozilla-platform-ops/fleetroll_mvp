@@ -320,7 +320,7 @@ def debug_host_script(
 
 
 @cli.command("host-set-override")
-@click.argument("host", metavar="HOST_OR_FILE")
+@click.argument("host", metavar="HOST_OR_FILE", nargs=-1, required=True)
 @common_options
 @click.option(
     "--workers",
@@ -389,7 +389,7 @@ def debug_host_script(
     help="Skip the automatic host-audit run after the override is written.",
 )
 def host_set_override(
-    host: str,
+    host: tuple[str, ...],
     ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
@@ -412,8 +412,13 @@ def host_set_override(
 
     Contents must be provided via --from-file.
     """
+    if len(host) > 1:
+        raise click.UsageError(
+            "Only a single HOST_OR_FILE may be specified. "
+            "To target multiple hosts, pass a file containing one host per line."
+        )
     args = HostSetOverrideArgs(
-        host=host,
+        host=host[0],
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
         timeout=timeout,
