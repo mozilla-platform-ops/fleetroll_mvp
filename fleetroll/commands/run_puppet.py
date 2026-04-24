@@ -279,7 +279,7 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
                 file=sys.stderr,
             )
 
-    if not args.confirm:
+    if not args.confirm and is_batch:
         _staging_warn()
         _print_dry_run(args, hosts, windows_hosts, host_file, is_batch, audit_log)
         return

@@ -14,10 +14,15 @@ from fleetroll.exceptions import CommandFailureError
 class TestCmdHostRunPuppet:
     """Tests for cmd_host_run_puppet function."""
 
-    def test_dry_run_without_confirm(self, mocker, mock_args_run_puppet: HostRunPuppetArgs):
-        """Prints summary and exits when --confirm not provided."""
+    def test_dry_run_without_confirm_batch(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        """Batch mode prints summary and exits when --confirm not provided."""
         mock_args_run_puppet.confirm = False
         mock_args_run_puppet.json = False
+        hosts_file = tmp_dir / "staging.list"
+        hosts_file.write_text("host1.example.com\nhost2.example.com\n")
+        mock_args_run_puppet.host = str(hosts_file)
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
@@ -371,15 +376,13 @@ class TestCmdHostRunPuppetOutput:
 class TestCmdHostRunPuppetExpandHostname:
     """Tests for short-hostname expansion in host-run-puppet."""
 
-    def test_short_hostname_expands_in_dry_run(
-        self, mocker, mock_args_run_puppet: HostRunPuppetArgs
-    ):
-        """Short hostname is expanded to FQDN and printed before dry-run summary."""
+    def test_short_hostname_expands(self, mocker, mock_args_run_puppet: HostRunPuppetArgs):
+        """Short hostname is expanded to FQDN and printed."""
         mock_args_run_puppet.host = "macmini-r8-42"
-        mock_args_run_puppet.confirm = False
         mock_args_run_puppet.json = False
 
-        mocker.patch("fleetroll.commands.run_puppet.run_ssh")
+        mocker.patch("fleetroll.commands.run_puppet.run_ssh", return_value=(0, "EXIT=0\n", ""))
+        mocker.patch("fleetroll.commands.run_puppet.append_jsonl")
         captured = []
         mocker.patch(
             "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
@@ -394,10 +397,10 @@ class TestCmdHostRunPuppetExpandHostname:
     def test_fqdn_not_expanded(self, mocker, mock_args_run_puppet: HostRunPuppetArgs):
         """A full FQDN passes through without any expansion message."""
         mock_args_run_puppet.host = "test.example.com"
-        mock_args_run_puppet.confirm = False
         mock_args_run_puppet.json = False
 
-        mocker.patch("fleetroll.commands.run_puppet.run_ssh")
+        mocker.patch("fleetroll.commands.run_puppet.run_ssh", return_value=(0, "EXIT=0\n", ""))
+        mocker.patch("fleetroll.commands.run_puppet.append_jsonl")
         captured = []
         mocker.patch(
             "builtins.print", side_effect=lambda *a, **kw: captured.append(a[0] if a else "")
