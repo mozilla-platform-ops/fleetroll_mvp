@@ -197,6 +197,7 @@ class MonitorDisplay:
         self._filter_history_saved: str = ""  # text saved when browsing began
         self._status_msg: str = ""  # ephemeral status message
         self._status_msg_expiry: float = 0.0  # monotonic time when message expires
+        self._popup_closed: bool = False  # set when a newwin popup is dismissed
         self.colors = CursesColors(stdscr)
         self.curses_mod = self.colors.curses_mod
         self.header_renderer = HeaderRenderer(safe_addstr=self.safe_addstr, colors=self.colors)
@@ -330,6 +331,7 @@ class MonitorDisplay:
         if self.show_help:
             if key != ord("?") and key != -1:
                 self.show_help = False
+                self._popup_closed = True
                 if draw:
                     self.stdscr.touchwin()
                     self.stdscr.refresh()
@@ -451,6 +453,7 @@ class MonitorDisplay:
 
     def _close_filters_popup(self) -> None:
         self._filters_popup_state = None
+        self._popup_closed = True
 
     def _apply_filters_popup_selection(self, query_text: str) -> None:
         """Apply a query selected from the picker and close the popup."""
@@ -869,6 +872,9 @@ class MonitorDisplay:
 
     def draw_screen(self) -> None:
         self.stdscr.erase()
+        if self._popup_closed:
+            self.stdscr.touchwin()
+            self._popup_closed = False
 
         # Sort and filter hosts
         all_hosts_sorted = sorted(self.hosts, key=self._get_sort_key)
