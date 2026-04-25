@@ -1,0 +1,2 @@
+query: sort:role:desc,host:asc
+description: Linux talos workers, sorted by hostname
