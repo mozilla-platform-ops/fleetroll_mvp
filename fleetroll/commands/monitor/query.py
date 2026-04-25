@@ -3,9 +3,28 @@
 from __future__ import annotations
 
 import operator as _op
+import re
 from dataclasses import dataclass, field
 
 from .data import parse_duration
+
+# Sentinel values that represent "no data" and collapse to "" for filtering.
+# "?" is intentionally excluded — it means "unknown" and remains matchable.
+EMPTY_SENTINELS = frozenset({"-", "", "--"})
+
+
+def normalize_for_filter(value: str) -> str:
+    """Collapse empty/missing sentinels to "" for filter comparison."""
+    return "" if value in EMPTY_SENTINELS else value
+
+
+_LEGACY_EMPTY_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)(=|!=)-(?=\s|$)")
+
+
+def migrate_legacy_empty_syntax(text: str) -> str:
+    """Rewrite legacy col=- / col!=- tokens to col= / col!= (empty-match syntax)."""
+    return _LEGACY_EMPTY_RE.sub(r"\1\2", text)
+
 
 # Columns whose values are time durations (for numeric comparison)
 TIME_COLUMNS = frozenset({"pp_last", "tc_act", "uptime", "tc_j_sf"})
@@ -128,7 +147,7 @@ def parse_query(text: str) -> Query:
             col = token[:op_pos].lower()
             col = COLUMN_ALIASES.get(col, col)
             val = token[op_pos + len(op_found) :]
-            if col and val:
+            if col and (val or op_found in ("=", "!=")):
                 conditions.append(FilterCondition(column=col, op=op_found, value=val))
 
     return Query(conditions=conditions, sort_keys=sort_keys)
@@ -222,10 +241,16 @@ def row_matches_condition(row: dict[str, str], cond: FilterCondition) -> bool:
     if "|" in cond.value and cond.op in ("=", "!="):
         return _match_pipe_values(row, cond)
 
+    col_value = row.get(cond.column, "")
+
+    # Empty-match shortcut: col= means "is missing", col!= means "is set".
+    if not cond.value and cond.op in ("=", "!="):
+        is_empty = normalize_for_filter(col_value) == ""
+        return is_empty if cond.op == "=" else not is_empty
+
     if cond.column == "data":
         return _match_data_column(row, cond)
 
-    col_value = row.get(cond.column, "")
     if cond.column in TIME_COLUMNS:
         col_secs = parse_duration(col_value)
         if col_secs is None:
@@ -234,7 +259,7 @@ def row_matches_condition(row: dict[str, str], cond: FilterCondition) -> bool:
         if flt_secs is not None:
             return _compare_numeric(col_secs, cond.op, flt_secs)
 
-    return _compare_string(col_value, cond.op, cond.value)
+    return _compare_string(normalize_for_filter(col_value), cond.op, cond.value)
 
 
 def apply_conditions(

@@ -45,6 +45,25 @@ No spaces required around the operator. Multiple conditions are implicit AND.
 - **String**: unquoted for simple values (`web`, `n`, `yes`)
 - **Case-insensitive** throughout
 
+### Empty / missing values
+
+Use `col=` (no value) to match hosts where a column has no data, and `col!=` to
+match hosts where a column is set.
+
+```
+note=           # hosts with no note
+note!=          # hosts with a note
+pp_sha=         # puppet SHA not yet reported
+pp_sha!=        # puppet SHA present
+```
+
+The display sentinel `-` is purely cosmetic. Filtering operates on the underlying
+empty value, so `col=-` is **not** the way to test for missing data (it matches
+nothing).
+
+`?` is distinct from empty — it means "unknown / host not yet heard from" and is
+matchable literally: `pp_sha=?`.
+
 ### Sort
 
 ```
@@ -69,6 +88,8 @@ host~win sort:role,host
 tc_quar=yes
 pp_match=n sort:pp_last:desc
 pp_last>20h tc_act<2h sort:tc_act:desc,host
+note= sort:host
+pp_sha!= role~web
 ```
 
 ### DATA column

@@ -10,6 +10,8 @@ from fleetroll.commands.monitor.query import (
     apply_conditions,
     apply_query,
     apply_sort,
+    migrate_legacy_empty_syntax,
+    normalize_for_filter,
     parse_query,
     parse_query_safe,
     row_matches_condition,
@@ -576,3 +578,126 @@ def test_highlight_pipe_spans_cover_full_text():
     spans = tokenize_for_highlight(text)
     reconstructed = "".join(text[s:e] for s, e, _ in spans)
     assert reconstructed == text
+
+
+# ---------------------------------------------------------------------------
+# normalize_for_filter
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_for_filter_empty_sentinels():
+    assert normalize_for_filter("-") == ""
+    assert normalize_for_filter("") == ""
+    assert normalize_for_filter("--") == ""
+
+
+def test_normalize_for_filter_question_mark_preserved():
+    assert normalize_for_filter("?") == "?"
+
+
+def test_normalize_for_filter_real_values_unchanged():
+    assert normalize_for_filter("gecko_t_linux") == "gecko_t_linux"
+    assert normalize_for_filter("Y") == "Y"
+
+
+# ---------------------------------------------------------------------------
+# Empty-match syntax: col= and col!=
+# ---------------------------------------------------------------------------
+
+
+def test_parse_query_empty_value_eq_accepted():
+    q = parse_query("note=")
+    assert len(q.conditions) == 1
+    cond = q.conditions[0]
+    assert cond.column == "note"
+    assert cond.op == "="
+    assert cond.value == ""
+
+
+def test_parse_query_empty_value_neq_accepted():
+    q = parse_query("note!=")
+    assert len(q.conditions) == 1
+    assert q.conditions[0].op == "!="
+    assert q.conditions[0].value == ""
+
+
+def test_parse_query_empty_value_other_ops_ignored():
+    assert parse_query("note>").is_empty()
+    assert parse_query("note<").is_empty()
+    assert parse_query("note~").is_empty()
+
+
+def test_row_matches_empty_eq_dash_sentinel():
+    assert row_matches_condition(_row(note="-"), FilterCondition("note", "=", ""))
+    assert row_matches_condition(_row(note=""), FilterCondition("note", "=", ""))
+    assert row_matches_condition(_row(note="--"), FilterCondition("note", "=", ""))
+
+
+def test_row_matches_empty_eq_rejects_real_value():
+    assert not row_matches_condition(_row(note="some text"), FilterCondition("note", "=", ""))
+
+
+def test_row_matches_empty_neq():
+    assert row_matches_condition(_row(note="some text"), FilterCondition("note", "!=", ""))
+    assert not row_matches_condition(_row(note="-"), FilterCondition("note", "!=", ""))
+
+
+def test_row_matches_empty_eq_question_mark_not_empty():
+    assert not row_matches_condition(_row(pp_sha="?"), FilterCondition("pp_sha", "=", ""))
+    assert row_matches_condition(_row(pp_sha="?"), FilterCondition("pp_sha", "=", "?"))
+
+
+def test_row_matches_empty_eq_dash_column():
+    # sha defaults to "-" in _row
+    assert row_matches_condition(_row(), FilterCondition("sha", "=", ""))
+    assert row_matches_condition(_row(), FilterCondition("pp_sha", "=", ""))
+
+
+def test_legacy_col_eq_dash_matches_nothing():
+    # note=- is a literal match against "-"; after normalization the stored
+    # value becomes "" so it never equals the literal "-" filter value.
+    assert not row_matches_condition(_row(note="-"), FilterCondition("note", "=", "-"))
+    assert not row_matches_condition(_row(note=""), FilterCondition("note", "=", "-"))
+
+
+def test_substring_does_not_match_dash_sentinel():
+    # note~ on a "-" sentinel row should not match (normalized to "")
+    assert not row_matches_condition(_row(note="-"), FilterCondition("note", "~", "-"))
+
+
+def test_full_filter_empty_note():
+    rows = [_row(note=""), _row(note="-"), _row(note="has text")]
+    result = apply_conditions(rows, [FilterCondition("note", "=", "")])
+    assert len(result) == 2
+    assert all(r["note"] in ("", "-") for r in result)
+
+
+# ---------------------------------------------------------------------------
+# migrate_legacy_empty_syntax
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_legacy_note_eq_dash():
+    assert migrate_legacy_empty_syntax("note=-") == "note="
+
+
+def test_migrate_legacy_note_neq_dash():
+    assert migrate_legacy_empty_syntax("note!=-") == "note!="
+
+
+def test_migrate_legacy_combined():
+    assert (
+        migrate_legacy_empty_syntax("tc_act>4h data>4h note=- sort:host:asc")
+        == "tc_act>4h data>4h note= sort:host:asc"
+    )
+
+
+def test_migrate_legacy_no_change_when_not_legacy():
+    assert migrate_legacy_empty_syntax("note=") == "note="
+    assert migrate_legacy_empty_syntax("role~web") == "role~web"
+    assert migrate_legacy_empty_syntax("pp_last>20h") == "pp_last>20h"
+
+
+def test_migrate_legacy_does_not_mangle_mid_token():
+    # role=-dev has "-dev" as value, not a standalone "-"
+    assert migrate_legacy_empty_syntax("role=-dev") == "role=-dev"
