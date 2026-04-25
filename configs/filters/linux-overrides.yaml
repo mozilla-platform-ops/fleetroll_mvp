@@ -1,0 +1,2 @@
+query: sort:ovr_bch,role:desc,host:asc ovr_bch!=
+description: Linux workers that are quarantined
