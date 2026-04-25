@@ -35,11 +35,17 @@ logger = logging.getLogger("fleetroll")
 _PUPPET_SUCCESS_EXITS = frozenset({0, 2})
 
 _EXIT_RE = re.compile(r"(?m)^EXIT=(\d+)")
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
 
 
 def _strip_exit_marker(stdout: str) -> str:
     """Remove the internal EXIT=N sentinel line from puppet output."""
     return _EXIT_RE.sub("", stdout).strip()
+
+
+def _strip_ansi(s: str) -> str:
+    """Strip ANSI/CSI escape sequences so captured PTY output renders cleanly."""
+    return _ANSI_ESCAPE_RE.sub("", s)
 
 
 def _parse_puppet_exit(stdout: str) -> int | None:
@@ -208,7 +214,7 @@ def _run_puppet_batch(
                     result = future.result()
                     results.append(result)
                     if show_output:
-                        output = _strip_exit_marker(result.get("raw_stdout", ""))
+                        output = _strip_ansi(_strip_exit_marker(result.get("raw_stdout", "")))
                         with print_lock:
                             print(f"--- [{host}] ---")
                             if output:
@@ -295,7 +301,7 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:
             if not args.quiet:
-                output = _strip_exit_marker(result.get("raw_stdout", ""))
+                output = _strip_ansi(_strip_exit_marker(result.get("raw_stdout", "")))
                 if output:
                     print(output)
             print(format_puppet_line(result))

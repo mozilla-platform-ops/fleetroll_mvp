@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from fleetroll.cli_types import HostRunPuppetArgs
-from fleetroll.commands.run_puppet import cmd_host_run_puppet
+from fleetroll.commands.run_puppet import _strip_ansi, cmd_host_run_puppet
 from fleetroll.exceptions import CommandFailureError
 
 
@@ -418,3 +418,80 @@ class TestCmdHostRunPuppetExpandHostname:
 
         called_host = mock_run_ssh.call_args[0][0]
         assert called_host == "test.example.com"
+
+
+class TestStripAnsi:
+    """Tests for _strip_ansi helper."""
+
+    def test_plain_text_passthrough(self):
+        assert _strip_ansi("Notice: applied catalog") == "Notice: applied catalog"
+
+    def test_strips_color_codes(self):
+        assert _strip_ansi("\x1b[0;32mPASSED\x1b[0m") == "PASSED"
+
+    def test_strips_cursor_column_positioning(self):
+        assert _strip_ansi("PUPPET_BRANCH:\x1b[40Gvalue") == "PUPPET_BRANCH:value"
+
+    def test_strips_erase_line(self):
+        assert _strip_ansi("text\x1b[K more") == "text more"
+
+    def test_strips_bare_esc(self):
+        assert _strip_ansi("before\x1b[2Jafter") == "beforeafter"
+
+    def test_empty_string(self):
+        assert _strip_ansi("") == ""
+
+    def test_multiline_preserved(self):
+        result = _strip_ansi("line1\n\x1b[1mline2\x1b[0m\nline3")
+        assert result == "line1\nline2\nline3"
+
+
+class TestAnsiStrippedInOutput:
+    """ANSI escapes are stripped from printed puppet output."""
+
+    def test_single_host_ansi_stripped(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_run_puppet.quiet = False
+        mock_args_run_puppet.json = False
+
+        ansi_stdout = "\x1b[0;32mNotice:\x1b[0m Finished catalog\x1b[40G\nEXIT=0\n"
+        mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh",
+            return_value=(0, ansi_stdout, ""),
+        )
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
+
+        cmd_host_run_puppet(mock_args_run_puppet)
+
+        output = "\n".join(captured)
+        assert "\x1b" not in output
+        assert "Notice:" in output
+        assert "Finished catalog" in output
+
+    def test_batch_ansi_stripped(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_run_puppet.quiet = False
+        mock_args_run_puppet.json = False
+        mock_args_run_puppet.confirm = True
+        mock_args_run_puppet.hosts = ["host1.example.com", "host2.example.com"]
+        mock_args_run_puppet.host_file = None
+
+        ansi_stdout = "PUPPET_BRANCH:\x1b[40Gbranch_name\nEXIT=0\n"
+        mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh",
+            return_value=(0, ansi_stdout, ""),
+        )
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
+
+        cmd_host_run_puppet(mock_args_run_puppet)
+
+        output = "\n".join(captured)
+        assert "\x1b" not in output
+        assert "PUPPET_BRANCH:" in output
+        assert "branch_name" in output
