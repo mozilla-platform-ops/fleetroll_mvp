@@ -6,7 +6,8 @@
 #   user: aerickson
 
 # puppet overrides
-PUPPET_REPO="https://github.com/aerickson/ronin_puppet.git"
+#PUPPET_REPO="https://github.com/aerickson/ronin_puppet.git"
+PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
 PUPPET_BRANCH="2404_ignore_secondary_interface"
 PUPPET_MAIL="aerickson@mozilla.com"
 
