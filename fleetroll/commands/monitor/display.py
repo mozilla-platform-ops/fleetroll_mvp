@@ -353,7 +353,7 @@ class MonitorDisplay:
             self.show_help = True
             self.draw_screen()
             return False
-        if key == ord("F"):
+        if key == ord("f"):
             self._open_filters_popup()
             self.draw_screen()
             return False
@@ -482,7 +482,7 @@ class MonitorDisplay:
 
         enter_keys = (cm.KEY_ENTER, ord("\n"), ord("\r"))
 
-        if key == 27 or key == ord("F"):  # Esc or F — close
+        if key == 27 or key == ord("f"):  # Esc or f — close
             self._close_filters_popup()
         elif key in enter_keys:
             if total == 0:
