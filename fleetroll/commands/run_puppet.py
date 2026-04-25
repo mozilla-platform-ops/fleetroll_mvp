@@ -35,7 +35,7 @@ logger = logging.getLogger("fleetroll")
 _PUPPET_SUCCESS_EXITS = frozenset({0, 2})
 
 _EXIT_RE = re.compile(r"(?m)^EXIT=(\d+)")
-_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-ln-~]|\x1b[@-Z\\-_]")
 
 
 def _strip_exit_marker(stdout: str) -> str:
@@ -44,7 +44,7 @@ def _strip_exit_marker(stdout: str) -> str:
 
 
 def _strip_ansi(s: str) -> str:
-    """Strip ANSI/CSI escape sequences so captured PTY output renders cleanly."""
+    """Strip cursor-control ANSI escapes; preserve SGR color codes (...m)."""
     return _ANSI_ESCAPE_RE.sub("", s)
 
 

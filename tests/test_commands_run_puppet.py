@@ -426,8 +426,8 @@ class TestStripAnsi:
     def test_plain_text_passthrough(self):
         assert _strip_ansi("Notice: applied catalog") == "Notice: applied catalog"
 
-    def test_strips_color_codes(self):
-        assert _strip_ansi("\x1b[0;32mPASSED\x1b[0m") == "PASSED"
+    def test_preserves_color_codes(self):
+        assert _strip_ansi("\x1b[0;32mPASSED\x1b[0m") == "\x1b[0;32mPASSED\x1b[0m"
 
     def test_strips_cursor_column_positioning(self):
         assert _strip_ansi("PUPPET_BRANCH:\x1b[40Gvalue") == "PUPPET_BRANCH:value"
@@ -435,15 +435,19 @@ class TestStripAnsi:
     def test_strips_erase_line(self):
         assert _strip_ansi("text\x1b[K more") == "text more"
 
-    def test_strips_bare_esc(self):
+    def test_strips_erase_display(self):
         assert _strip_ansi("before\x1b[2Jafter") == "beforeafter"
 
     def test_empty_string(self):
         assert _strip_ansi("") == ""
 
-    def test_multiline_preserved(self):
+    def test_multiline_color_preserved(self):
         result = _strip_ansi("line1\n\x1b[1mline2\x1b[0m\nline3")
-        assert result == "line1\nline2\nline3"
+        assert result == "line1\n\x1b[1mline2\x1b[0m\nline3"
+
+    def test_color_with_cursor_move_mixed(self):
+        s = "\x1b[0;32mROLE:\x1b[0m\x1b[40Gvalue"
+        assert _strip_ansi(s) == "\x1b[0;32mROLE:\x1b[0mvalue"
 
 
 class TestAnsiStrippedInOutput:
@@ -467,7 +471,8 @@ class TestAnsiStrippedInOutput:
         cmd_host_run_puppet(mock_args_run_puppet)
 
         output = "\n".join(captured)
-        assert "\x1b" not in output
+        assert "\x1b[40G" not in output  # cursor positioning stripped
+        assert "\x1b[0;32m" in output  # colors preserved
         assert "Notice:" in output
         assert "Finished catalog" in output
 
