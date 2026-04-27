@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .logging import RequestIDMiddleware, configure_structlog
 from .routes.health import router as health_router
 from .routes.hello import router as hello_router
+from .routes.hosts import router as hosts_router
 from .settings import WebSettings
 from .static import mount_static
 
@@ -35,6 +36,7 @@ def create_app(settings: WebSettings | None = None) -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(hello_router)
+    app.include_router(hosts_router)
 
     # FUTURE: mount Prometheus instrumentator or OTel middleware here (mvp-kaw5.5)
 

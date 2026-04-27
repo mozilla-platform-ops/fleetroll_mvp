@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -15,3 +17,31 @@ class HelloResponse(BaseModel):
     message: str
     version: str
     db_ok: bool
+
+
+class HostRow(BaseModel):
+    status: str
+    host: str
+    uptime: str
+    override: str
+    role: str
+    os: str
+    sha: str
+    vlt_sha: str
+    mtime: str
+    err: str
+    tc_quar: str
+    tc_act: str
+    tc_j_sf: str
+    pp_last: str
+    pp_sha: str
+    pp_exp: str
+    pp_match: str
+    healthy: str
+    data: str
+    note: str
+
+
+class HostsResponse(BaseModel):
+    rows: list[HostRow]
+    generated_at: datetime

@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { NotFound } from "./NotFound";
 import { Hello } from "./pages/Hello";
+import { Hosts } from "./pages/Hosts";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,7 +20,8 @@ export function App() {
       <BrowserRouter>
         <ErrorBoundary>
           <Routes>
-            <Route path="/" element={<Hello />} />
+            <Route path="/" element={<Hosts />} />
+            <Route path="/hello" element={<Hello />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </ErrorBoundary>

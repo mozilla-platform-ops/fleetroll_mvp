@@ -609,6 +609,12 @@ def get_latest_github_refs(
     return result
 
 
+def get_all_known_hosts(conn: sqlite3.Connection) -> list[str]:
+    """Return all distinct hostnames that have at least one observation."""
+    rows = conn.execute("SELECT DISTINCT host FROM host_observations ORDER BY host").fetchall()
+    return [row[0] for row in rows]
+
+
 def compact_database(db_path: Path) -> tuple[int, int]:
     """Run WAL checkpoint and VACUUM on the database.
 

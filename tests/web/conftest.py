@@ -14,6 +14,7 @@ from fleetroll.commands.web.settings import WebSettings
 def web_client(temp_db: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("fleetroll.commands.web.routes.health.get_db_path", lambda: temp_db)
     monkeypatch.setattr("fleetroll.commands.web.routes.hello.get_db_path", lambda: temp_db)
+    monkeypatch.setattr("fleetroll.commands.web.routes.hosts.get_db_path", lambda: temp_db)
     settings = WebSettings(web_host="127.0.0.1", web_port=8765, web_dev=False)
     app = create_app(settings)
     return TestClient(app, raise_server_exceptions=False)

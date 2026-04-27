@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Hosts */
+        get: operations["hosts_api_hosts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -59,6 +76,59 @@ export interface components {
             version: string;
             /** Db Ok */
             db_ok: boolean;
+        };
+        /** HostRow */
+        HostRow: {
+            /** Status */
+            status: string;
+            /** Host */
+            host: string;
+            /** Uptime */
+            uptime: string;
+            /** Override */
+            override: string;
+            /** Role */
+            role: string;
+            /** Os */
+            os: string;
+            /** Sha */
+            sha: string;
+            /** Vlt Sha */
+            vlt_sha: string;
+            /** Mtime */
+            mtime: string;
+            /** Err */
+            err: string;
+            /** Tc Quar */
+            tc_quar: string;
+            /** Tc Act */
+            tc_act: string;
+            /** Tc J Sf */
+            tc_j_sf: string;
+            /** Pp Last */
+            pp_last: string;
+            /** Pp Sha */
+            pp_sha: string;
+            /** Pp Exp */
+            pp_exp: string;
+            /** Pp Match */
+            pp_match: string;
+            /** Healthy */
+            healthy: string;
+            /** Data */
+            data: string;
+            /** Note */
+            note: string;
+        };
+        /** HostsResponse */
+        HostsResponse: {
+            /** Rows */
+            rows: components["schemas"]["HostRow"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
         };
     };
     responses: never;
@@ -105,6 +175,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HelloResponse"];
+                };
+            };
+        };
+    };
+    hosts_api_hosts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostsResponse"];
                 };
             };
         };
