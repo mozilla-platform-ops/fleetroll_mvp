@@ -69,7 +69,7 @@ def _launch(ws: dict[str, Any]) -> TmuxSession:
 
 
 class TestFiltersPopup:
-    def test_shift_f_opens_popup(self, tmp_path: Path) -> None:
+    def test_f_opens_popup(self, tmp_path: Path) -> None:
         ws = _prepare_workspace(
             tmp_path,
             filter_yaml={
@@ -79,7 +79,7 @@ class TestFiltersPopup:
         )
         sess = _launch(ws)
         try:
-            sess.send_keys("F")
+            sess.send_keys("f")
             assert sess.wait_for("Filters", timeout=5.0), sess.capture()
             screen = sess.capture()
             assert "Saved" in screen
@@ -96,7 +96,7 @@ class TestFiltersPopup:
         )
         sess = _launch(ws)
         try:
-            sess.send_keys("F")
+            sess.send_keys("f")
             assert sess.wait_for("prod-talos", timeout=5.0), sess.capture()
             sess.send_keys("Escape")
             assert sess.wait_until(lambda: "prod-talos" not in sess.capture(), timeout=5.0), (
@@ -112,7 +112,7 @@ class TestFiltersPopup:
         )
         sess = _launch(ws)
         try:
-            sess.send_keys("F")
+            sess.send_keys("f")
             assert sess.wait_for("linux-only", timeout=5.0)
             sess.send_keys("Enter")
             # Popup closes and the query shows up in the header.
@@ -134,7 +134,7 @@ class TestFiltersPopup:
         )
         sess = _launch(ws)
         try:
-            sess.send_keys("F")
+            sess.send_keys("f")
             assert sess.wait_for("prod-talos", timeout=5.0)
             # Type "prod" — only prod-talos should remain
             for ch in "prod":
@@ -155,7 +155,7 @@ class TestFiltersPopup:
         )
         sess = _launch(ws)
         try:
-            sess.send_keys("F")
+            sess.send_keys("f")
             assert sess.wait_for("Saved", timeout=5.0)
             sess.send_keys("Right")
             # Recent tab is highlighted — saved rows go away since history is empty
@@ -175,7 +175,7 @@ class TestFiltersPopup:
         )
         sess = _launch(ws)
         try:
-            sess.send_keys("F")
+            sess.send_keys("f")
             assert sess.wait_for("initial", timeout=5.0)
             sess.send_keys("Escape")
             assert sess.wait_until(lambda: "initial" not in sess.capture(), timeout=5.0)
@@ -183,7 +183,7 @@ class TestFiltersPopup:
             # Add a new filter on disk while the monitor is running.
             (tmp_path / "configs" / "filters" / "late-added.yaml").write_text("query: os=M\n")
 
-            sess.send_keys("F")
+            sess.send_keys("f")
             assert sess.wait_for("late-added", timeout=5.0), sess.capture()
             assert "initial" in sess.capture()
         finally:
@@ -196,7 +196,7 @@ class TestFiltersPopup:
         )
         sess = _launch(ws)
         try:
-            sess.send_keys("F")
+            sess.send_keys("f")
             assert sess.wait_for("prod-talos", timeout=5.0)
             for ch in "zzzz":
                 sess.send_keys(ch)

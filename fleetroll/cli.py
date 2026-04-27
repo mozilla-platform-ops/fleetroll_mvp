@@ -10,6 +10,7 @@ from importlib.metadata import version
 import click
 
 from .cli_types import (
+    DataFreshnessArgs,
     HostAuditArgs,
     HostMonitorArgs,
     HostRunPuppetArgs,
@@ -23,6 +24,7 @@ from .cli_types import (
     WebArgs,
 )
 from .commands import (
+    cmd_data_freshness,
     cmd_gh_fetch,
     cmd_host_audit,
     cmd_host_monitor,
@@ -759,6 +761,39 @@ def maintain(audit_log: str | None, confirm: bool, force: bool):
     except (FleetRollError, UserError) as e:
         click.echo(f"ERROR: {e}", err=True)
         sys.exit(1)
+
+
+@cli.command("data-freshness")
+@click.argument("hosts_file", metavar="HOSTS_FILE", required=False)
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Emit machine-readable JSON to stdout.",
+)
+@click.option(
+    "--stale-threshold",
+    type=int,
+    default=None,
+    help=f"Override stale threshold in seconds (default: {3600}).",
+)
+def data_freshness(hosts_file: str | None, json_output: bool, stale_threshold: int | None):
+    """Report audit data freshness status.
+
+    Checks whether host audit data is fresh using the same logic as the
+    [stale] indicator in the TUI status bar. Exits 0 if fresh, 1 if stale
+    or no data — suitable for use in scripts that need to verify data
+    reliability before acting on it.
+
+    HOSTS_FILE is an optional path to a hosts list file. Without it,
+    freshness is checked across all hosts in the database.
+    """
+    args = DataFreshnessArgs(
+        hosts_file=hosts_file,
+        stale_threshold=stale_threshold,
+        json=json_output,
+    )
+    cmd_data_freshness(args)
 
 
 @cli.command("note-add")

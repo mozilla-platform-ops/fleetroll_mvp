@@ -158,6 +158,15 @@ class MaintainArgs:
 
 
 @dataclass
+class DataFreshnessArgs:
+    """Arguments for data-freshness command."""
+
+    hosts_file: str | None
+    stale_threshold: int | None
+    json: bool
+
+
+@dataclass
 class WebArgs:
     """Arguments for web command."""
 

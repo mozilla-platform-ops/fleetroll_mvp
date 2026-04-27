@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .audit import cmd_host_audit
+from .data_freshness import cmd_data_freshness
 from .gh_fetch import cmd_gh_fetch
 from .maintain import cmd_maintain
 from .monitor import cmd_host_monitor
@@ -16,6 +17,7 @@ from .vault import cmd_host_set_vault, cmd_vault_show
 from .web import cmd_web
 
 __all__ = [
+    "cmd_data_freshness",
     "cmd_gh_fetch",
     "cmd_host_audit",
     "cmd_host_monitor",
