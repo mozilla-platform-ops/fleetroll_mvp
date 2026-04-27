@@ -81,10 +81,3 @@ def test_save_unwritable_path_does_not_raise(tmp_path: Path) -> None:
         save_filter_history(locked / "filter_history", ["foo"])
     finally:
         locked.chmod(0o755)
-
-
-def test_load_migrates_legacy_empty_syntax(tmp_path: Path) -> None:
-    p = tmp_path / "filter_history"
-    p.write_text("note=-\ntc_act>4h note=-\nnote!=- sort:host\n", encoding="utf-8")
-    loaded = load_filter_history(p)
-    assert loaded == ["note=", "tc_act>4h note=", "note!= sort:host"]

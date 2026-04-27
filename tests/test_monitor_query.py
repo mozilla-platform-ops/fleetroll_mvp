@@ -10,7 +10,6 @@ from fleetroll.commands.monitor.query import (
     apply_conditions,
     apply_query,
     apply_sort,
-    migrate_legacy_empty_syntax,
     normalize_for_filter,
     parse_query,
     parse_query_safe,
@@ -670,34 +669,3 @@ def test_full_filter_empty_note():
     result = apply_conditions(rows, [FilterCondition("note", "=", "")])
     assert len(result) == 2
     assert all(r["note"] in ("", "-") for r in result)
-
-
-# ---------------------------------------------------------------------------
-# migrate_legacy_empty_syntax
-# ---------------------------------------------------------------------------
-
-
-def test_migrate_legacy_note_eq_dash():
-    assert migrate_legacy_empty_syntax("note=-") == "note="
-
-
-def test_migrate_legacy_note_neq_dash():
-    assert migrate_legacy_empty_syntax("note!=-") == "note!="
-
-
-def test_migrate_legacy_combined():
-    assert (
-        migrate_legacy_empty_syntax("tc_act>4h data>4h note=- sort:host:asc")
-        == "tc_act>4h data>4h note= sort:host:asc"
-    )
-
-
-def test_migrate_legacy_no_change_when_not_legacy():
-    assert migrate_legacy_empty_syntax("note=") == "note="
-    assert migrate_legacy_empty_syntax("role~web") == "role~web"
-    assert migrate_legacy_empty_syntax("pp_last>20h") == "pp_last>20h"
-
-
-def test_migrate_legacy_does_not_mangle_mid_token():
-    # role=-dev has "-dev" as value, not a standalone "-"
-    assert migrate_legacy_empty_syntax("role=-dev") == "role=-dev"

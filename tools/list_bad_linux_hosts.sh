@@ -2,17 +2,14 @@
 
 set -e
 
-# lists hosts that havne't talked to tc and have been unreachable for awhile
+# lists hosts that haven't talked to tc and have been unreachable for awhile
 #
 # idea: use this as a source of hosts to reset
 
-filter="tc_act>4h data>4h note=- sort:host:asc"
-# filter="tc_act>4h note=-"
-
-uv run fleetroll host-monitor  \
+uv run fleetroll host-monitor \
     configs/host-lists/linux/all.list \
     --once \
     --hostname-only \
-    --filter "$filter" | \
+    --filter-file configs/filters/moonshots-hung.yaml | \
     tr '\n' ' '
 echo

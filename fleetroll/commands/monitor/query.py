@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import operator as _op
-import re
 from dataclasses import dataclass, field
 
 from .data import parse_duration
@@ -16,14 +15,6 @@ EMPTY_SENTINELS = frozenset({"-", "", "--"})
 def normalize_for_filter(value: str) -> str:
     """Collapse empty/missing sentinels to "" for filter comparison."""
     return "" if value in EMPTY_SENTINELS else value
-
-
-_LEGACY_EMPTY_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)(=|!=)-(?=\s|$)")
-
-
-def migrate_legacy_empty_syntax(text: str) -> str:
-    """Rewrite legacy col=- / col!=- tokens to col= / col!= (empty-match syntax)."""
-    return _LEGACY_EMPTY_RE.sub(r"\1\2", text)
 
 
 # Columns whose values are time durations (for numeric comparison)

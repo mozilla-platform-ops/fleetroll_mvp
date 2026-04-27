@@ -225,6 +225,13 @@ def host_audit(
     help='Filter/sort query (e.g. "pp_last>20h sort:tc_act:desc").',
 )
 @click.option(
+    "--filter-file",
+    "filter_file",
+    type=click.Path(exists=True),
+    default=None,
+    help="Load filter query from a named filter YAML file (configs/filters/*.yaml).",
+)
+@click.option(
     "--hostname-only",
     is_flag=True,
     help="Print one FQDN per line (requires --once).",
@@ -236,9 +243,22 @@ def host_monitor(
     once: bool,
     sort: str,
     filter_query: str | None,
+    filter_file: str | None,
     hostname_only: bool,
 ):
     """Monitor the latest audit record for a host (follows the audit log)."""
+    import yaml
+
+    if filter_query and filter_file:
+        raise click.UsageError("--filter and --filter-file are mutually exclusive")
+    if filter_file:
+        try:
+            data = yaml.safe_load(click.open_file(filter_file).read())
+        except Exception as exc:
+            raise click.UsageError(f"could not load filter file: {exc}") from exc
+        if not isinstance(data, dict) or not isinstance(data.get("query"), str):
+            raise click.UsageError(f"filter file missing 'query' field: {filter_file}")
+        filter_query = data["query"].strip()
     if hostname_only and not once:
         raise click.UsageError("--hostname-only requires --once")
     if hostname_only and json_output:
