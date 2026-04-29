@@ -1,0 +1,2 @@
+query: os=M sort:role:desc,host:asc
+description: Mac workers

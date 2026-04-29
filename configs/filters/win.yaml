@@ -1,0 +1,2 @@
+query: os=W sort:role:desc,host:asc
+description: Linux workers
