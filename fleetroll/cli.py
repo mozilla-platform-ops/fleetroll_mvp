@@ -786,6 +786,13 @@ def maintain(audit_log: str | None, confirm: bool, force: bool):
 @cli.command("data-freshness")
 @click.argument("hosts_file", metavar="HOSTS_FILE", required=False)
 @click.option(
+    "--all",
+    "-a",
+    "all_hosts",
+    is_flag=True,
+    help="Check all hosts ever seen in the database (mutually exclusive with HOSTS_FILE).",
+)
+@click.option(
     "--json",
     "json_output",
     is_flag=True,
@@ -797,20 +804,39 @@ def maintain(audit_log: str | None, confirm: bool, force: bool):
     default=None,
     help=f"Override stale threshold in seconds (default: {3600}).",
 )
-def data_freshness(hosts_file: str | None, json_output: bool, stale_threshold: int | None):
+@click.option(
+    "--min-fresh-pct",
+    type=int,
+    default=80,
+    show_default=True,
+    help="Minimum percentage of hosts that must have a fresh ok observation.",
+)
+def data_freshness(
+    hosts_file: str | None,
+    all_hosts: bool,
+    json_output: bool,
+    stale_threshold: int | None,
+    min_fresh_pct: int,
+):
     """Report audit data freshness status.
 
-    Checks whether host audit data is fresh using the same logic as the
-    [stale] indicator in the TUI status bar. Exits 0 if fresh, 1 if stale
-    or no data — suitable for use in scripts that need to verify data
-    reliability before acting on it.
+    Checks whether host audit data is fresh by requiring a minimum percentage
+    of the target hosts to have a recent ok observation. Exits 0 if fresh,
+    1 if stale or no data — suitable for use in scripts that need to verify
+    data reliability before acting on it.
 
-    HOSTS_FILE is an optional path to a hosts list file. Without it,
-    freshness is checked across all hosts in the database.
+    Specify either HOSTS_FILE (a list of expected hosts) or --all (every host
+    in the database). Exactly one is required.
     """
+    if hosts_file and all_hosts:
+        raise click.UsageError("HOSTS_FILE and --all are mutually exclusive.")
+    if not hosts_file and not all_hosts:
+        raise click.UsageError("Specify either HOSTS_FILE or --all.")
     args = DataFreshnessArgs(
         hosts_file=hosts_file,
+        all_hosts=all_hosts,
         stale_threshold=stale_threshold,
+        min_fresh_pct=min_fresh_pct,
         json=json_output,
     )
     cmd_data_freshness(args)

@@ -162,7 +162,9 @@ class DataFreshnessArgs:
     """Arguments for data-freshness command."""
 
     hosts_file: str | None
+    all_hosts: bool
     stale_threshold: int | None
+    min_fresh_pct: int
     json: bool
 
 
