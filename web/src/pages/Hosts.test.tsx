@@ -22,6 +22,15 @@ function wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+const fakeSummary = {
+  version: "1.2.3",
+  db_path: "/home/user/.fleetroll/hosts.db",
+  total_hosts: 1,
+  fqdn_suffix: null,
+  log_size_warnings: [],
+  data_is_stale: false,
+};
+
 const fakeRow = {
   status: "OK",
   host: "host1",
@@ -50,25 +59,26 @@ describe("Hosts", () => {
     vi.mocked(api.hosts).mockResolvedValue({
       rows: [fakeRow],
       generated_at: "2026-04-27T00:00:00Z",
+      summary: fakeSummary,
     });
 
     render(<Hosts />, { wrapper });
 
     expect(await screen.findByText("host1")).toBeInTheDocument();
     expect(screen.getByText("t-linux-talos")).toBeInTheDocument();
-    expect(screen.getByText("1 hosts")).toBeInTheDocument();
+    expect(screen.getByText("hosts=1")).toBeInTheDocument();
   });
 
   it("renders empty state when no hosts", async () => {
     vi.mocked(api.hosts).mockResolvedValue({
       rows: [],
       generated_at: "2026-04-27T00:00:00Z",
+      summary: { ...fakeSummary, total_hosts: 0 },
     });
 
     render(<Hosts />, { wrapper });
 
     expect(await screen.findByText("No hosts in database.")).toBeInTheDocument();
-    expect(screen.getByText("0 hosts")).toBeInTheDocument();
   });
 
   it("renders error state on fetch failure", async () => {
@@ -85,6 +95,7 @@ describe("Hosts", () => {
     vi.mocked(api.hosts).mockResolvedValue({
       rows: [fakeRow],
       generated_at: "2026-04-27T00:00:00Z",
+      summary: fakeSummary,
     });
 
     render(<Hosts />, { wrapper });
@@ -102,6 +113,7 @@ describe("Hosts", () => {
     vi.mocked(api.hosts).mockResolvedValue({
       rows: [fakeRow],
       generated_at: "2026-04-27T00:00:00Z",
+      summary: fakeSummary,
     });
 
     render(<Hosts />, { wrapper });
@@ -122,6 +134,7 @@ describe("Hosts", () => {
     vi.mocked(api.hosts).mockResolvedValueOnce({
       rows: [fakeRow],
       generated_at: "2026-04-27T00:00:00Z",
+      summary: fakeSummary,
     });
 
     render(<Hosts />, { wrapper });

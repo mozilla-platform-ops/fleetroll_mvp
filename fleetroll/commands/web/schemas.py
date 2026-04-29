@@ -42,6 +42,16 @@ class HostRow(BaseModel):
     note: str
 
 
+class HostsSummary(BaseModel):
+    version: str
+    db_path: str
+    total_hosts: int
+    fqdn_suffix: str | None
+    log_size_warnings: list[str]
+    data_is_stale: bool
+
+
 class HostsResponse(BaseModel):
     rows: list[HostRow]
     generated_at: datetime
+    summary: HostsSummary

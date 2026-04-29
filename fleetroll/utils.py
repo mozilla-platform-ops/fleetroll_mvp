@@ -117,6 +117,27 @@ def get_log_file_size(path: Path) -> int:
         return 0
 
 
+def check_log_sizes(*, warn_threshold_mb: int = 100) -> list[str]:
+    """Return warning strings for log files that exceed the size threshold."""
+    bytes_per_mb = 1024 * 1024
+    fleetroll_dir = Path(os.path.expanduser("~")) / ".fleetroll"
+    warnings = []
+
+    audit_path = fleetroll_dir / "audit.jsonl"
+    audit_size_mb = get_log_file_size(audit_path) / bytes_per_mb
+    if audit_size_mb >= warn_threshold_mb:
+        warnings.append(f"audit: {audit_size_mb:.0f}M")
+
+    from .db import get_db_path
+
+    db_file = get_db_path()
+    db_size_mb = get_log_file_size(db_file) / bytes_per_mb
+    if db_size_mb >= warn_threshold_mb:
+        warnings.append(f"db: {db_size_mb:.0f}M")
+
+    return warnings
+
+
 def parse_kv_lines(output: str) -> dict[str, str]:
     """Parse key=value lines from string output."""
     d: dict[str, str] = {}

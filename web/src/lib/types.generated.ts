@@ -134,6 +134,22 @@ export interface components {
              * Format: date-time
              */
             generated_at: string;
+            summary: components["schemas"]["HostsSummary"];
+        };
+        /** HostsSummary */
+        HostsSummary: {
+            /** Version */
+            version: string;
+            /** Db Path */
+            db_path: string;
+            /** Total Hosts */
+            total_hosts: number;
+            /** Fqdn Suffix */
+            fqdn_suffix: string | null;
+            /** Log Size Warnings */
+            log_size_warnings: string[];
+            /** Data Is Stale */
+            data_is_stale: boolean;
         };
         /** ValidationError */
         ValidationError: {

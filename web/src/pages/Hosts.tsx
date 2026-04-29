@@ -7,7 +7,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { type HostRow, api } from "../lib/api";
+import { type HostRow, type HostsSummary, api } from "../lib/api";
 import { cn } from "../lib/cn";
 
 const columnHelper = createColumnHelper<HostRow>();
@@ -139,6 +139,68 @@ const columns = [
   }),
 ];
 
+function relativeTime(isoString: string): string {
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function MonitorHeader({
+  summary,
+  generatedAt,
+  filteredCount,
+  appliedFilter,
+}: {
+  summary: HostsSummary;
+  generatedAt: string;
+  filteredCount: number;
+  appliedFilter: string;
+}) {
+  const showOverridesBadge = /\boverride[=:]/i.test(appliedFilter);
+
+  const hostsPart =
+    filteredCount !== summary.total_hosts
+      ? `hosts=${filteredCount}/${summary.total_hosts}`
+      : `hosts=${summary.total_hosts}`;
+
+  const dbName = summary.db_path.split("/").pop() ?? summary.db_path;
+
+  return (
+    <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 font-mono text-caption">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+        <span className="font-semibold text-status-online tabular-nums">
+          fleetroll v{summary.version}
+        </span>
+        {showOverridesBadge && (
+          <span className="rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+            [OVERRIDES]
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-status-idle">
+        {summary.fqdn_suffix && (
+          <span className="tabular-nums">fqdn={summary.fqdn_suffix}</span>
+        )}
+        <span className="tabular-nums" title={summary.db_path}>
+          source={dbName}
+        </span>
+        <span className="tabular-nums">{hostsPart}</span>
+        <span className="tabular-nums">updated={relativeTime(generatedAt)}</span>
+        {summary.data_is_stale && (
+          <span className="text-status-warn">[stale]</span>
+        )}
+        {summary.log_size_warnings.length > 0 && (
+          <span className="text-status-warn" title="Run 'fleetroll maintain' to clean up">
+            ⚠ Large logs: {summary.log_size_warnings.join(", ")}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Hosts() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchParams.get("filter") ?? "");
@@ -200,12 +262,14 @@ export function Hosts() {
 
   return (
     <main className="p-4">
-      <div className="mb-3 flex items-baseline gap-3">
-        <h1 className="text-display">Hosts</h1>
-        <span className="text-caption text-status-idle tabular-nums">
-          {data?.rows.length ?? 0} hosts
-        </span>
-      </div>
+      {data?.summary && (
+        <MonitorHeader
+          summary={data.summary}
+          generatedAt={data.generated_at}
+          filteredCount={data.rows.length}
+          appliedFilter={activeFilter}
+        />
+      )}
       <div className="mb-3">
         <div className="flex gap-2">
           <input

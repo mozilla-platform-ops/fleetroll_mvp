@@ -3,18 +3,27 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from importlib.metadata import version as get_version
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
 from fleetroll.commands.monitor.cache import ShaInfoCache
-from fleetroll.commands.monitor.data import build_row_values, strip_fqdn
+from fleetroll.commands.monitor.data import (
+    age_seconds,
+    build_row_values,
+    detect_common_fqdn_suffix,
+    most_recent_ok_ts,
+    strip_fqdn,
+)
 from fleetroll.commands.monitor.query import apply_query, parse_query_safe, validate_query
-from fleetroll.commands.web.schemas import HostRow, HostsResponse
+from fleetroll.commands.web.schemas import HostRow, HostsResponse, HostsSummary
+from fleetroll.constants import STALE_DATA_THRESHOLD_SECONDS
 from fleetroll.data_provider import LocalProvider
 from fleetroll.db import get_all_known_hosts, get_connection, get_db_path
 from fleetroll.notes import default_notes_path, load_latest_notes
+from fleetroll.utils import check_log_sizes
 
 router = APIRouter()
 
@@ -77,7 +86,20 @@ def hosts(
         ]
         values_list = apply_query(values_list, q)
         rows = [HostRow(**v) for v in values_list]
+
+        most_recent_ok = most_recent_ok_ts(latest_ok)
+        ok_age = age_seconds(most_recent_ok) if most_recent_ok else None
+        data_is_stale = ok_age is None or ok_age > STALE_DATA_THRESHOLD_SECONDS
+
+        summary = HostsSummary(
+            version=get_version("fleetroll"),
+            db_path=str(db_path),
+            total_hosts=len(all_hosts),
+            fqdn_suffix=detect_common_fqdn_suffix(list(all_hosts)),
+            log_size_warnings=check_log_sizes(),
+            data_is_stale=data_is_stale,
+        )
     finally:
         conn.close()
 
-    return HostsResponse(rows=rows, generated_at=datetime.now(UTC))
+    return HostsResponse(rows=rows, generated_at=datetime.now(UTC), summary=summary)

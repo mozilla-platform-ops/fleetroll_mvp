@@ -4,6 +4,7 @@ export type HealthResponse = components["schemas"]["HealthResponse"];
 export type HelloResponse = components["schemas"]["HelloResponse"];
 export type HostRow = components["schemas"]["HostRow"];
 export type HostsResponse = components["schemas"]["HostsResponse"];
+export type HostsSummary = components["schemas"]["HostsSummary"];
 
 const BASE = "";
 

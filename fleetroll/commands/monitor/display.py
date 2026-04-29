@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .named_filters import NamedFilter
 
 from ...constants import STALE_DATA_THRESHOLD_SECONDS
-from ...utils import get_log_file_size
+from ...utils import check_log_sizes
 from .curses_colors import CursesColors
 from .data import (
     age_seconds,
@@ -536,32 +536,7 @@ class MonitorDisplay:
             self.draw_screen()
 
     def _check_log_sizes(self) -> list[str]:
-        """Check log file sizes and return warnings for files over threshold.
-
-        Returns:
-            List of warning strings, e.g., ["audit: 120M", "obs: 105M"]
-        """
-        warn_threshold_mb = 100
-        bytes_per_mb = 1024 * 1024
-
-        warnings = []
-        fleetroll_dir = Path.home() / ".fleetroll"
-
-        # Check audit.jsonl
-        audit_path = fleetroll_dir / "audit.jsonl"
-        audit_size_mb = get_log_file_size(audit_path) / bytes_per_mb
-        if audit_size_mb >= warn_threshold_mb:
-            warnings.append(f"audit: {audit_size_mb:.0f}M")
-
-        # Check SQLite database
-        from ...db import get_db_path
-
-        db_file = get_db_path()
-        db_size_mb = get_log_file_size(db_file) / bytes_per_mb
-        if db_size_mb >= warn_threshold_mb:
-            warnings.append(f"db: {db_size_mb:.0f}M")
-
-        return warnings
+        return check_log_sizes()
 
     def poll_tc_data(self) -> bool:
         """Check if TC data changed and reload if needed. Returns True if reloaded."""
