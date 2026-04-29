@@ -5,6 +5,7 @@ export type HelloResponse = components["schemas"]["HelloResponse"];
 export type HostRow = components["schemas"]["HostRow"];
 export type HostsResponse = components["schemas"]["HostsResponse"];
 export type HostsSummary = components["schemas"]["HostsSummary"];
+export type SavedFilter = components["schemas"]["SavedFilter"];
 
 const BASE = "";
 
@@ -26,4 +27,5 @@ export const api = {
     const qs = params.size > 0 ? `?${params}` : "";
     return get<HostsResponse>(`/api/hosts${qs}`);
   },
+  savedFilters: () => get<SavedFilter[]>("/api/filters"),
 };

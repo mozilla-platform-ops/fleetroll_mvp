@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Filters */
+        get: operations["filters_api_filters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -151,6 +168,15 @@ export interface components {
             /** Data Is Stale */
             data_is_stale: boolean;
         };
+        /** SavedFilter */
+        SavedFilter: {
+            /** Name */
+            name: string;
+            /** Query */
+            query: string;
+            /** Description */
+            description: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -173,6 +199,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    filters_api_filters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedFilter"][];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;

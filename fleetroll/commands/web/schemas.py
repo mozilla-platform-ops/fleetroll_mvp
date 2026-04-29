@@ -19,6 +19,12 @@ class HelloResponse(BaseModel):
     db_ok: bool
 
 
+class SavedFilter(BaseModel):
+    name: str
+    query: str
+    description: str
+
+
 class HostRow(BaseModel):
     status: str
     host: str

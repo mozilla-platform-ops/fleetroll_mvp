@@ -7,8 +7,10 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { type HostRow, type HostsSummary, api } from "../lib/api";
+import { type HostRow, type HostsSummary, type SavedFilter, api } from "../lib/api";
 import { cn } from "../lib/cn";
+import { FilterDropdown } from "../components/FilterDropdown";
+import { useFilterHistory } from "../lib/useFilterHistory";
 
 const columnHelper = createColumnHelper<HostRow>();
 
@@ -212,8 +214,10 @@ export function Hosts() {
   const [inputValue, setInputValue] = useState(searchParams.get("filter") ?? "");
   const [activeFilter, setActiveFilter] = useState(searchParams.get("filter") ?? "");
   const inputRef = useRef<HTMLInputElement>(null);
+  const filterHistory = useFilterHistory();
 
   const applyFilter = (value: string) => {
+    if (value) filterHistory.push(value);
     setActiveFilter(value);
     setSearchParams(value ? { filter: value } : {}, { replace: true });
   };
@@ -236,6 +240,12 @@ export function Hosts() {
     queryKey: ["hosts", activeFilter],
     queryFn: () => api.hosts({ filter: activeFilter || undefined }),
     refetchInterval: 30_000,
+  });
+
+  const { data: savedFilters } = useQuery({
+    queryKey: ["saved-filters"],
+    queryFn: api.savedFilters,
+    staleTime: Infinity,
   });
 
   const filterError =
@@ -288,6 +298,23 @@ export function Hosts() {
             onBlur={() => applyFilter(inputValue)}
             placeholder="os=linux pp_last>1h sort:pp_last:desc"
             className="flex-1 rounded border border-neutral-300 bg-transparent px-3 py-1.5 font-mono text-caption placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:placeholder:text-neutral-600 dark:focus:border-neutral-400"
+          />
+          <FilterDropdown
+            buttonLabel="Saved ▾"
+            items={(savedFilters ?? []).map((f: SavedFilter) => ({
+              label: f.name,
+              query: f.query,
+              description: f.description || undefined,
+            }))}
+            emptyMessage="No saved filters"
+            onSelect={(q) => { setInputValue(q); applyFilter(q); }}
+          />
+          <FilterDropdown
+            buttonLabel="Recent ▾"
+            items={filterHistory.recent.map((q) => ({ label: q, query: q }))}
+            emptyMessage="No recent filters"
+            onSelect={(q) => { setInputValue(q); applyFilter(q); }}
+            onClear={filterHistory.clear}
           />
           {inputValue && (
             <button
