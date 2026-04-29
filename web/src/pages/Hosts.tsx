@@ -188,12 +188,12 @@ export function Hosts() {
             onKeyDown={handleKeyDown}
             onBlur={() => applyFilter(inputValue)}
             placeholder="os=linux pp_last>1h sort:pp_last:desc"
-            className="flex-1 rounded border border-neutral-300 bg-transparent px-3 py-1.5 font-mono text-caption focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:focus:border-neutral-400"
+            className="flex-1 rounded border border-neutral-300 bg-transparent px-3 py-1.5 font-mono text-caption placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:placeholder:text-neutral-600 dark:focus:border-neutral-400"
           />
           {inputValue && (
             <button
               onClick={handleClear}
-              className="rounded border border-neutral-300 px-3 py-1.5 text-caption text-status-idle hover:border-neutral-400 dark:border-neutral-700"
+              className="rounded border border-neutral-300 px-3 py-1.5 text-caption text-status-idle hover:border-neutral-400 dark:border-neutral-700 dark:hover:border-neutral-500"
             >
               Clear
             </button>
@@ -203,7 +203,7 @@ export function Hosts() {
           <p className="mt-1 text-caption text-status-crit">{filterError}</p>
         )}
       </div>
-      <div className="overflow-x-auto rounded border border-neutral-200 dark:border-neutral-800">
+      <div className="overflow-x-auto rounded border border-neutral-200 dark:border-neutral-800 dark:bg-neutral-900">
         <table className="w-full text-body">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -226,7 +226,7 @@ export function Hosts() {
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
+                className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800"
               >
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="px-3 py-1.5">

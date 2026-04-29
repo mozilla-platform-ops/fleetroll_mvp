@@ -7,6 +7,10 @@
     font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   }
 
+  html {
+    @apply bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
+  }
+
   code,
   pre,
   .font-mono {
