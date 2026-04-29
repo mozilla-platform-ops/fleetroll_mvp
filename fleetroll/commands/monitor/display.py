@@ -715,6 +715,7 @@ class MonitorDisplay:
             - labels_dict maps column name to header label
             - widths_dict maps column name to computed width
         """
+        # Column order/set mirrors web/src/pages/Hosts.tsx — update both when adding columns.
         all_columns = [
             "host",
             "os",

@@ -34,6 +34,7 @@ const statusColors: Record<StatusVariant, string> = {
   unknown: "text-status-unknown",
 };
 
+// Column order/set mirrors fleetroll/commands/monitor/display.py — update both when adding columns.
 function th(label: string, title: string) {
   return () => <abbr title={title}>{label}</abbr>;
 }
