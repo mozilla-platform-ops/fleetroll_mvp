@@ -26,6 +26,7 @@ def cmd_data_freshness(args: DataFreshnessArgs) -> None:
         _output(
             {
                 "status": "no_data",
+                "host_source": args.hosts_file or "--all",
                 "most_recent_ok_ts": None,
                 "ok_age_seconds": None,
                 "ok_age_human": None,
@@ -48,8 +49,10 @@ def cmd_data_freshness(args: DataFreshnessArgs) -> None:
 
         from ..utils import parse_host_list
 
+        host_source = args.hosts_file
         hosts = parse_host_list(Path(args.hosts_file))
     else:
+        host_source = "--all"
         rows = conn.execute("SELECT DISTINCT host FROM host_observations").fetchall()
         hosts = [r["host"] for r in rows]
 
@@ -79,6 +82,7 @@ def cmd_data_freshness(args: DataFreshnessArgs) -> None:
     _output(
         {
             "status": status,
+            "host_source": host_source,
             "most_recent_ok_ts": most_recent_ok,
             "ok_age_seconds": ok_age,
             "ok_age_human": humanize_duration(ok_age) if ok_age is not None else None,
@@ -110,6 +114,7 @@ def _output(result: dict, *, json_output: bool) -> None:
     min_fresh_pct = result["min_fresh_pct"]
     threshold = result["stale_threshold_seconds"]
     print(f"status:          {status}")
+    print(f"host_source:     {result['host_source']}")
     print(f"most_recent_ok:  {ok_ts} ({ok_age} ago)")
     print(f"hosts_with_ok:   {hosts_with_ok}/{hosts_total}")
     print(f"fresh:           {hosts_fresh}/{hosts_total} ({fresh_pct}%, min {min_fresh_pct}%)")
