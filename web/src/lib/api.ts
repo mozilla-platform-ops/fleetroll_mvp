@@ -10,7 +10,8 @@ const BASE = "";
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   if (!res.ok) {
-    throw new Error(`${path} returned ${res.status}`);
+    const body = await res.json().catch(() => ({})) as { detail?: string };
+    throw Object.assign(new Error(body.detail ?? `${path} returned ${res.status}`), { status: res.status, detail: body.detail });
   }
   return res.json() as Promise<T>;
 }
@@ -18,5 +19,10 @@ async function get<T>(path: string): Promise<T> {
 export const api = {
   health: () => get<HealthResponse>("/api/health"),
   hello: () => get<HelloResponse>("/api/hello"),
-  hosts: () => get<HostsResponse>("/api/hosts"),
+  hosts: ({ filter }: { filter?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (filter) params.set("filter", filter);
+    const qs = params.size > 0 ? `?${params}` : "";
+    return get<HostsResponse>(`/api/hosts${qs}`);
+  },
 };

@@ -59,6 +59,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** HealthResponse */
         HealthResponse: {
             /** Ok */
@@ -130,6 +135,19 @@ export interface components {
              */
             generated_at: string;
         };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
+        };
     };
     responses: never;
     parameters: never;
@@ -181,7 +199,12 @@ export interface operations {
     };
     hosts_api_hosts_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Filter expression using the host-monitor DSL (e.g. os=linux pp_last>1h) */
+                filter?: string;
+                /** @description Sort spec (e.g. pp_last:desc or host:asc). Also accepted inline in filter via sort: prefix. */
+                sort?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -195,6 +218,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HostsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

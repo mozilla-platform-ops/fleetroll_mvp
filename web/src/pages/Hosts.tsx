@@ -5,6 +5,8 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { type HostRow, api } from "../lib/api";
 import { cn } from "../lib/cn";
 
@@ -110,10 +112,39 @@ const columns = [
 ];
 
 export function Hosts() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["hosts"],
-    queryFn: () => api.hosts(),
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [inputValue, setInputValue] = useState(searchParams.get("filter") ?? "");
+  const [activeFilter, setActiveFilter] = useState(searchParams.get("filter") ?? "");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const applyFilter = (value: string) => {
+    setActiveFilter(value);
+    setSearchParams(value ? { filter: value } : {}, { replace: true });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") applyFilter(inputValue);
+    if (e.key === "Escape") {
+      setInputValue("");
+      applyFilter("");
+    }
+  };
+
+  const handleClear = () => {
+    setInputValue("");
+    applyFilter("");
+    inputRef.current?.focus();
+  };
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["hosts", activeFilter],
+    queryFn: () => api.hosts({ filter: activeFilter || undefined }),
   });
+
+  const filterError =
+    isError && (error as { status?: number; detail?: string })?.status === 400
+      ? ((error as { detail?: string }).detail ?? "Invalid filter expression")
+      : null;
 
   const table = useReactTable({
     data: data?.rows ?? [],
@@ -121,7 +152,7 @@ export function Hosts() {
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <div className="flex h-screen items-center justify-center">
         <p className="text-body text-status-idle">Loading…</p>
@@ -129,7 +160,7 @@ export function Hosts() {
     );
   }
 
-  if (isError || !data) {
+  if ((isError || !data) && !filterError) {
     return (
       <div className="flex h-screen items-center justify-center">
         <p className="text-body text-status-crit">
@@ -144,8 +175,33 @@ export function Hosts() {
       <div className="mb-3 flex items-baseline gap-3">
         <h1 className="text-display">Hosts</h1>
         <span className="text-caption text-status-idle tabular-nums">
-          {data.rows.length} hosts
+          {data?.rows.length ?? 0} hosts
         </span>
+      </div>
+      <div className="mb-3">
+        <div className="flex gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={() => applyFilter(inputValue)}
+            placeholder="os=linux pp_last>1h sort:pp_last:desc"
+            className="flex-1 rounded border border-neutral-300 bg-transparent px-3 py-1.5 font-mono text-caption focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:focus:border-neutral-400"
+          />
+          {inputValue && (
+            <button
+              onClick={handleClear}
+              className="rounded border border-neutral-300 px-3 py-1.5 text-caption text-status-idle hover:border-neutral-400 dark:border-neutral-700"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        {filterError && (
+          <p className="mt-1 text-caption text-status-crit">{filterError}</p>
+        )}
       </div>
       <div className="overflow-x-auto rounded border border-neutral-200 dark:border-neutral-800">
         <table className="w-full text-body">
@@ -179,7 +235,7 @@ export function Hosts() {
                 ))}
               </tr>
             ))}
-            {data.rows.length === 0 && (
+            {(data?.rows.length ?? 0) === 0 && !filterError && (
               <tr>
                 <td
                   colSpan={columns.length}

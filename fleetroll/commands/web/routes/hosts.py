@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 
 from fleetroll.commands.monitor.cache import ShaInfoCache
 from fleetroll.commands.monitor.data import build_row_values, strip_fqdn
+from fleetroll.commands.monitor.query import apply_query, parse_query_safe, validate_query
 from fleetroll.commands.web.schemas import HostRow, HostsResponse
 from fleetroll.data_provider import LocalProvider
 from fleetroll.db import get_all_known_hosts, get_connection, get_db_path
@@ -18,7 +20,30 @@ router = APIRouter()
 
 
 @router.get("/api/hosts", response_model=HostsResponse)
-def hosts() -> HostsResponse:
+def hosts(
+    filter_expr: Annotated[
+        str,
+        Query(
+            alias="filter",
+            description="Filter expression using the host-monitor DSL (e.g. os=linux pp_last>1h)",
+        ),
+    ] = "",
+    sort: Annotated[
+        str,
+        Query(
+            description="Sort spec (e.g. pp_last:desc or host:asc). Also accepted inline in filter via sort: prefix.",
+        ),
+    ] = "",
+) -> HostsResponse:
+    raw = filter_expr.strip()
+    if sort.strip():
+        raw = f"{raw} sort:{sort.strip()}" if raw else f"sort:{sort.strip()}"
+    q = parse_query_safe(raw)
+    if raw:
+        err = validate_query(q, raw)
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+
     db_path = get_db_path()
     conn = get_connection(db_path)
     try:
@@ -37,9 +62,8 @@ def hosts() -> HostsResponse:
 
         notes_data = load_latest_notes(default_notes_path())
 
-        rows = []
-        for host in sorted(all_hosts):
-            values = build_row_values(
+        values_list = [
+            build_row_values(
                 host,
                 latest.get(host),
                 last_ok=latest_ok.get(host),
@@ -49,7 +73,10 @@ def hosts() -> HostsResponse:
                 windows_pools=windows_pools,
                 notes_data=notes_data,
             )
-            rows.append(HostRow(**values))
+            for host in sorted(all_hosts)
+        ]
+        values_list = apply_query(values_list, q)
+        rows = [HostRow(**v) for v in values_list]
     finally:
         conn.close()
 
