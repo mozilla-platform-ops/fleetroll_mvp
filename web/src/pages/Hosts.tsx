@@ -34,28 +34,13 @@ const statusColors: Record<StatusVariant, string> = {
   unknown: "text-status-unknown",
 };
 
+function th(label: string, title: string) {
+  return () => <abbr title={title}>{label}</abbr>;
+}
+
 const columns = [
-  columnHelper.accessor("healthy", {
-    header: "HEALTHY",
-    cell: (info) => {
-      const v = info.getValue();
-      return (
-        <span className={cn("font-medium", statusColors[healthVariant(v)])}>
-          {v}
-        </span>
-      );
-    },
-  }),
-  columnHelper.accessor("host", {
-    header: "HOST",
-    cell: (info) => (
-      <span className="font-mono text-caption">{info.getValue()}</span>
-    ),
-  }),
-  columnHelper.accessor("role", { header: "ROLE" }),
-  columnHelper.accessor("os", { header: "OS" }),
   columnHelper.accessor("status", {
-    header: "STATUS",
+    header: th("STATUS", "Audit collection status: OK = last run succeeded, FAIL = last run errored, UNK = host known but never audited"),
     cell: (info) => {
       const v = info.getValue();
       return (
@@ -65,50 +50,92 @@ const columns = [
       );
     },
   }),
-  columnHelper.accessor("sha", {
-    header: "SHA",
+  columnHelper.accessor("host", {
+    header: th("HOST", "Hostname (FQDN suffix stripped)"),
     cell: (info) => (
       <span className="font-mono text-caption">{info.getValue()}</span>
     ),
   }),
+  columnHelper.accessor("os", {
+    header: th("OS", "Operating system: L=Linux, M=macOS, W=Windows"),
+  }),
+  columnHelper.accessor("role", {
+    header: th("ROLE", "Puppet role assigned to this host"),
+  }),
   columnHelper.accessor("vlt_sha", {
-    header: "VLT_SHA",
+    header: th("VLT_SHA", "SHA of the vault.yaml file currently on disk"),
     cell: (info) => (
       <span className="font-mono text-caption">{info.getValue()}</span>
+    ),
+  }),
+  columnHelper.accessor("sha", {
+    header: th("OVR_BCH", "Override branch currently checked out on this host"),
+    cell: (info) => (
+      <span className="font-mono text-caption">{info.getValue()}</span>
+    ),
+  }),
+  columnHelper.accessor("uptime", {
+    header: th("UPTIME", "System uptime"),
+    cell: (info) => (
+      <span className="tabular-nums">{info.getValue()}</span>
     ),
   }),
   columnHelper.accessor("pp_last", {
-    header: "PP_LAST",
+    header: th("PP_LAST", "Time since last successful Puppet run"),
     cell: (info) => (
       <span className="tabular-nums">{info.getValue()}</span>
     ),
   }),
   columnHelper.accessor("pp_sha", {
-    header: "PP_SHA",
+    header: th("PP_SHA", "Git SHA that Puppet last applied on this host"),
     cell: (info) => (
       <span className="font-mono text-caption">{info.getValue()}</span>
     ),
   }),
-  columnHelper.accessor("pp_match", { header: "PP_MATCH" }),
+  columnHelper.accessor("pp_exp", {
+    header: th("PP_EXP", "Expected SHA for this host's role (from GitHub)"),
+    cell: (info) => (
+      <span className="font-mono text-caption">{info.getValue()}</span>
+    ),
+  }),
+  columnHelper.accessor("pp_match", {
+    header: th("PP_MATCH", "Whether PP_SHA matches PP_EXP (Y = in sync, N = drift detected)"),
+  }),
   columnHelper.accessor("tc_act", {
-    header: "TC_ACT",
+    header: th("TC_ACT", "Time since last TaskCluster worker activity"),
     cell: (info) => (
       <span className="tabular-nums">{info.getValue()}</span>
     ),
   }),
-  columnHelper.accessor("uptime", {
-    header: "UPTIME",
+  columnHelper.accessor("tc_j_sf", {
+    header: th("TC_T_DUR", "Duration of the last TaskCluster task run on this host"),
     cell: (info) => (
       <span className="tabular-nums">{info.getValue()}</span>
     ),
+  }),
+  columnHelper.accessor("tc_quar", {
+    header: th("TC_QUAR", "TaskCluster quarantine status for this worker"),
   }),
   columnHelper.accessor("data", {
-    header: "DATA",
+    header: th("DATA", "Data freshness: audit age / TC data age"),
     cell: (info) => (
       <span className="tabular-nums">{info.getValue()}</span>
     ),
   }),
-  columnHelper.accessor("note", { header: "NOTE" }),
+  columnHelper.accessor("healthy", {
+    header: th("HEALTHY", "Overall health assessment: Y=healthy, N=unhealthy, -=unknown"),
+    cell: (info) => {
+      const v = info.getValue();
+      return (
+        <span className={cn("font-medium", statusColors[healthVariant(v)])}>
+          {v}
+        </span>
+      );
+    },
+  }),
+  columnHelper.accessor("note", {
+    header: th("NOTE", "Operator note for this host"),
+  }),
 ];
 
 export function Hosts() {
