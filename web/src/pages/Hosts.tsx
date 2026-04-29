@@ -5,7 +5,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { type HostRow, type HostsSummary, api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -158,6 +158,12 @@ function MonitorHeader({
   filteredCount: number;
   appliedFilter: string;
 }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 10_000);
+    return () => clearInterval(id);
+  }, []);
+
   const showOverridesBadge = /\boverride[=:]/i.test(appliedFilter);
 
   const hostsPart =
@@ -229,6 +235,7 @@ export function Hosts() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["hosts", activeFilter],
     queryFn: () => api.hosts({ filter: activeFilter || undefined }),
+    refetchInterval: 30_000,
   });
 
   const filterError =
