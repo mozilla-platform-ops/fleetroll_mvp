@@ -110,16 +110,16 @@ export function FilterDropdown({ buttonLabel, items, emptyMessage, onSelect, onC
                     <div className="min-w-0 flex-1">
                       {isCompact ? (
                         <div className="flex items-baseline justify-between gap-2">
-                          <div className="break-all font-mono text-caption">{item.query}</div>
+                          <div className="break-all font-mono text-caption text-status-idle">{item.query}</div>
                           {age && <div className="shrink-0 self-start text-caption text-status-idle">{age}</div>}
                         </div>
                       ) : (
                         <>
                           <div className="truncate font-medium text-caption">{item.label}</div>
-                          <div className="truncate font-mono text-caption text-status-idle">{item.query}</div>
                           {item.description && (
-                            <div className="text-caption text-status-idle">{item.description}</div>
+                            <div className="text-caption italic text-neutral-400 dark:text-neutral-500">{item.description}</div>
                           )}
+                          <div className="break-all font-mono text-caption text-status-idle">{item.query}</div>
                         </>
                       )}
                     </div>
