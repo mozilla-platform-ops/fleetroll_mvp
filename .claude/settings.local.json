@@ -40,7 +40,8 @@
       "Bash(cm context:*)",
       "Bash(gh run view:*)",
       "Bash(cass view:*)",
-      "Bash(bunx @wener/mcp-cli:*)"
+      "Bash(bunx @wener/mcp-cli:*)",
+      "Bash(br --help)"
     ]
   }
 }
