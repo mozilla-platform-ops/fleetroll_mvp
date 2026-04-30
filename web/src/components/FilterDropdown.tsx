@@ -13,23 +13,33 @@ type Props = {
   emptyMessage: string;
   onSelect: (query: string) => void;
   onClear?: () => void;
+  activeQuery?: string;
 };
 
-export function FilterDropdown({ buttonLabel, items, emptyMessage, onSelect, onClear }: Props) {
+export function FilterDropdown({ buttonLabel, items, emptyMessage, onSelect, onClear, activeQuery }: Props) {
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
+  const [alignRight, setAlignRight] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setHighlighted(0);
+    if (dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      if (rect.right > window.innerWidth) setAlignRight(true);
+    }
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      setAlignRight(false);
+    };
   }, [open]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -60,35 +70,41 @@ export function FilterDropdown({ buttonLabel, items, emptyMessage, onSelect, onC
         {buttonLabel}
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 min-w-56 max-w-80 rounded border border-neutral-200 bg-white shadow-md dark:border-neutral-700 dark:bg-neutral-900">
+        <div ref={dropdownRef} className={cn("absolute top-full z-20 mt-1 w-72 overflow-hidden rounded border border-neutral-200 bg-white shadow-md dark:border-neutral-700 dark:bg-neutral-900", alignRight ? "right-0" : "left-0")}>
           {items.length === 0 ? (
             <p className="px-3 py-2 text-caption text-status-idle">{emptyMessage}</p>
           ) : (
             <ul role="listbox">
-              {items.map((item, i) => (
-                <li
-                  key={item.query}
-                  role="option"
-                  aria-selected={i === highlighted}
-                  onMouseEnter={() => setHighlighted(i)}
-                  onClick={() => {
-                    onSelect(item.query);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "cursor-pointer px-3 py-2",
-                    i === highlighted
-                      ? "bg-neutral-100 dark:bg-neutral-800"
-                      : "hover:bg-neutral-50 dark:hover:bg-neutral-800",
-                  )}
-                >
-                  <div className="font-medium text-caption">{item.label}</div>
-                  <div className="font-mono text-caption text-status-idle truncate">{item.query}</div>
-                  {item.description && (
-                    <div className="text-caption text-status-idle">{item.description}</div>
-                  )}
-                </li>
-              ))}
+              {items.map((item, i) => {
+                const isActive = activeQuery !== undefined && item.query === activeQuery;
+                return (
+                  <li
+                    key={item.query}
+                    role="option"
+                    aria-selected={i === highlighted}
+                    onMouseEnter={() => setHighlighted(i)}
+                    onClick={() => {
+                      onSelect(item.query);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      "cursor-pointer px-3 py-2 flex gap-2 items-start",
+                      i === highlighted
+                        ? "bg-neutral-100 dark:bg-neutral-800"
+                        : "hover:bg-neutral-50 dark:hover:bg-neutral-800",
+                    )}
+                  >
+                    <span className={cn("mt-0.5 shrink-0 text-caption", isActive ? "text-status-online" : "invisible")}>●</span>
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-caption">{item.label}</div>
+                      <div className="truncate font-mono text-caption text-status-idle">{item.query}</div>
+                      {item.description && (
+                        <div className="text-caption text-status-idle">{item.description}</div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
           {onClear && items.length > 0 && (

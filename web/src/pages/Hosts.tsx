@@ -308,6 +308,7 @@ export function Hosts() {
             }))}
             emptyMessage="No saved filters"
             onSelect={(q) => { setInputValue(q); applyFilter(q); }}
+            activeQuery={activeFilter || undefined}
           />
           <FilterDropdown
             buttonLabel="Recent ▾"
@@ -315,6 +316,7 @@ export function Hosts() {
             emptyMessage="No recent filters"
             onSelect={(q) => { setInputValue(q); applyFilter(q); }}
             onClear={filterHistory.clear}
+            activeQuery={activeFilter || undefined}
           />
           {inputValue && (
             <button
@@ -327,6 +329,16 @@ export function Hosts() {
         </div>
         {filterError && (
           <p className="mt-1 text-caption text-status-crit">{filterError}</p>
+        )}
+        {!filterError && activeFilter && (
+          <p className="mt-1 flex items-center gap-2 text-caption">
+            <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-status-idle dark:bg-neutral-800">
+              {`filter: ${(savedFilters ?? []).find((f) => f.query === activeFilter)?.name ?? activeFilter}`}
+            </span>
+            {inputValue !== activeFilter && (
+              <span className="text-status-warn">pending — press Enter to apply</span>
+            )}
+          </p>
         )}
       </div>
       <div className="overflow-x-auto rounded border border-neutral-200 dark:border-neutral-800 dark:bg-neutral-900">
