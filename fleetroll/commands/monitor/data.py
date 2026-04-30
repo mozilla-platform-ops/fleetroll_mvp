@@ -304,15 +304,22 @@ def build_ok_row_values(
     if vault_sha_full:
         vault_sha = f"{vault_sha} {humanize(vault_sha_full, words=2)}"
 
+    # Structured sub-fields for web UI popover (TUI uses the formatted strings below)
+    ovr_branch = ""
+    vlt_symlink = ""
+    vlt_mnemonic = humanize(vault_sha_full, words=2) if vault_sha_full else ""
+
     # Append human-readable info to SHA columns
     if sha_cache:
         if sha_full:
             ovr_info = sha_cache.get_override_info(sha_full)
             if ovr_info != "-":
+                ovr_branch = ovr_info
                 sha = f"{ovr_info} ({sha})"
         if vault_sha_full:
             vlt_info = sha_cache.get_vault_info(vault_sha_full)
             if vlt_info != "-":
+                vlt_symlink = vlt_info
                 vault_sha = f"{vault_sha} ({vlt_info})"
     meta = observed.get("override_meta") or {}
     mtime = meta.get("mtime_epoch") if override_present else "-"
@@ -535,6 +542,11 @@ def build_ok_row_values(
         "os": os_type,
         "sha": sha,
         "vlt_sha": vault_sha,
+        "ovr_branch": ovr_branch,
+        "ovr_sha_full": sha_full,
+        "vlt_sha_full": vault_sha_full,
+        "vlt_mnemonic": vlt_mnemonic,
+        "vlt_symlink": vlt_symlink,
         "mtime": str(mtime),
         "err": "-",
         "tc_quar": tc_quar,
@@ -585,6 +597,11 @@ def build_row_values(
             "os": "?",
             "sha": "?",
             "vlt_sha": "?",
+            "ovr_branch": "",
+            "ovr_sha_full": "",
+            "vlt_sha_full": "",
+            "vlt_mnemonic": "",
+            "vlt_symlink": "",
             "mtime": "?",
             "err": "?",
             "tc_quar": "-",
@@ -630,6 +647,11 @@ def build_row_values(
             "os": "-",
             "sha": "-",
             "vlt_sha": "-",
+            "ovr_branch": "",
+            "ovr_sha_full": "",
+            "vlt_sha_full": "",
+            "vlt_mnemonic": "",
+            "vlt_symlink": "",
             "mtime": "-",
             "err": err,
             "tc_quar": "-",

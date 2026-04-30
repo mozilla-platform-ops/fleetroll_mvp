@@ -34,6 +34,11 @@ class HostRow(BaseModel):
     os: str
     sha: str
     vlt_sha: str
+    ovr_branch: str = ""
+    ovr_sha_full: str = ""
+    vlt_sha_full: str = ""
+    vlt_mnemonic: str = ""
+    vlt_symlink: str = ""
     mtime: str
     err: str
     tc_quar: str

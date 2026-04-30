@@ -10,6 +10,7 @@ import { useSearchParams } from "react-router-dom";
 import { type HostRow, type HostsSummary, type SavedFilter, api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { FilterDropdown } from "../components/FilterDropdown";
+import { Popover, PopoverRow } from "../components/Popover";
 import { useFilterHistory } from "../lib/useFilterHistory";
 
 const columnHelper = createColumnHelper<HostRow>();
@@ -42,17 +43,6 @@ function th(label: string, title: string) {
 }
 
 const columns = [
-  columnHelper.accessor("status", {
-    header: th("STATUS", "Audit collection status: OK = last run succeeded, FAIL = last run errored, UNK = host known but never audited"),
-    cell: (info) => {
-      const v = info.getValue();
-      return (
-        <span className={cn("font-medium", statusColors[statusVariant(v)])}>
-          {v}
-        </span>
-      );
-    },
-  }),
   columnHelper.accessor("host", {
     header: th("HOST", "Hostname (FQDN suffix stripped)"),
     cell: (info) => (
@@ -67,15 +57,32 @@ const columns = [
   }),
   columnHelper.accessor("vlt_sha", {
     header: th("VLT_SHA", "SHA of the vault.yaml file currently on disk"),
-    cell: (info) => (
-      <span className="font-mono text-caption">{info.getValue()}</span>
-    ),
+    cell: (info) => {
+      const row = info.row.original;
+      const sha8 = row.vlt_sha_full ? row.vlt_sha_full.slice(0, 8) : info.getValue();
+      if (!row.vlt_sha_full) return <span className="font-mono text-caption">{sha8}</span>;
+      return (
+        <Popover trigger={<span className="font-mono text-caption">{sha8}</span>}>
+          <PopoverRow label="sha" value={row.vlt_sha_full} mono />
+          <PopoverRow label="mnem" value={row.vlt_mnemonic} />
+          <PopoverRow label="sym" value={row.vlt_symlink} mono />
+        </Popover>
+      );
+    },
   }),
   columnHelper.accessor("sha", {
     header: th("OVR_BCH", "Override branch currently checked out on this host"),
-    cell: (info) => (
-      <span className="font-mono text-caption">{info.getValue()}</span>
-    ),
+    cell: (info) => {
+      const row = info.row.original;
+      const branch = row.ovr_branch;
+      if (!branch) return <span className="font-mono text-caption">{info.getValue()}</span>;
+      return (
+        <Popover trigger={<span className="font-mono text-caption">{branch}</span>}>
+          <PopoverRow label="sha8" value={row.ovr_sha_full.slice(0, 8)} mono />
+          <PopoverRow label="sha" value={row.ovr_sha_full} mono />
+        </Popover>
+      );
+    },
   }),
   columnHelper.accessor("uptime", {
     header: th("UPTIME", "System uptime"),
@@ -139,6 +146,17 @@ const columns = [
   columnHelper.accessor("note", {
     header: th("NOTE", "Operator note for this host"),
   }),
+  columnHelper.accessor("status", {
+    header: th("STATUS", "Audit collection status: OK = last run succeeded, FAIL = last run errored, UNK = host known but never audited"),
+    cell: (info) => {
+      const v = info.getValue();
+      return (
+        <span className={cn("font-medium", statusColors[statusVariant(v)])}>
+          {v}
+        </span>
+      );
+    },
+  }),
 ];
 
 function relativeTime(isoString: string): string {
@@ -188,9 +206,6 @@ function MonitorHeader({
         )}
       </div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-status-idle">
-        {summary.fqdn_suffix && (
-          <span className="tabular-nums">fqdn={summary.fqdn_suffix}</span>
-        )}
         <span className="tabular-nums" title={summary.db_path}>
           source={dbName}
         </span>

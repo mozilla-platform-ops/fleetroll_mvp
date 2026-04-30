@@ -117,6 +117,16 @@ export interface components {
             sha: string;
             /** Vlt Sha */
             vlt_sha: string;
+            /** Ovr Branch */
+            ovr_branch: string;
+            /** Ovr Sha Full */
+            ovr_sha_full: string;
+            /** Vlt Sha Full */
+            vlt_sha_full: string;
+            /** Vlt Mnemonic */
+            vlt_mnemonic: string;
+            /** Vlt Symlink */
+            vlt_symlink: string;
             /** Mtime */
             mtime: string;
             /** Err */
