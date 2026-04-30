@@ -5,6 +5,7 @@ export type FilterItem = {
   label: string;
   query: string;
   description?: string;
+  timestamp?: number;
 };
 
 type Props = {
@@ -15,6 +16,15 @@ type Props = {
   onClear?: () => void;
   activeQuery?: string;
 };
+
+function relativeTime(ts: number): string {
+  if (ts === 0) return "";
+  const secs = Math.floor((Date.now() - ts) / 1000);
+  if (secs < 60) return "just now";
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return `${Math.floor(secs / 86400)}d ago`;
+}
 
 export function FilterDropdown({ buttonLabel, items, emptyMessage, onSelect, onClear, activeQuery }: Props) {
   const [open, setOpen] = useState(false);
@@ -77,6 +87,8 @@ export function FilterDropdown({ buttonLabel, items, emptyMessage, onSelect, onC
             <ul role="listbox">
               {items.map((item, i) => {
                 const isActive = activeQuery !== undefined && item.query === activeQuery;
+                const isCompact = item.label === item.query;
+                const age = item.timestamp !== undefined ? relativeTime(item.timestamp) : "";
                 return (
                   <li
                     key={item.query}
@@ -95,11 +107,20 @@ export function FilterDropdown({ buttonLabel, items, emptyMessage, onSelect, onC
                     )}
                   >
                     <span className={cn("mt-0.5 shrink-0 text-caption", isActive ? "text-status-online" : "invisible")}>●</span>
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-caption">{item.label}</div>
-                      <div className="truncate font-mono text-caption text-status-idle">{item.query}</div>
-                      {item.description && (
-                        <div className="text-caption text-status-idle">{item.description}</div>
+                    <div className="min-w-0 flex-1">
+                      {isCompact ? (
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="truncate font-mono text-caption">{item.query}</div>
+                          {age && <div className="shrink-0 text-caption text-status-idle">{age}</div>}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="truncate font-medium text-caption">{item.label}</div>
+                          <div className="truncate font-mono text-caption text-status-idle">{item.query}</div>
+                          {item.description && (
+                            <div className="text-caption text-status-idle">{item.description}</div>
+                          )}
+                        </>
                       )}
                     </div>
                   </li>

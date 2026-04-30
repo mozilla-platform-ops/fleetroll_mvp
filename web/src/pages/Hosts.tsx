@@ -312,7 +312,7 @@ export function Hosts() {
           />
           <FilterDropdown
             buttonLabel="Recent ▾"
-            items={filterHistory.recent.map((q) => ({ label: q, query: q }))}
+            items={filterHistory.recent.map((e) => ({ label: e.query, query: e.query, timestamp: e.ts }))}
             emptyMessage="No recent filters"
             onSelect={(q) => { setInputValue(q); applyFilter(q); }}
             onClear={filterHistory.clear}
