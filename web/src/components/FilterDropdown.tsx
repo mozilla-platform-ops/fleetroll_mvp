@@ -80,7 +80,7 @@ export function FilterDropdown({ buttonLabel, items, emptyMessage, onSelect, onC
         {buttonLabel}
       </button>
       {open && (
-        <div ref={dropdownRef} className={cn("absolute top-full z-20 mt-1 w-72 overflow-hidden rounded border border-neutral-200 bg-white shadow-md dark:border-neutral-700 dark:bg-neutral-900", alignRight ? "right-0" : "left-0")}>
+        <div ref={dropdownRef} className={cn("absolute top-full z-20 mt-1 w-96 overflow-hidden rounded border border-neutral-200 bg-white shadow-md dark:border-neutral-700 dark:bg-neutral-900", alignRight ? "right-0" : "left-0")}>
           {items.length === 0 ? (
             <p className="px-3 py-2 text-caption text-status-idle">{emptyMessage}</p>
           ) : (
@@ -110,8 +110,8 @@ export function FilterDropdown({ buttonLabel, items, emptyMessage, onSelect, onC
                     <div className="min-w-0 flex-1">
                       {isCompact ? (
                         <div className="flex items-baseline justify-between gap-2">
-                          <div className="truncate font-mono text-caption">{item.query}</div>
-                          {age && <div className="shrink-0 text-caption text-status-idle">{age}</div>}
+                          <div className="break-all font-mono text-caption">{item.query}</div>
+                          {age && <div className="shrink-0 self-start text-caption text-status-idle">{age}</div>}
                         </div>
                       ) : (
                         <>
