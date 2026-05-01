@@ -49,7 +49,7 @@ def format_tc_fetch_quiet(
     warnings: list[str],
     elapsed_seconds: float,
 ) -> str:
-    """Format tc-fetch output in quiet mode.
+    """Format gather-tc output in quiet mode.
 
     Args:
         worker_count: Number of worker records written

@@ -58,7 +58,7 @@ Fleetroll uses a puppet state metadata file for ground-truth tracking of what pu
 **What it does**:
 - Written automatically by the puppet wrapper script after each run
 - Contains git SHA, override SHA, vault SHA, success status, and timestamps
-- Read by `fleetroll host-audit` via SSH to populate monitor data
+- Read by `fleetroll gather-host` via SSH to populate monitor data
 - Enables reliable APPLIED status checking through SHA comparison
 
 **Integration**:
@@ -125,24 +125,24 @@ Running these with `watch -n 300 <command>` is how I'm currently using them. In 
 
 #### Host data
 
-The `host-audit` command stores host observations in SQLite (`~/.fleetroll/fleetroll.db`) and places all observed overrides and vault.yamls in `~/.fleetroll/overrides` and `~/.fleetroll/vault_yamls`.
+The `gather-host` command stores host observations in SQLite (`~/.fleetroll/fleetroll.db`) and places all observed overrides and vault.yamls in `~/.fleetroll/overrides` and `~/.fleetroll/vault_yamls`.
 
 ```bash
 # audit a single host
-uv run fleetroll host-audit t-linux64-ms-238.test.releng.mdc1.mozilla.com
+uv run fleetroll gather-host t-linux64-ms-238.test.releng.mdc1.mozilla.com
 
 # audit a list of hosts
-uv run fleetroll host-audit configs/host-lists/1804.list
+uv run fleetroll gather-host configs/host-lists/1804.list
 ```
 
 #### TaskCluster data
 
 ```bash
 # fetch TaskCluster worker data for hosts (stores in ~/.fleetroll/fleetroll.db)
-uv run fleetroll tc-fetch configs/host-lists/1804.list
+uv run fleetroll gather-tc configs/host-lists/1804.list
 
 # verbose output (shows API calls)
-uv run fleetroll tc-fetch -v configs/host-lists/1804.list
+uv run fleetroll gather-tc -v configs/host-lists/1804.list
 ```
 
 #### Data Storage

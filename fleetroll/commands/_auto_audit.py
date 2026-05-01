@@ -23,9 +23,9 @@ class HasAutoAuditArgs(Protocol):
 
 
 def _run_auto_audit(hosts: list[str], args: HasAutoAuditArgs, audit_log: Path) -> None:
-    """Run host-audit on the given hosts to refresh DB observations."""
+    """Run gather-host on the given hosts to refresh DB observations."""
     from ..cli_types import HostAuditArgs
-    from .audit import cmd_host_audit_batch
+    from .gather_host import cmd_host_audit_batch
 
     audit_args = HostAuditArgs(
         host="",

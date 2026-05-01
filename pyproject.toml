@@ -159,7 +159,7 @@ max-complexity = 25
 "fleetroll/commands/monitor/header_renderer.py" = ["C901", "PLR0912", "PLR0915"]
 "fleetroll/commands/monitor/row_renderer.py" = ["C901", "PLR0912", "PLR0915"]
 "fleetroll/commands/set.py" = ["C901", "PLR0912", "PLR0915"]
-"fleetroll/commands/tc_fetch.py" = ["C901", "PLR0912", "PLR0915"]
+"fleetroll/commands/gather_tc.py" = ["C901", "PLR0912", "PLR0915"]
 "fleetroll/commands/unset.py" = ["PLR0915"]
 "fleetroll/commands/vault.py" = ["C901", "PLR0912", "PLR0915"]
 

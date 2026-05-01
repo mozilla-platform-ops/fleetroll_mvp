@@ -221,7 +221,7 @@ fi
    - Test on both Linux and macOS
 
 2. **Collector integration**:
-   - Run `fleetroll host-audit` on test host
+   - Run `fleetroll gather-host` on test host
    - Verify audit log contains new PP_* fields
    - Verify values match state file
 

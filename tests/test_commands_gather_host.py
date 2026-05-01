@@ -6,7 +6,7 @@ import json
 
 import pytest
 from fleetroll.cli_types import HostAuditArgs
-from fleetroll.commands.audit import (
+from fleetroll.commands.gather_host import (
     aggregate_audit_summary,
     cmd_host_audit,
     format_single_host_output,
@@ -25,7 +25,7 @@ class TestCmdHostAudit:
         mock_args_audit.json = True
         mock_args_audit.audit_log = str(tmp_dir / "audit.jsonl")
 
-        mock_run_ssh = mocker.patch("fleetroll.commands.audit.run_ssh")
+        mock_run_ssh = mocker.patch("fleetroll.commands.gather_host.run_ssh")
         mock_run_ssh.return_value = (1, "", "Permission denied")
 
         with pytest.raises(CommandFailureError) as excinfo:
@@ -44,7 +44,7 @@ class TestCmdHostAudit:
         mock_args_audit.host = str(tmp_host_file)
         mock_args_audit.workers = 2
 
-        mock_run_ssh = mocker.patch("fleetroll.commands.audit.run_ssh")
+        mock_run_ssh = mocker.patch("fleetroll.commands.gather_host.run_ssh")
         mock_run_ssh.return_value = (1, "", "Permission denied")
 
         with pytest.raises(CommandFailureError) as excinfo:

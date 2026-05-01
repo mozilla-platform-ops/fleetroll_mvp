@@ -64,11 +64,11 @@ The SQLite schema is well-defined in `db.py`. The doc should at least note the m
 
 ### 7. Missing: Scanning configuration
 
-The server runs `host-audit`, `tc-fetch`, `gh-fetch` as background tasks. Not addressed:
+The server runs `gather-host`, `gather-tc`, `gather-gh` as background tasks. Not addressed:
 
 - Scan intervals (how often?)
 - SSH configuration for the server (keys, bastion/ProxyJump, ports)
-- Concurrency — current `host-audit` SSHes to hosts in batches; what batch size/parallelism for the server?
+- Concurrency — current `gather-host` SSHes to hosts in batches; what batch size/parallelism for the server?
 - Error handling — what happens when SSH to a host fails? Retry? Backoff?
 - TaskCluster and GitHub API credentials on the server
 

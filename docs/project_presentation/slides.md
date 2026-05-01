@@ -28,16 +28,16 @@ https://github.com/mozilla-platform-ops/fleetroll_mvp
 
 # data collection
 
-  - host data (`fleetroll host-audit`)
+  - host data (`fleetroll gather-host`)
     - uses SSH. bash for mac and linux and powershell for windows.
       - `fleetroll debug-host-script (--windows)`
   	- gathers info like role, puppet run metadata, uptime, vault, and override info
   - additional data
-    - github (`fleetroll gh-fetch`): expected puppet git SHA for mac and linux (master or override) and win (worker_images file)
-    - taskcluster (`fleetroll tc-fetch`): last time in touch with TC, job status (including pass/fail, duration)
+    - github (`fleetroll gather-gh`): expected puppet git SHA for mac and linux (master or override) and win (worker_images file)
+    - taskcluster (`fleetroll gather-tc`): last time in touch with TC, job status (including pass/fail, duration)
       - worker_type is determined via lookup tables/patterns based on role
   - `watch -n 600 tools/gather-generic.sh config/host-lists/BLAH`
-    - handles collection of all three (`tc-fetch` calls `gh-fetch`)
+    - handles collection of all three (`gather-tc` calls `gather-gh`)
     - allows more frequent collection of interesting hosts (3m for canaries, 15m for rest)
 
 ---

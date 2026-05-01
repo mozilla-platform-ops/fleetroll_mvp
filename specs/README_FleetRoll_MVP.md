@@ -44,9 +44,9 @@ chmod +x fleetroll_mvp.py
 Audit:
 
 ```bash
-./fleetroll_mvp.py host-audit myhost.example.net
-./fleetroll_mvp.py host-audit myhost.example.net --no-content
-./fleetroll_mvp.py host-audit myhost.example.net --json
+./fleetroll_mvp.py gather-host myhost.example.net
+./fleetroll_mvp.py gather-host myhost.example.net --no-content
+./fleetroll_mvp.py gather-host myhost.example.net --json
 ```
 
 Set override from local file:
@@ -75,8 +75,8 @@ Unset override:
 SSH options (ProxyJump, alternate port, etc.):
 
 ```bash
-./fleetroll_mvp.py --ssh-option "-J bastion.example.net" host-audit myhost.example.net
-./fleetroll_mvp.py --ssh-option "-p 2222" host-audit myhost.example.net
+./fleetroll_mvp.py --ssh-option "-J bastion.example.net" gather-host myhost.example.net
+./fleetroll_mvp.py --ssh-option "-p 2222" gather-host myhost.example.net
 ```
 
 ## Audit log
@@ -91,7 +91,7 @@ Each line is a JSON object recording:
 - parameters (reason, hashes, backups, etc.)
 - result (ssh rc, ok, stderr)
 
-**Note:** `host-audit` stores override content hashes (SHA256) in the audit log; it does not write raw contents to JSONL.
+**Note:** `gather-host` stores override content hashes (SHA256) in the audit log; it does not write raw contents to JSONL.
 
 ## Next steps to grow into full FleetRoll
 

@@ -124,7 +124,7 @@ def cli(ctx: click.Context, debug: bool):
     setup_logging(debug=debug)
 
 
-@cli.command("host-audit")
+@cli.command("gather-host")
 @click.argument("host", metavar="HOST_OR_FILE")
 @common_options
 @click.option(
@@ -157,7 +157,7 @@ def cli(ctx: click.Context, debug: bool):
     is_flag=True,
     help="Single-line output.",
 )
-def host_audit(
+def gather_host(
     host: str,
     ssh_option: tuple[str, ...],
     connect_timeout: int,
@@ -328,7 +328,7 @@ def debug_host_script(
     wrap: bool,
     windows: bool,
 ):
-    """Print the remote host audit script used by host-audit."""
+    """Print the remote host audit script used by gather-host."""
     if windows:
         if wrap:
             print(remote_windows_audit_script())
@@ -409,7 +409,7 @@ def debug_host_script(
 @click.option(
     "--no-audit",
     is_flag=True,
-    help="Skip the automatic host-audit run after the override is written.",
+    help="Skip the automatic gather-host run after the override is written.",
 )
 def host_set_override(
     host: tuple[str, ...],
@@ -528,7 +528,7 @@ def host_set_override(
 @click.option(
     "--no-audit",
     is_flag=True,
-    help="Skip the automatic host-audit run after the vault is written.",
+    help="Skip the automatic gather-host run after the vault is written.",
 )
 def host_set_vault(
     host: tuple[str, ...],
@@ -607,7 +607,7 @@ def host_set_vault(
 @click.option(
     "--no-audit",
     is_flag=True,
-    help="Skip the automatic host-audit run after the override is removed.",
+    help="Skip the automatic gather-host run after the override is removed.",
 )
 def host_unset_override(
     host: tuple[str, ...],
@@ -667,7 +667,7 @@ def host_unset_override(
 @click.option(
     "--no-audit",
     is_flag=True,
-    help="Skip the automatic host-audit run after puppet completes.",
+    help="Skip the automatic gather-host run after puppet completes.",
 )
 @click.option(
     "--quiet",
@@ -711,7 +711,7 @@ def host_run_puppet(
     cmd_host_run_puppet(args)
 
 
-@cli.command("tc-fetch")
+@cli.command("gather-tc")
 @click.argument("host", metavar="HOST_OR_FILE")
 @click.option(
     "--verbose",
@@ -725,7 +725,7 @@ def host_run_puppet(
     is_flag=True,
     help="Single-line output.",
 )
-def tc_fetch(host: str, verbose: int, quiet: bool):
+def gather_tc(host: str, verbose: int, quiet: bool):
     """Fetch TaskCluster worker data for hosts."""
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
@@ -734,7 +734,7 @@ def tc_fetch(host: str, verbose: int, quiet: bool):
     cmd_tc_fetch(args)
 
 
-@cli.command("gh-fetch")
+@cli.command("gather-gh")
 @click.option(
     "--override-delay",
     is_flag=True,
@@ -746,9 +746,100 @@ def tc_fetch(host: str, verbose: int, quiet: bool):
     is_flag=True,
     help="Single-line output.",
 )
-def gh_fetch(override_delay: bool, quiet: bool):
+def gather_gh(override_delay: bool, quiet: bool):
     """Fetch GitHub branch refs for puppet repos."""
     cmd_gh_fetch(override_delay=override_delay, quiet=quiet)
+
+
+@cli.command("gather")
+@click.argument("host", metavar="HOST_OR_FILE")
+@common_options
+@click.option(
+    "--workers",
+    type=int,
+    default=10,
+    show_default=True,
+    help="Number of parallel workers for gather-host batch mode.",
+)
+@click.option(
+    "--batch-timeout",
+    type=int,
+    default=600,
+    show_default=True,
+    help="Overall timeout for gather-host batch operations in seconds.",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    count=True,
+    help="Verbose output (use -vv for very verbose in gather-tc).",
+)
+@click.option(
+    "--quiet",
+    "-q",
+    is_flag=True,
+    help="Single-line output for all sub-commands.",
+)
+@click.option(
+    "--skip-host",
+    is_flag=True,
+    help="Skip gather-host (SSH host introspection).",
+)
+@click.option(
+    "--skip-tc",
+    is_flag=True,
+    help="Skip gather-tc (TaskCluster worker data).",
+)
+@click.option(
+    "--skip-gh",
+    is_flag=True,
+    help="Skip gather-gh (GitHub branch refs).",
+)
+def gather(
+    host: str,
+    ssh_option: tuple[str, ...],
+    connect_timeout: int,
+    timeout: int,
+    audit_log: str | None,
+    json_output: bool,
+    workers: int,
+    batch_timeout: int,
+    verbose: int,
+    quiet: bool,
+    skip_host: bool,
+    skip_tc: bool,
+    skip_gh: bool,
+):
+    """Run gather-host, gather-tc, and gather-gh in sequence.
+
+    HOST_OR_FILE can be a hostname, user@hostname, or a file containing hosts
+    (one per line). Passed to gather-host and gather-tc; gather-gh does not
+    use it.
+
+    Use --skip-host / --skip-tc / --skip-gh to omit individual steps.
+    """
+    if not skip_host:
+        host_args = HostAuditArgs(
+            host=host,
+            ssh_option=list(ssh_option) if ssh_option else None,
+            connect_timeout=connect_timeout,
+            timeout=timeout,
+            audit_log=audit_log,
+            json=json_output,
+            no_content=False,
+            workers=workers,
+            batch_timeout=batch_timeout,
+            verbose=verbose >= 1,
+            quiet=quiet,
+        )
+        cmd_host_audit(host_args)
+
+    if not skip_tc:
+        tc_args = TcFetchArgs(host=host, verbose=verbose, quiet=quiet)
+        cmd_tc_fetch(tc_args)
+
+    if not skip_gh:
+        cmd_gh_fetch(override_delay=False, quiet=quiet)
 
 
 @cli.command("maintain")

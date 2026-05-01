@@ -1,4 +1,4 @@
-"""E2E integration tests for host-audit command.
+"""E2E integration tests for gather-host command.
 
 Tests the full audit pipeline by running against a real SSH server in Docker:
 - SSH connection with real keys
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 from fleetroll.cli_types import HostAuditArgs
-from fleetroll.commands.audit import cmd_host_audit
+from fleetroll.commands.gather_host import cmd_host_audit
 from fleetroll.db import get_connection, get_db_path, get_latest_host_observations
 
 

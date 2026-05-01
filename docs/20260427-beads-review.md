@@ -60,7 +60,7 @@ Many small features and two P2 bugs:
 
 ### 7. Naming / refactor / chores [P2/P4]
 
-- `mvp-3fn` rename tc-fetch, host-audit, gh-fetch to consistent convention
+- `mvp-3fn` rename gather-tc, gather-host, gather-gh to consistent convention
 - `mvp-1ea` migrate os.path → pathlib
 - `mvp-l0h` structured logging with structlog
 - `mvp-6rl` CLI integration tests

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from fleetroll.commands.tc_fetch import (
+from fleetroll.commands.gather_tc import (
     build_role_to_hosts_mapping,
     build_windows_role_mapping,
     format_tc_fetch_quiet,
@@ -592,7 +592,7 @@ class TestBuildWindowsRoleMapping:
             "win11-64-24h2-hw-alpha",
             "gecko-t-linux-talos",  # non-win pool, should be excluded
         ]
-        with patch("fleetroll.commands.tc_fetch.fetch_worker_type_names", return_value=pool_names):
+        with patch("fleetroll.commands.gather_tc.fetch_worker_type_names", return_value=pool_names):
             result = build_windows_role_mapping("releng-hardware", credentials=None)
 
         assert result["win116424h2hw"] == ("releng-hardware", "win11-64-24h2-hw")
@@ -603,7 +603,7 @@ class TestBuildWindowsRoleMapping:
     def test_excludes_non_win_pools(self):
         """Should only include pools starting with 'win'."""
         pool_names = ["win11-64-24h2-hw", "linux-t-basic", "osx-1500-m4"]
-        with patch("fleetroll.commands.tc_fetch.fetch_worker_type_names", return_value=pool_names):
+        with patch("fleetroll.commands.gather_tc.fetch_worker_type_names", return_value=pool_names):
             result = build_windows_role_mapping("releng-hardware", credentials=None)
 
         assert len(result) == 1
@@ -611,7 +611,7 @@ class TestBuildWindowsRoleMapping:
 
     def test_empty_pool_list(self):
         """Should return empty dict when no pools are returned."""
-        with patch("fleetroll.commands.tc_fetch.fetch_worker_type_names", return_value=[]):
+        with patch("fleetroll.commands.gather_tc.fetch_worker_type_names", return_value=[]):
             result = build_windows_role_mapping("releng-hardware", credentials=None)
 
         assert result == {}
@@ -619,7 +619,7 @@ class TestBuildWindowsRoleMapping:
     def test_windows_role_through_map_roles_to_worker_types(self):
         """Windows roles resolved dynamically should work end-to-end."""
         pool_names = ["win11-64-24h2-hw-ref", "gecko-t-linux-talos"]
-        with patch("fleetroll.commands.tc_fetch.fetch_worker_type_names", return_value=pool_names):
+        with patch("fleetroll.commands.gather_tc.fetch_worker_type_names", return_value=pool_names):
             windows_mapping = build_windows_role_mapping("releng-hardware", credentials=None)
 
         role_to_hosts = {

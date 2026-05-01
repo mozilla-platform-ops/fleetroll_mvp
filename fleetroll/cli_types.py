@@ -9,7 +9,7 @@ from typing import Protocol
 
 @dataclass
 class HostAuditArgs:
-    """Arguments for host-audit command."""
+    """Arguments for gather-host command."""
 
     host: str
     ssh_option: list[str] | None
@@ -141,7 +141,7 @@ class HostRunPuppetArgs:
 
 @dataclass
 class TcFetchArgs:
-    """Arguments for tc-fetch command."""
+    """Arguments for gather-tc command."""
 
     host: str
     verbose: int

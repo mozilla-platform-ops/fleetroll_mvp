@@ -100,9 +100,9 @@ class TestStoreOverrideFile:
 
     def test_filename_is_sha_prefix(self, tmp_dir: Path):
         """Filename is SHA256 prefix (12 chars by default)."""
-        sha = "abcdef1234567890" + "0" * 48
+        sha = "testsha_pref_xy" + "z" * 48
         path = store_override_file("content", sha, tmp_dir)
-        assert path.name == "abcdef123456"
+        assert path.name == "testsha_pref"
 
     def test_returns_existing_if_same_content(self, tmp_dir: Path):
         """Returns existing file path if content matches (idempotent)."""

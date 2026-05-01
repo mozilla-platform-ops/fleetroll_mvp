@@ -13,5 +13,5 @@ host_list="$1"
 shift
 options="-q"
 
-uv run fleetroll host-audit "$host_list" $options --workers 20 "$@"
-uv run fleetroll tc-fetch "$host_list" $options "$@"
+uv run fleetroll gather-host "$host_list" $options --workers 20 "$@"
+uv run fleetroll gather-tc "$host_list" $options "$@"

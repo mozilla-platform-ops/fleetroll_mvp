@@ -25,7 +25,7 @@ class TestCliHelp:
         """Main --help shows all commands."""
         result = runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
-        assert "host-audit" in result.output
+        assert "gather-host" in result.output
         assert "debug-host-script" in result.output
         assert "show-vault" in result.output
         assert "host-set-override" in result.output
@@ -39,8 +39,8 @@ class TestCliHelp:
         assert "FleetRoll" in result.output
 
     def test_audit_help(self, runner: CliRunner):
-        """host-audit --help shows command options."""
-        result = runner.invoke(cli, ["host-audit", "--help"])
+        """gather-host --help shows command options."""
+        result = runner.invoke(cli, ["gather-host", "--help"])
         assert result.exit_code == 0
         # Path options removed - OS detection automatic
         assert "--workers" in result.output
@@ -166,8 +166,8 @@ class TestCliValidation:
         assert "DRY RUN" in result.output
 
     def test_audit_requires_host_argument(self, runner: CliRunner):
-        """host-audit requires HOST_OR_FILE argument."""
-        result = runner.invoke(cli, ["host-audit"])
+        """gather-host requires HOST_OR_FILE argument."""
+        result = runner.invoke(cli, ["gather-host"])
         assert result.exit_code != 0
 
     def test_set_requires_host_argument(self, runner: CliRunner, tmp_dir: Path):
@@ -263,8 +263,8 @@ class TestCliCommonOptions:
     """Tests for common options shared across commands."""
 
     def test_ssh_option_in_audit(self, runner: CliRunner):
-        """--ssh-option is available in host-audit."""
-        result = runner.invoke(cli, ["host-audit", "--help"])
+        """--ssh-option is available in gather-host."""
+        result = runner.invoke(cli, ["gather-host", "--help"])
         assert "--ssh-option" in result.output
 
     def test_ssh_option_in_set(self, runner: CliRunner):
@@ -285,7 +285,7 @@ class TestCliCommonOptions:
     def test_timeout_options_in_all_commands(self, runner: CliRunner):
         """--timeout and --connect-timeout are available in all commands."""
         for cmd in [
-            "host-audit",
+            "gather-host",
             "host-set-override",
             "host-set-vault",
             "host-unset-override",
@@ -297,7 +297,7 @@ class TestCliCommonOptions:
     def test_json_option_in_all_commands(self, runner: CliRunner):
         """--json option is available in all commands."""
         for cmd in [
-            "host-audit",
+            "gather-host",
             "host-set-override",
             "host-set-vault",
             "host-unset-override",
@@ -308,7 +308,7 @@ class TestCliCommonOptions:
     def test_audit_log_option_in_all_commands(self, runner: CliRunner):
         """--audit-log option is available in all commands."""
         for cmd in [
-            "host-audit",
+            "gather-host",
             "host-set-override",
             "host-set-vault",
             "host-unset-override",
@@ -355,15 +355,15 @@ class TestCliMissingHelp:
         assert "--force" in result.output
 
     def test_tc_fetch_help(self, runner: CliRunner):
-        """tc-fetch --help shows command options."""
-        result = runner.invoke(cli, ["tc-fetch", "--help"])
+        """gather-tc --help shows command options."""
+        result = runner.invoke(cli, ["gather-tc", "--help"])
         assert result.exit_code == 0
         assert "--verbose" in result.output
         assert "--quiet" in result.output
 
     def test_gh_fetch_help(self, runner: CliRunner):
-        """gh-fetch --help shows command options."""
-        result = runner.invoke(cli, ["gh-fetch", "--help"])
+        """gather-gh --help shows command options."""
+        result = runner.invoke(cli, ["gather-gh", "--help"])
         assert result.exit_code == 0
         assert "--quiet" in result.output
 
@@ -386,13 +386,13 @@ class TestCliMutualExclusion:
     """Tests for mutually exclusive flags."""
 
     def test_host_audit_verbose_and_quiet_rejected(self, runner: CliRunner):
-        """host-audit rejects --verbose and --quiet together."""
-        result = runner.invoke(cli, ["host-audit", "somehost", "--verbose", "--quiet"])
+        """gather-host rejects --verbose and --quiet together."""
+        result = runner.invoke(cli, ["gather-host", "somehost", "--verbose", "--quiet"])
         assert result.exit_code != 0
 
     def test_tc_fetch_verbose_and_quiet_rejected(self, runner: CliRunner):
-        """tc-fetch rejects --verbose and --quiet together."""
-        result = runner.invoke(cli, ["tc-fetch", "somehost", "--verbose", "--quiet"])
+        """gather-tc rejects --verbose and --quiet together."""
+        result = runner.invoke(cli, ["gather-tc", "somehost", "--verbose", "--quiet"])
         assert result.exit_code != 0
 
     def test_hostname_only_without_once_rejected(self, runner: CliRunner, tmp_path: Path):

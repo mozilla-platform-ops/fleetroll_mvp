@@ -66,7 +66,7 @@ class TestMaybeAutoAudit:
 
 class TestRunAutoAudit:
     def test_builds_audit_args_and_calls_batch(self, mocker, audit_args, tmp_path: Path):
-        mock_batch = mocker.patch("fleetroll.commands.audit.cmd_host_audit_batch")
+        mock_batch = mocker.patch("fleetroll.commands.gather_host.cmd_host_audit_batch")
         mocker.patch("builtins.print")
         hosts = ["host1.example.com"]
         audit_log = tmp_path / "audit.jsonl"
@@ -82,7 +82,7 @@ class TestRunAutoAudit:
         assert call_audit_args.quiet is True
 
     def test_prints_refresh_message(self, mocker, audit_args, tmp_path: Path):
-        mocker.patch("fleetroll.commands.audit.cmd_host_audit_batch")
+        mocker.patch("fleetroll.commands.gather_host.cmd_host_audit_batch")
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
 

@@ -9,9 +9,9 @@ The existing architecture has a clean seam: `db.py` separates scanners from disp
 ## Architecture
 
 ```
- Before:  [Each User] → host-audit/tc-fetch/gh-fetch → local SQLite → host-monitor TUI
+ Before:  [Each User] → gather-host/gather-tc/gather-gh → local SQLite → host-monitor TUI
 
- After:   [Server pods *] → host-audit/tc-fetch/gh-fetch → PostgreSQL → REST + SSE
+ After:   [Server pods *] → gather-host/gather-tc/gather-gh → PostgreSQL → REST + SSE
                                                                        │
                                        ┌───────────────────────────────┤
                                        ▼                               ▼
@@ -30,7 +30,7 @@ The existing architecture has a clean seam: `db.py` separates scanners from disp
 - **Framework**: FastAPI + uvicorn + sse-starlette
 - **Storage**: PostgreSQL (server); local mode retains SQLite via `db.py`
 - **Deployment**: Container on K8s, multiple replicas for HA
-- **Scanning**: Background async tasks (host-audit, tc-fetch, gh-fetch); only the leader pod scans
+- **Scanning**: Background async tasks (gather-host, gather-tc, gather-gh); only the leader pod scans
 - **Leader election**: PostgreSQL advisory lock — lock holder scans, others retry on an interval; pod death releases the lock immediately
 - **Host list**: `configs/host-lists/all.list` baked into the image; redeploy to update
 - **API**: REST for snapshots/queries, SSE for real-time observation streaming

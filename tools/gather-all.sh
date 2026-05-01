@@ -6,5 +6,5 @@
 host_list="configs/host-lists/all.list"
 options="-q"
 
-uv run fleetroll host-audit $host_list $options "$@"
-uv run fleetroll tc-fetch $host_list $options "$@"
+uv run fleetroll gather-host $host_list $options "$@"
+uv run fleetroll gather-tc $host_list $options "$@"

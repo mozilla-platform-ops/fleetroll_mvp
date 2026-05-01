@@ -238,7 +238,7 @@ sudo ls -la /etc/puppet/last_run_metadata.json
 sudo cat /etc/puppet/last_run_metadata.json | python3 -m json.tool
 
 # 4. Check fleetroll can read it
-fleetroll host-audit hostname
+fleetroll gather-host hostname
 fleetroll host-monitor host-list.txt
 ```
 
@@ -248,7 +248,7 @@ Once deployed, fleetroll commands will automatically use the new state file:
 
 ```bash
 # Audit host (reads state file via SSH)
-fleetroll host-audit t-linux64-ms-238
+fleetroll gather-host t-linux64-ms-238
 
 # Monitor hosts (shows APPLIED status based on state)
 fleetroll host-monitor hosts.txt
