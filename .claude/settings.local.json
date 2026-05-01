@@ -41,7 +41,10 @@
       "Bash(gh run view:*)",
       "Bash(cass view:*)",
       "Bash(bunx @wener/mcp-cli:*)",
-      "Bash(br --help)"
+      "Bash(br --help)",
+      "Bash(npm run typecheck:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(npm test:*)"
     ]
   }
 }
