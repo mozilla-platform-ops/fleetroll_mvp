@@ -44,7 +44,8 @@
       "Bash(br --help)",
       "Bash(npm run typecheck:*)",
       "Bash(uv run pytest:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(bv --robot-triage --format toon)"
     ]
   }
 }
