@@ -272,9 +272,14 @@ def ensure_fqdn(hostname: str) -> None:
 
 FQDN_DEFAULT_SUFFIX = ".test.releng.mdc1.mozilla.com"
 
+_MS_SHORT_RE = re.compile(r"^ms(\d+)$", re.IGNORECASE)
+
 
 def expand_hostname(hostname: str) -> str:
     """Expand a short hostname to an FQDN. Pass-through if already dotted."""
     if "." in hostname:
         return hostname
+    m = _MS_SHORT_RE.match(hostname)
+    if m:
+        hostname = f"t-linux64-ms-{int(m.group(1)):03d}"
     return hostname + FQDN_DEFAULT_SUFFIX

@@ -500,6 +500,15 @@ class TestExpandHostname:
             expand_hostname("t-linux64-ms-239") == "t-linux64-ms-239.test.releng.mdc1.mozilla.com"
         )
 
+    def test_ms_alias_zero_padded(self):
+        assert expand_hostname("ms001") == "t-linux64-ms-001.test.releng.mdc1.mozilla.com"
+
+    def test_ms_alias_unpadded(self):
+        assert expand_hostname("ms1") == "t-linux64-ms-001.test.releng.mdc1.mozilla.com"
+
+    def test_ms_alias_large_number(self):
+        assert expand_hostname("ms239") == "t-linux64-ms-239.test.releng.mdc1.mozilla.com"
+
     def test_macmini_m4_expands(self):
         assert expand_hostname("macmini-m4-60") == "macmini-m4-60.test.releng.mdc1.mozilla.com"
 
