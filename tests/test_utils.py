@@ -509,6 +509,9 @@ class TestExpandHostname:
     def test_ms_alias_large_number(self):
         assert expand_hostname("ms239") == "t-linux64-ms-239.test.releng.mdc1.mozilla.com"
 
+    def test_ms_alias_with_hyphen(self):
+        assert expand_hostname("ms-101") == "t-linux64-ms-101.test.releng.mdc1.mozilla.com"
+
     def test_macmini_m4_expands(self):
         assert expand_hostname("macmini-m4-60") == "macmini-m4-60.test.releng.mdc1.mozilla.com"
 
@@ -536,6 +539,15 @@ class TestResolveHostArgs:
     def test_multiple_fqdns(self):
         hosts, host_file = resolve_host_args(("a.example.com", "b.example.com"))
         assert hosts == ["a.example.com", "b.example.com"]
+        assert host_file is None
+
+    def test_comma_separated_hosts(self):
+        hosts, host_file = resolve_host_args(("ms001,ms003,ms004",))
+        assert hosts == [
+            "t-linux64-ms-001.test.releng.mdc1.mozilla.com",
+            "t-linux64-ms-003.test.releng.mdc1.mozilla.com",
+            "t-linux64-ms-004.test.releng.mdc1.mozilla.com",
+        ]
         assert host_file is None
 
     def test_short_hostname_expanded(self):

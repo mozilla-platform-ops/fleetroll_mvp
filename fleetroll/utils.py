@@ -237,6 +237,9 @@ def resolve_host_args(args: tuple[str, ...]) -> tuple[list[str], Path | None]:
     if not args:
         raise UserError("At least one HOST or file argument is required.")
 
+    # Allow comma-separated hosts in a single arg (e.g. ms001,ms003,ms004)
+    args = tuple(h for a in args for h in a.split(",") if h)
+
     file_args = [a for a in args if is_host_file(a)]
     host_args = [a for a in args if not is_host_file(a)]
 
@@ -272,7 +275,7 @@ def ensure_fqdn(hostname: str) -> None:
 
 FQDN_DEFAULT_SUFFIX = ".test.releng.mdc1.mozilla.com"
 
-_MS_SHORT_RE = re.compile(r"^ms(\d+)$", re.IGNORECASE)
+_MS_SHORT_RE = re.compile(r"^ms-?(\d+)$", re.IGNORECASE)
 
 
 def expand_hostname(hostname: str) -> str:
