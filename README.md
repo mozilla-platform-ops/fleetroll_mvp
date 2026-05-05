@@ -172,6 +172,75 @@ Fleetroll uses a hybrid storage architecture optimized for different data access
 uv run fleetroll host-monitor configs/host-lists/1804.list --once
 ```
 
+##### Filtering and hostname-only output
+
+```bash
+# list hostnames matching an override filter (e.g. audit a specific override rollout)
+uv run fleetroll host-monitor --filter 'ovr_bch~05032026-1804-resolverd-wedging' --once configs/host-lists/linux/all.list --hostname-only
+```
+
+##### Filter Query Syntax
+
+Filters are space-separated conditions (all must match). Each condition is `COLUMN OP VALUE`.
+
+**Operators**
+
+| Op | Meaning |
+|----|---------|
+| `~` | contains (case-insensitive substring) |
+| `=` | equals |
+| `!=` | not equals |
+| `>` `<` `>=` `<=` | numeric for time columns, lexicographic otherwise |
+
+**Columns**
+
+| Column | Aliases | Type | Description |
+|--------|---------|------|-------------|
+| `host` | | string | hostname |
+| `os` | | string | operating system |
+| `role` | | string | Puppet role |
+| `sha` | `ovr_bch`, `ovr_sha` | string | override branch / SHA |
+| `vlt_sha` | | string | vault SHA |
+| `uptime` | | duration | host uptime |
+| `pp_last` | | duration | time since last Puppet run |
+| `pp_sha` | | string | SHA Puppet last applied |
+| `pp_exp` | | string | expected SHA |
+| `pp_match` | | string | Puppet SHA match status |
+| `tc_act` | | duration | TaskCluster last activity |
+| `tc_j_sf` | `tc_t_dur` | duration | TC job time since finish |
+| `tc_quar` | | string | TC quarantine status |
+| `data` | | duration | max(audit age, TC age) |
+| `healthy` | `health` | string | health status (`y`/`n`) |
+| `note` | | string | notes |
+
+Time columns (`pp_last`, `tc_act`, `uptime`, `tc_j_sf`, `data`) accept duration values like `20h`, `90m`, `2d`.
+
+**Special syntax**
+
+- `col=` — match rows where column is missing/empty
+- `col!=` — match rows where column has a value
+- `os=M|L` — pipe-separated alternatives for `=` and `!=`
+- `sort:COL[:asc|desc][,COL...]` — sort by one or more columns (unknown values sort last)
+
+**Examples**
+
+```bash
+# hosts where Puppet hasn't run in over 20 hours
+healthy=n pp_last>20h
+
+# hosts with a specific override branch
+ovr_bch~05032026-1804-resolverd-wedging
+
+# Linux hosts sorted by most-stale Puppet run
+os=L sort:pp_last:desc
+
+# hosts with no note set, sorted by TC activity
+note= sort:tc_act:desc
+
+# hosts running either macOS or Linux
+os=M|L
+```
+
 ##### JSON output
 
 ```bash
