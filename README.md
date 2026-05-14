@@ -262,6 +262,21 @@ uv run fleetroll host-monitor configs/host-lists/1804.list
 # keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
 ```
 
+### Web Interface
+
+```bash
+# single process (uses pre-built frontend)
+uv run fleetroll web
+# open http://localhost:8765
+
+# dev mode (live frontend reloading)
+uv run fleetroll web --dev          # terminal 1
+pnpm --dir web dev                  # terminal 2
+# open http://localhost:5173
+```
+
+To rebuild the frontend after changes: `pnpm --dir web build`
+
 ### Override management
 
 ```bash
