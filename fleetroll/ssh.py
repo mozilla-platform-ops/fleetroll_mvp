@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 
 from .constants import (
     CONTENT_SENTINEL,
+    SSH_PTY_COLS,
+    SSH_PTY_ROWS,
     SSH_TIMEOUT_EXIT_CODE,
     WIN_COLLECT_SCRIPT_PATH,
     WIN_METADATA_JSON_PATH,
@@ -637,5 +639,12 @@ def remote_run_puppet_script() -> str:
       2 = success, changes applied
       1/4/6 = failure
     """
-    body = "sudo -n run-puppet.sh 2>&1; echo EXIT=$?"
+    # Set explicit terminal dimensions so run-puppet.sh sees a consistent
+    # width across hosts. ssh -t allocates a remote PTY whose initial size
+    # comes from the local terminal — under subprocess.PIPE that's undefined,
+    # which produced garbled wide output on some hosts.
+    body = (
+        f"stty cols {SSH_PTY_COLS} rows {SSH_PTY_ROWS} 2>/dev/null || true; "
+        "sudo -n run-puppet.sh 2>&1; echo EXIT=$?"
+    )
     return "sh -c " + shlex.quote(body)

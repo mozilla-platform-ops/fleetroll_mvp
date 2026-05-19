@@ -27,6 +27,11 @@ WIN_COLLECT_SCRIPT_PATH = r"C:\management_scripts\fleetroll_mvp_collect.ps1"
 CONTENT_SENTINEL = "__FLEETROLL_OVERRIDE_CONTENT__"
 BACKUP_TIME_FORMAT = "%Y%m%dT%H%M%SZ"
 SSH_TIMEOUT_EXIT_CODE = 124
+# Explicit dimensions for PTYs allocated by `ssh -t`. Without these the remote
+# pty gets whatever size the local (non-)terminal reports, which is undefined
+# under subprocess.PIPE and produces wildly different widths host-to-host.
+SSH_PTY_COLS = 200
+SSH_PTY_ROWS = 50
 AUDIT_MAX_RETRIES = 1
 AUDIT_RETRY_DELAY_S = 2
 CONTENT_PREFIX_LEN = 12
