@@ -114,7 +114,51 @@ pools:
 
 ### Windows Host SSH Access
 
-Use the win_audit key out of 1password and ssh adminstrator@. It will be powershell shell, so you should be able to invoke the script by the path.
+Windows hosts (`*.wintest2.releng.mdc1.mozilla.com`) reject your normal user SSH
+key. They require a shared audit key:
+
+- **Key name:** `id_rsa.win_audit_2021_02-17`
+- **Location:** Team 1Password / password safe (search "win_audit")
+- **Remote user:** `administrator` (handled automatically by
+  `windows_ssh_host()` in `fleetroll/ssh.py`)
+- **Remote shell:** PowerShell (Windows OpenSSH default; no wrapper needed)
+
+#### Setup
+
+1. Download the private key from the team password safe.
+2. Save it to `~/.ssh/id_rsa.win_audit_2021_02-17` and chmod it `0600`.
+3. Either point ssh at it for wintest hosts via `~/.ssh/config`:
+
+   ```
+   Host *.wintest2.releng.mdc1.mozilla.com
+       User administrator
+       IdentityFile ~/.ssh/id_rsa.win_audit_2021_02-17
+       IdentitiesOnly yes
+   ```
+
+   …or pass it per-invocation via fleetroll's `--ssh-option`:
+
+   ```bash
+   uv run fleetroll host-audit <wintest-host> \
+     --ssh-option "-i ~/.ssh/id_rsa.win_audit_2021_02-17" \
+     --ssh-option "-o IdentitiesOnly=yes"
+   ```
+
+   `IdentitiesOnly=yes` matters: without it, ssh may try every key in your
+   agent first and get rate-limited / locked out before reaching the audit
+   key.
+
+#### Verify the connection
+
+```bash
+ssh -o BatchMode=yes -o ConnectTimeout=10 \
+    -i ~/.ssh/id_rsa.win_audit_2021_02-17 -o IdentitiesOnly=yes \
+    administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com 'whoami'
+```
+
+Should print `wintest2\administrator` (or similar). If it hangs or returns
+`Permission denied (publickey)`, the key is wrong / missing / not chmod'd
+correctly.
 
 
 ### Windows HW Pupppet Flow
