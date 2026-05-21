@@ -53,6 +53,11 @@ class TestCmdHostRunPuppet:
         assert output["action"] == "host.run_puppet"
         assert output["observed"]["puppet_exit"] == 0
         assert output["observed"]["changes_applied"] is False
+        # Regression guard: run-puppet must request a remote pty so the
+        # remote sees a tty and emits color SGR codes. run_ssh allocates a
+        # local pty with explicit winsize to keep the remote pretty-printer
+        # from inheriting the user's local terminal width.
+        assert mock_run_ssh.call_args.kwargs.get("force_tty") is True
 
     def test_single_host_success_with_changes(
         self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
@@ -448,6 +453,30 @@ class TestStripAnsi:
     def test_color_with_cursor_move_mixed(self):
         s = "\x1b[0;32mROLE:\x1b[0m\x1b[40Gvalue"
         assert _strip_ansi(s) == "\x1b[0;32mROLE:\x1b[0mvalue"
+
+    def test_strips_osc_title_bel_terminated(self):
+        # ESC ] 0 ; title BEL — sets window title; can pollute scrollback.
+        assert _strip_ansi("a\x1b]0;hello\x07b") == "ab"
+
+    def test_strips_osc_string_terminator(self):
+        # ESC ] 0 ; title ESC \ — same as BEL form but ST-terminated.
+        assert _strip_ansi("a\x1b]0;hello\x1b\\b") == "ab"
+
+    def test_strips_alt_screen_buffer(self):
+        # ESC [ ? 1049 h / l — leaving these in wrecks the user's terminal.
+        s = "before\x1b[?1049hpayload\x1b[?1049lafter"
+        assert _strip_ansi(s) == "beforepayloadafter"
+
+    def test_strips_full_reset(self):
+        # ESC c — full terminal reset, the worst offender for user-visible damage.
+        assert _strip_ansi("a\x1bcb") == "ab"
+
+    def test_strips_save_restore_cursor(self):
+        assert _strip_ansi("a\x1b7middle\x1b8b") == "amiddleb"
+
+    def test_strips_charset_designator(self):
+        # ESC ( B — switch G0 to US ASCII; harmless but noise.
+        assert _strip_ansi("a\x1b(Bb") == "ab"
 
 
 class TestAnsiStrippedInOutput:

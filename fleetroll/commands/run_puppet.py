@@ -35,7 +35,20 @@ logger = logging.getLogger("fleetroll")
 _PUPPET_SUCCESS_EXITS = frozenset({0, 2})
 
 _EXIT_RE = re.compile(r"(?m)^EXIT=(\d+)")
-_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-ln-~]|\x1b[@-Z\\-_]")
+_ANSI_ESCAPE_RE = re.compile(
+    # CSI: ESC [ params? intermediates? final  — final byte set excludes
+    # 'm' (109) so SGR colors survive; everything else (cursor moves,
+    # alt screen buffer toggles, mode sets) is stripped.
+    r"\x1b\[[0-9;?]*[ -/]*[@-ln-~]"
+    # OSC: ESC ] payload (BEL | ESC \) — title sets, hyperlinks, etc.
+    r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"
+    # Charset designators / DCS-ish 2-byte sequences: ESC ( B, ESC ) 0, ESC # 8, ...
+    r"|\x1b[\(\)*+#%][\x20-\x7e]"
+    # Standalone Fe/Fp/Fs ESC singletons that affect terminal state:
+    # ESC c (full reset), ESC 7/8 (save/restore cursor), ESC =/> (keypad),
+    # ESC D/E/H/M/N/O (C1 controls), ESC 0-9 etc.
+    r"|\x1b[0-9:;<=>?@A-Z\\\]^_`a-z{|}~]"
+)
 
 
 def _strip_exit_marker(stdout: str) -> str:
@@ -71,6 +84,12 @@ def run_puppet_for_host(
 ) -> dict[str, Any]:
     """Run puppet on a single host and append audit log."""
     start = time.monotonic()
+    # force_tty=True asks run_ssh to allocate a local pty with an explicit
+    # winsize so the remote pty also has a known width. That gets us colored
+    # output from run-puppet.sh without inheriting the user's local terminal
+    # width (which made the pretty-printer emit absurd padding). Mode-change
+    # ANSI escapes that would corrupt the user's terminal are stripped below
+    # via _strip_ansi; SGR color codes are preserved.
     rc, out, err = run_ssh(
         host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout, force_tty=True
     )

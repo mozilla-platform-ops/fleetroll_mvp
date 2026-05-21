@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fleetroll.cli_types import HostAuditArgs
-from fleetroll.constants import CONTENT_SENTINEL, SSH_PTY_COLS, SSH_PTY_ROWS
+from fleetroll.constants import CONTENT_SENTINEL
 from fleetroll.ssh import (
     build_ssh_options,
     is_windows_host,
@@ -648,21 +648,12 @@ class TestBackupCreatedMarkerInUnsetScript:
 
 
 class TestRemoteRunPuppetScript:
-    """remote_run_puppet_script sets explicit terminal dimensions (mvp-3pze)."""
+    """remote_run_puppet_script emits the puppet command and exit marker."""
 
-    def test_sets_stty_dimensions_before_running_puppet(self):
+    def test_invokes_run_puppet_with_sudo(self):
         script = remote_run_puppet_script()
-        stty_pos = script.find(f"stty cols {SSH_PTY_COLS} rows {SSH_PTY_ROWS}")
-        puppet_pos = script.find("run-puppet.sh")
-        assert stty_pos > 0, "stty call missing from remote command"
-        assert puppet_pos > stty_pos, "stty must run before run-puppet.sh"
+        assert "sudo -n run-puppet.sh" in script
 
-    def test_stty_failure_does_not_abort_run(self):
-        # If the remote pty allocation oddly fails or stty isn't present,
-        # we still want the puppet run to proceed.
-        script = remote_run_puppet_script()
-        assert "2>/dev/null || true" in script
-
-    def test_still_emits_exit_marker(self):
+    def test_emits_exit_marker(self):
         script = remote_run_puppet_script()
         assert "echo EXIT=$?" in script

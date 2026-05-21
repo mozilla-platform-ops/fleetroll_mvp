@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import base64
+import contextlib
+import fcntl
 import logging
+import os
+import pty
 import shlex
+import struct
 import subprocess
+import termios
 import time
 from typing import TYPE_CHECKING
 
@@ -49,17 +55,36 @@ def run_ssh(
 
     force_tty allocates a PTY so remote programs see a terminal (e.g. for
     color output). Captured stdout will have \\r stripped.
+
+    When force_tty=True, this function allocates a *local* pty with an
+    explicit winsize (SSH_PTY_COLS x SSH_PTY_ROWS) and passes its slave fd
+    as ssh's stdin. ssh queries TIOCGWINSZ on stdin and forwards that size
+    to the remote pty, so the remote pretty-printer always sees a known
+    width regardless of how wide the user's local terminal happens to be.
     """
     tty_flags = ["-t"] if force_tty else []
     cmd = ["ssh", "-o", "BatchMode=yes"] + tty_flags + ssh_options + [host, remote_cmd]
     logger.debug("SSH command: ssh %s %s '<script>'", " ".join(ssh_options), host)
     logger.debug("SSH timeout: %ds", timeout_s)
 
+    pty_master: int | None = None
+    pty_slave: int | None = None
+    stdin_arg: int | None = None
+    if force_tty:
+        if input_bytes is not None:
+            raise FleetRollError("force_tty=True is not compatible with input_bytes")
+        pty_master, pty_slave = pty.openpty()
+        # struct winsize { rows, cols, xpixel, ypixel }
+        winsize = struct.pack("HHHH", SSH_PTY_ROWS, SSH_PTY_COLS, 0, 0)
+        fcntl.ioctl(pty_slave, termios.TIOCSWINSZ, winsize)
+        stdin_arg = pty_slave
+
     start_time = time.time()
     try:
         p = subprocess.run(
             cmd,
             input=input_bytes,
+            stdin=stdin_arg,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=timeout_s,
@@ -75,6 +100,11 @@ def run_ssh(
         )
     except FileNotFoundError:
         raise FleetRollError("ssh binary not found on PATH. Install OpenSSH client (ssh).")
+    finally:
+        if pty_master is not None:
+            for fd in (pty_master, pty_slave):
+                with contextlib.suppress(OSError):
+                    os.close(fd)  # type: ignore[arg-type]
 
     elapsed = time.time() - start_time
     logger.debug("SSH completed in %.2fs (rc=%d)", elapsed, p.returncode)
@@ -639,12 +669,5 @@ def remote_run_puppet_script() -> str:
       2 = success, changes applied
       1/4/6 = failure
     """
-    # Set explicit terminal dimensions so run-puppet.sh sees a consistent
-    # width across hosts. ssh -t allocates a remote PTY whose initial size
-    # comes from the local terminal — under subprocess.PIPE that's undefined,
-    # which produced garbled wide output on some hosts.
-    body = (
-        f"stty cols {SSH_PTY_COLS} rows {SSH_PTY_ROWS} 2>/dev/null || true; "
-        "sudo -n run-puppet.sh 2>&1; echo EXIT=$?"
-    )
+    body = "sudo -n run-puppet.sh 2>&1; echo EXIT=$?"
     return "sh -c " + shlex.quote(body)

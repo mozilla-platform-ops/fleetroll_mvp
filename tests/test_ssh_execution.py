@@ -60,6 +60,62 @@ class TestRunSsh:
         assert "user@host.example.com" in cmd
         assert "test command" in cmd
 
+    def test_force_tty_allocates_pty_with_explicit_winsize(self, mocker):
+        """force_tty=True opens a local pty and sets TIOCSWINSZ to known dims."""
+        import struct
+        import termios
+
+        from fleetroll.constants import SSH_PTY_COLS, SSH_PTY_ROWS
+
+        mock_run = mocker.patch("fleetroll.ssh.subprocess.run")
+        mock_run.return_value = MagicMock(returncode=0, stdout=b"", stderr=b"")
+        mock_openpty = mocker.patch("fleetroll.ssh.pty.openpty", return_value=(10, 11))
+        mock_ioctl = mocker.patch("fleetroll.ssh.fcntl.ioctl")
+        mocker.patch("fleetroll.ssh.os.close")
+
+        run_ssh(
+            "test.example.com",
+            "echo hi",
+            ssh_options=[],
+            timeout_s=60,
+            force_tty=True,
+        )
+
+        mock_openpty.assert_called_once()
+        # ioctl called on the slave fd with TIOCSWINSZ and the right winsize
+        args, _ = mock_ioctl.call_args
+        assert args[0] == 11, "ioctl must target the pty slave fd"
+        assert args[1] == termios.TIOCSWINSZ
+        assert args[2] == struct.pack("HHHH", SSH_PTY_ROWS, SSH_PTY_COLS, 0, 0)
+        # subprocess.run got the slave fd as stdin
+        assert mock_run.call_args.kwargs["stdin"] == 11
+        # And -t is on the ssh command line
+        assert "-t" in mock_run.call_args[0][0]
+
+    def test_no_force_tty_skips_pty_allocation(self, mocker):
+        """force_tty=False does not open a pty or set stdin."""
+        mock_run = mocker.patch("fleetroll.ssh.subprocess.run")
+        mock_run.return_value = MagicMock(returncode=0, stdout=b"", stderr=b"")
+        mock_openpty = mocker.patch("fleetroll.ssh.pty.openpty")
+
+        run_ssh("test.example.com", "echo hi", ssh_options=[], timeout_s=60)
+
+        mock_openpty.assert_not_called()
+        assert mock_run.call_args.kwargs.get("stdin") is None
+
+    def test_force_tty_rejects_input_bytes(self, mocker):
+        """force_tty=True with input_bytes raises (mutually exclusive)."""
+        mocker.patch("fleetroll.ssh.subprocess.run")
+        with pytest.raises(FleetRollError, match=r"force_tty.*input_bytes"):
+            run_ssh(
+                "test.example.com",
+                "cat",
+                ssh_options=[],
+                timeout_s=60,
+                force_tty=True,
+                input_bytes=b"data",
+            )
+
     def test_timeout_passed_to_subprocess(self, mocker):
         """Timeout is passed to subprocess.run."""
         mock_run = mocker.patch("fleetroll.ssh.subprocess.run")
