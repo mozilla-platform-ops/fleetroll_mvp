@@ -12,15 +12,17 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from ..constants import ROLE_TO_TASKCLUSTER
+from ..constants import DEFAULT_TC_PROVISIONER, OVERRIDES_DIR_NAME, ROLE_TO_TASKCLUSTER
 from ..exceptions import FleetRollError
 from ..taskcluster import fetch_worker_type_names, fetch_workers, load_tc_credentials
 from ..utils import (
+    default_audit_log_path,
     format_elapsed_time,
     is_host_file,
     parse_host_list,
     utc_now_iso,
 )
+from .monitor.cache import parse_override_file
 
 if TYPE_CHECKING:
     from ..cli_types import TcFetchArgs
@@ -96,6 +98,143 @@ def get_host_roles_bulk(hosts: set[str], db_conn: sqlite3.Connection) -> dict[st
             result[host] = role
 
     return result
+
+
+def get_host_override_shas_bulk(
+    hosts: set[str], db_conn: sqlite3.Connection
+) -> dict[str, str | None]:
+    """Get the most recent override file SHA256 for multiple hosts from SQLite.
+
+    Args:
+        hosts: Set of hostnames to look up
+        db_conn: SQLite database connection
+
+    Returns:
+        Dict mapping hostname to override SHA256 string (or None if the host
+        has no override deployed / no observation).
+    """
+    from ..db import get_latest_host_observations
+
+    latest, _ = get_latest_host_observations(db_conn, list(hosts))
+
+    result = dict.fromkeys(hosts)
+    for host, record in latest.items():
+        observed = record.get("observed", {})
+        if observed.get("override_present"):
+            result[host] = observed.get("override_sha256")
+
+    return result
+
+
+def resolve_override_pool(sha256: str | None, overrides_dir: Path) -> str | None:
+    """Resolve a host's WORKER_TYPE_OVERRIDE pool from its override file.
+
+    Override files are stored under ``overrides_dir`` keyed by the 12-char
+    prefix of the content SHA256 (matching the audit storage scheme).
+
+    Args:
+        sha256: Full override file SHA256 (or None)
+        overrides_dir: Directory containing stored override files
+
+    Returns:
+        The WORKER_TYPE_OVERRIDE pool name, or None if not set / file missing.
+    """
+    if not sha256:
+        return None
+
+    override_file = overrides_dir / sha256[:12]
+    if not override_file.exists():
+        return None
+
+    info = parse_override_file(override_file)
+    if not info:
+        return None
+
+    return info.get("worker_type_override")
+
+
+def build_host_override_pools(
+    host_to_override_sha: dict[str, str | None], overrides_dir: Path
+) -> dict[str, str | None]:
+    """Map hosts to their WORKER_TYPE_OVERRIDE pool (or None).
+
+    Args:
+        host_to_override_sha: Mapping of hostname to override SHA256 (or None)
+        overrides_dir: Directory containing stored override files
+
+    Returns:
+        Dict mapping hostname to override pool name (or None if no override pool)
+    """
+    # Cache parsed results per SHA so we read each override file only once.
+    pool_by_sha: dict[str, str | None] = {}
+    result: dict[str, str | None] = {}
+    for host, sha in host_to_override_sha.items():
+        if not sha:
+            result[host] = None
+            continue
+        if sha not in pool_by_sha:
+            pool_by_sha[sha] = resolve_override_pool(sha, overrides_dir)
+        result[host] = pool_by_sha[sha]
+    return result
+
+
+def resolve_host_worker_types(
+    hosts: list[str],
+    *,
+    host_to_role: dict[str, str | None],
+    role_to_worker_type: dict[str, tuple[str, str]],
+    host_to_override_pool: dict[str, str | None],
+    default_provisioner: str = DEFAULT_TC_PROVISIONER,
+) -> dict[str, tuple[str, str]]:
+    """Resolve each host's (provisioner, worker_type), applying overrides.
+
+    The role-based mapping is the baseline. When a host has a
+    WORKER_TYPE_OVERRIDE pool, it replaces the role-derived worker type while
+    keeping the provisioner from the role mapping (or ``default_provisioner``
+    if the role is unmapped). Hosts with neither a mapped role nor an override
+    pool are omitted.
+
+    Args:
+        hosts: List of hostnames to resolve
+        host_to_role: Mapping of hostname to role (or None)
+        role_to_worker_type: Mapping of role to (provisioner, worker_type)
+        host_to_override_pool: Mapping of hostname to override pool (or None)
+        default_provisioner: Provisioner to use when override pool exists but
+            role is unmapped
+
+    Returns:
+        Dict mapping hostname to (provisioner, worker_type)
+    """
+    result: dict[str, tuple[str, str]] = {}
+    for host in hosts:
+        role = host_to_role.get(host)
+        base = role_to_worker_type.get(role) if role else None
+        override_pool = host_to_override_pool.get(host)
+
+        if override_pool:
+            provisioner = base[0] if base else default_provisioner
+            result[host] = (provisioner, override_pool)
+        elif base:
+            result[host] = base
+
+    return result
+
+
+def invert_host_worker_types(
+    host_to_worker_type: dict[str, tuple[str, str]],
+) -> dict[tuple[str, str], list[str]]:
+    """Invert a host->worker_type map into worker_type->hosts.
+
+    Args:
+        host_to_worker_type: Mapping of hostname to (provisioner, worker_type)
+
+    Returns:
+        Dict mapping (provisioner, worker_type) to list of hosts
+    """
+    worker_type_to_hosts: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for host, worker_type_key in host_to_worker_type.items():
+        worker_type_to_hosts[worker_type_key].append(host)
+    return dict(worker_type_to_hosts)
 
 
 def strip_fqdn(hostname: str) -> str:
@@ -189,8 +328,7 @@ def build_windows_role_mapping(
 def match_workers_to_hosts(
     hosts: list[str],
     *,
-    host_to_role: dict[str, str | None],
-    role_to_worker_type: dict[str, tuple[str, str]],
+    host_to_worker_type: dict[str, tuple[str, str]],
     worker_type_to_workers: dict[tuple[str, str], dict[str, Any]],
     ts: str,
 ) -> list[dict[str, Any]]:
@@ -198,8 +336,8 @@ def match_workers_to_hosts(
 
     Args:
         hosts: List of hostnames to match
-        host_to_role: Mapping of hostname to role
-        role_to_worker_type: Mapping of role to (provisioner, worker_type)
+        host_to_worker_type: Mapping of hostname to (provisioner, worker_type),
+            already resolved with any WORKER_TYPE_OVERRIDE applied
         worker_type_to_workers: Mapping of (provisioner, worker_type) to worker data
         ts: Timestamp for the records
 
@@ -209,12 +347,11 @@ def match_workers_to_hosts(
     records = []
 
     for host in hosts:
-        role = host_to_role.get(host)
-        if not role or role not in role_to_worker_type:
+        worker_type_key = host_to_worker_type.get(host)
+        if not worker_type_key:
             continue
 
-        provisioner, worker_type = role_to_worker_type[role]
-        worker_type_key = (provisioner, worker_type)
+        provisioner, worker_type = worker_type_key
         workers_map = worker_type_to_workers.get(worker_type_key, {})
 
         # Match by short hostname
@@ -322,15 +459,40 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             role_lookup = {**ROLE_TO_TASKCLUSTER, **windows_mapping}
 
         # Map roles to workerTypes
-        role_to_worker_type, worker_type_to_hosts, unmapped_roles = map_roles_to_worker_types(
+        role_to_worker_type, _, unmapped_roles = map_roles_to_worker_types(
             role_to_hosts, role_lookup
         )
 
-        # Display warnings for unmapped roles
+        # Apply per-host WORKER_TYPE_OVERRIDE on top of the role-based mapping.
+        # A deployed override file can move a host to a different worker pool
+        # (e.g. gecko-t-linux-talos-2404 -> gecko-t-linux-talos-2404-bug2031822).
+        overrides_dir = default_audit_log_path().parent / OVERRIDES_DIR_NAME
+        host_to_override_sha = get_host_override_shas_bulk(set(hosts), db_conn)
+        host_to_override_pool = build_host_override_pools(host_to_override_sha, overrides_dir)
+        host_to_worker_type = resolve_host_worker_types(
+            hosts,
+            host_to_role=host_to_role,
+            role_to_worker_type=role_to_worker_type,
+            host_to_override_pool=host_to_override_pool,
+        )
+        worker_type_to_hosts = invert_host_worker_types(host_to_worker_type)
+
+        if verbose >= 1 and not quiet:
+            for host, pool in host_to_override_pool.items():
+                if pool:
+                    click.echo(f"  {host} -> worker pool override: {pool}")
+
+        # Display warnings for unmapped roles. Hosts whose role is unmapped but
+        # that have a worker pool override are still fetched, so don't warn for
+        # those.
         for role, host_count in unmapped_roles:
-            if not quiet:
+            override_hosts = sum(
+                1 for h in role_to_hosts.get(role, []) if host_to_override_pool.get(h)
+            )
+            skipped = host_count - override_hosts
+            if skipped > 0 and not quiet:
                 click.echo(
-                    f"WARNING: Role '{role}' not found in lookup table, skipping {host_count} host(s)",
+                    f"WARNING: Role '{role}' not found in lookup table, skipping {skipped} host(s)",
                     err=True,
                 )
 
@@ -397,8 +559,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         # Match workers to hosts
         worker_records = match_workers_to_hosts(
             hosts,
-            host_to_role=host_to_role,
-            role_to_worker_type=role_to_worker_type,
+            host_to_worker_type=host_to_worker_type,
             worker_type_to_workers=worker_type_to_workers,
             ts=ts,
         )
@@ -407,7 +568,6 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         for record in worker_records:
             host = record["host"]
             short_host = record["worker_id"]
-            role = host_to_role.get(host)
 
             if verbose >= 1 and not quiet:
                 provisioner = record["provisioner"]
@@ -438,8 +598,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             written_hosts = {r["host"] for r in worker_records}
             for host in hosts:
                 if host not in written_hosts:
-                    role = host_to_role.get(host)
-                    if not role or role not in role_to_worker_type:
+                    if host not in host_to_worker_type:
                         click.echo(f"  Skipping {host}: no role or role not in worker type mapping")
                     else:
                         click.echo(f"  Skipping {host}: no worker data found")

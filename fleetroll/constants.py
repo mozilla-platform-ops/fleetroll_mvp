@@ -57,6 +57,11 @@ DB_RETENTION_LIMIT = 10  # Keep latest N records per key in SQLite tables
 # Monitor display settings
 STALE_DATA_THRESHOLD_SECONDS = 3600  # 1 hour — show [stale] if no ok checks within this window
 
+# Default TaskCluster provisioner. Used when a host's worker pool comes from a
+# WORKER_TYPE_OVERRIDE (which names only a pool, not a provisioner) and the
+# host's role is not in ROLE_TO_TASKCLUSTER to supply one.
+DEFAULT_TC_PROVISIONER = "releng-hardware"
+
 # TaskCluster role to (provisioner, workerType) mapping
 ROLE_TO_TASKCLUSTER = {
     "gecko_t_linux_talos": ("releng-hardware", "gecko-t-linux-talos-1804"),

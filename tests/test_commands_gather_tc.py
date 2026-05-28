@@ -5,12 +5,16 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from fleetroll.commands.gather_tc import (
+    build_host_override_pools,
     build_role_to_hosts_mapping,
     build_windows_role_mapping,
     format_tc_fetch_quiet,
     get_host_roles_bulk,
+    invert_host_worker_types,
     map_roles_to_worker_types,
     match_workers_to_hosts,
+    resolve_host_worker_types,
+    resolve_override_pool,
     strip_fqdn,
 )
 from fleetroll.utils import format_elapsed_time
@@ -398,12 +402,9 @@ class TestMatchWorkersToHosts:
     def test_matches_workers_to_hosts(self):
         """Should match worker data to hosts by short hostname."""
         hosts = ["host1.example.com", "host2.example.com"]
-        host_to_role = {
-            "host1.example.com": "gecko_t_linux",
-            "host2.example.com": "gecko_t_linux",
-        }
-        role_to_worker_type = {
-            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+        host_to_worker_type = {
+            "host1.example.com": ("releng-hardware", "gecko-t-linux"),
+            "host2.example.com": ("releng-hardware", "gecko-t-linux"),
         }
         worker_type_to_workers = {
             ("releng-hardware", "gecko-t-linux"): {
@@ -431,8 +432,7 @@ class TestMatchWorkersToHosts:
 
         records = match_workers_to_hosts(
             hosts,
-            host_to_role=host_to_role,
-            role_to_worker_type=role_to_worker_type,
+            host_to_worker_type=host_to_worker_type,
             worker_type_to_workers=worker_type_to_workers,
             ts="2024-01-15T12:00:00Z",
         )
@@ -460,15 +460,12 @@ class TestMatchWorkersToHosts:
         assert record2["task_started"] is None
         assert record2["task_resolved"] is None
 
-    def test_skips_hosts_without_role(self):
-        """Should skip hosts with no role."""
+    def test_skips_hosts_without_worker_type(self):
+        """Should skip hosts with no resolved worker type."""
         hosts = ["host1.example.com", "host2.example.com"]
-        host_to_role = {
-            "host1.example.com": "gecko_t_linux",
-            "host2.example.com": None,
-        }
-        role_to_worker_type = {
-            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+        host_to_worker_type = {
+            "host1.example.com": ("releng-hardware", "gecko-t-linux"),
+            # host2 omitted (no role / no override)
         }
         worker_type_to_workers = {
             ("releng-hardware", "gecko-t-linux"): {
@@ -478,8 +475,7 @@ class TestMatchWorkersToHosts:
 
         records = match_workers_to_hosts(
             hosts,
-            host_to_role=host_to_role,
-            role_to_worker_type=role_to_worker_type,
+            host_to_worker_type=host_to_worker_type,
             worker_type_to_workers=worker_type_to_workers,
             ts="2024-01-15T12:00:00Z",
         )
@@ -487,34 +483,37 @@ class TestMatchWorkersToHosts:
         assert len(records) == 1
         assert records[0]["host"] == "host1.example.com"
 
-    def test_skips_hosts_with_unmapped_role(self):
-        """Should skip hosts whose role is not in worker type mapping."""
+    def test_uses_override_worker_type(self):
+        """Should match against the override pool when worker type is overridden."""
         hosts = ["host1.example.com"]
-        host_to_role = {
-            "host1.example.com": "unknown_role",
+        host_to_worker_type = {
+            "host1.example.com": ("releng-hardware", "gecko-t-linux-talos-2404-bug2031822"),
         }
-        role_to_worker_type = {}
-        worker_type_to_workers = {}
+        worker_type_to_workers = {
+            ("releng-hardware", "gecko-t-linux-talos-2404-bug2031822"): {
+                "host1": {"workerId": "host1", "state": "running"},
+            },
+            # The role-derived pool has no matching worker; only the override does.
+            ("releng-hardware", "gecko-t-linux-talos-2404"): {},
+        }
 
         records = match_workers_to_hosts(
             hosts,
-            host_to_role=host_to_role,
-            role_to_worker_type=role_to_worker_type,
+            host_to_worker_type=host_to_worker_type,
             worker_type_to_workers=worker_type_to_workers,
             ts="2024-01-15T12:00:00Z",
         )
 
-        assert len(records) == 0
+        assert len(records) == 1
+        assert records[0]["worker_type"] == "gecko-t-linux-talos-2404-bug2031822"
+        assert records[0]["state"] == "running"
 
     def test_skips_hosts_without_worker_data(self):
         """Should skip hosts with no matching worker data."""
         hosts = ["host1.example.com", "host2.example.com"]
-        host_to_role = {
-            "host1.example.com": "gecko_t_linux",
-            "host2.example.com": "gecko_t_linux",
-        }
-        role_to_worker_type = {
-            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+        host_to_worker_type = {
+            "host1.example.com": ("releng-hardware", "gecko-t-linux"),
+            "host2.example.com": ("releng-hardware", "gecko-t-linux"),
         }
         worker_type_to_workers = {
             ("releng-hardware", "gecko-t-linux"): {
@@ -525,8 +524,7 @@ class TestMatchWorkersToHosts:
 
         records = match_workers_to_hosts(
             hosts,
-            host_to_role=host_to_role,
-            role_to_worker_type=role_to_worker_type,
+            host_to_worker_type=host_to_worker_type,
             worker_type_to_workers=worker_type_to_workers,
             ts="2024-01-15T12:00:00Z",
         )
@@ -537,11 +535,8 @@ class TestMatchWorkersToHosts:
     def test_handles_missing_optional_fields(self):
         """Should handle missing optional fields in worker data."""
         hosts = ["host1.example.com"]
-        host_to_role = {
-            "host1.example.com": "gecko_t_linux",
-        }
-        role_to_worker_type = {
-            "gecko_t_linux": ("releng-hardware", "gecko-t-linux"),
+        host_to_worker_type = {
+            "host1.example.com": ("releng-hardware", "gecko-t-linux"),
         }
         worker_type_to_workers = {
             ("releng-hardware", "gecko-t-linux"): {
@@ -554,8 +549,7 @@ class TestMatchWorkersToHosts:
 
         records = match_workers_to_hosts(
             hosts,
-            host_to_role=host_to_role,
-            role_to_worker_type=role_to_worker_type,
+            host_to_worker_type=host_to_worker_type,
             worker_type_to_workers=worker_type_to_workers,
             ts="2024-01-15T12:00:00Z",
         )
@@ -572,8 +566,7 @@ class TestMatchWorkersToHosts:
         """Should return empty list for empty hosts input."""
         records = match_workers_to_hosts(
             [],
-            host_to_role={},
-            role_to_worker_type={},
+            host_to_worker_type={},
             worker_type_to_workers={},
             ts="2024-01-15T12:00:00Z",
         )
@@ -648,3 +641,108 @@ class TestBuildWindowsRoleMapping:
             "gecko-t-linux-talos",
         )
         assert unmapped == []
+
+
+OVERRIDE_WITH_POOL = """\
+PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="052226-linux-moonshots-perf-sudoers"
+WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-2404-bug2031822'
+"""
+
+OVERRIDE_COMMENTED_POOL = """\
+PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="RELOPS-snmp-gw-pool-id-linux"
+# WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-1804-staging'
+"""
+
+
+def _write_override(overrides_dir, sha, body):
+    """Write an override file keyed by 12-char SHA prefix."""
+    path = overrides_dir / sha[:12]
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+class TestResolveOverridePool:
+    """Tests for resolve_override_pool."""
+
+    def test_extracts_pool_from_override(self, tmp_path):
+        sha = "test_sha_with_pool_aaa"
+        _write_override(tmp_path, sha, OVERRIDE_WITH_POOL)
+        assert resolve_override_pool(sha, tmp_path) == "gecko-t-linux-talos-2404-bug2031822"
+
+    def test_ignores_commented_pool(self, tmp_path):
+        sha = "test_sha_commented_bbb"
+        _write_override(tmp_path, sha, OVERRIDE_COMMENTED_POOL)
+        assert resolve_override_pool(sha, tmp_path) is None
+
+    def test_none_sha(self, tmp_path):
+        assert resolve_override_pool(None, tmp_path) is None
+
+    def test_missing_file(self, tmp_path):
+        assert resolve_override_pool("test_sha_missing_zzz", tmp_path) is None
+
+
+class TestBuildHostOverridePools:
+    """Tests for build_host_override_pools."""
+
+    def test_maps_hosts_to_pools(self, tmp_path):
+        sha = "test_sha_buildpool_ccc"
+        _write_override(tmp_path, sha, OVERRIDE_WITH_POOL)
+        host_to_sha = {
+            "ms084": sha,
+            "ms100": None,  # no override deployed
+        }
+        result = build_host_override_pools(host_to_sha, tmp_path)
+        assert result["ms084"] == "gecko-t-linux-talos-2404-bug2031822"
+        assert result["ms100"] is None
+
+
+class TestResolveHostWorkerTypes:
+    """Tests for resolve_host_worker_types."""
+
+    def test_override_replaces_role_pool_keeping_provisioner(self):
+        result = resolve_host_worker_types(
+            ["ms084", "ms100"],
+            host_to_role={"ms084": "gecko_t_linux_2404_talos", "ms100": "gecko_t_linux_2404_talos"},
+            role_to_worker_type={
+                "gecko_t_linux_2404_talos": ("releng-hardware", "gecko-t-linux-talos-2404"),
+            },
+            host_to_override_pool={"ms084": "gecko-t-linux-talos-2404-bug2031822", "ms100": None},
+        )
+        # ms084 follows the override; ms100 keeps the role-based pool.
+        assert result["ms084"] == ("releng-hardware", "gecko-t-linux-talos-2404-bug2031822")
+        assert result["ms100"] == ("releng-hardware", "gecko-t-linux-talos-2404")
+
+    def test_unmapped_role_with_override_uses_default_provisioner(self):
+        result = resolve_host_worker_types(
+            ["h1"],
+            host_to_role={"h1": "mystery_role"},
+            role_to_worker_type={},
+            host_to_override_pool={"h1": "some-custom-pool"},
+            default_provisioner="releng-hardware",
+        )
+        assert result["h1"] == ("releng-hardware", "some-custom-pool")
+
+    def test_no_role_no_override_omitted(self):
+        result = resolve_host_worker_types(
+            ["h1"],
+            host_to_role={"h1": None},
+            role_to_worker_type={},
+            host_to_override_pool={"h1": None},
+        )
+        assert "h1" not in result
+
+
+class TestInvertHostWorkerTypes:
+    """Tests for invert_host_worker_types."""
+
+    def test_groups_hosts_by_worker_type(self):
+        host_to_worker_type = {
+            "a": ("releng-hardware", "pool-1"),
+            "b": ("releng-hardware", "pool-1"),
+            "c": ("releng-hardware", "pool-2"),
+        }
+        result = invert_host_worker_types(host_to_worker_type)
+        assert sorted(result[("releng-hardware", "pool-1")]) == ["a", "b"]
+        assert result[("releng-hardware", "pool-2")] == ["c"]

@@ -8,14 +8,16 @@ from typing import cast
 
 
 def parse_override_file(path: Path) -> dict[str, str | None] | None:
-    """Parse override file to extract user/branch/repo info.
+    """Parse override file to extract user/branch/repo/worker-pool info.
 
     Args:
         path: Path to override file
 
     Returns:
-        Dict with "user", "repo", and "branch" keys, or None on error.
-        User and repo will be None if repo is not a GitHub URL.
+        Dict with "user", "repo", "branch", and "worker_type_override" keys,
+        or None on error. User and repo will be None if repo is not a GitHub
+        URL. worker_type_override will be None if the file has no active
+        (uncommented) WORKER_TYPE_OVERRIDE line.
     """
     try:
         content = path.read_text(encoding="utf-8")
@@ -42,7 +44,17 @@ def parse_override_file(path: Path) -> dict[str, str | None] | None:
             user = user_match.group(1)
             repo_name = user_match.group(2)
 
-    return {"user": user, "repo": repo_name, "branch": branch}
+    # Extract WORKER_TYPE_OVERRIDE if present. The anchored ^ ensures commented
+    # lines (e.g. "# WORKER_TYPE_OVERRIDE=...") are ignored.
+    worker_match = re.search(r"^WORKER_TYPE_OVERRIDE=['\"](.+?)['\"]", content, re.MULTILINE)
+    worker_type_override = worker_match.group(1) if worker_match else None
+
+    return {
+        "user": user,
+        "repo": repo_name,
+        "branch": branch,
+        "worker_type_override": worker_type_override,
+    }
 
 
 def find_vault_symlink(sha256: str, vault_dir: Path) -> str | None:

@@ -26,6 +26,38 @@ PUPPET_MAIL='rcurran@mozilla.com'
         assert result["user"] == "rcurranmoz"
         assert result["repo"] == "ronin_puppet"
         assert result["branch"] == "disable_spotlight_2"
+        # No WORKER_TYPE_OVERRIDE line present
+        assert result["worker_type_override"] is None
+
+
+def test_parse_override_file_worker_type_override():
+    """Test extracting an active WORKER_TYPE_OVERRIDE pool."""
+    with TemporaryDirectory() as tmpdir:
+        override_file = Path(tmpdir) / "test_override"
+        override_file.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="052226-linux-moonshots-perf-sudoers"
+WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-2404-bug2031822'
+"""
+        )
+        result = parse_override_file(override_file)
+        assert result is not None
+        assert result["worker_type_override"] == "gecko-t-linux-talos-2404-bug2031822"
+
+
+def test_parse_override_file_commented_worker_type_override():
+    """Test that a commented-out WORKER_TYPE_OVERRIDE is ignored."""
+    with TemporaryDirectory() as tmpdir:
+        override_file = Path(tmpdir) / "test_override"
+        override_file.write_text(
+            """PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="RELOPS-snmp-gw-pool-id-linux"
+# WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-1804-staging'
+"""
+        )
+        result = parse_override_file(override_file)
+        assert result is not None
+        assert result["worker_type_override"] is None
 
 
 def test_parse_override_file_double_quotes():
