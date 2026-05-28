@@ -447,6 +447,73 @@ class TestHostMonitorHostnameOnly:
         lines = result.output.strip().splitlines()
         assert lines == ["host1.example.com", "host2.example.com"]
 
+    def test_once_filter_pp_match_uses_github_refs(self, runner: CliRunner, tmp_path: Path):
+        """--once filtering on pp_match must thread github_refs into row values.
+
+        Regression: the --once path previously omitted github_refs when building
+        rows, so pp_match was always "-" and a `pp_match=n` filter matched nothing.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from fleetroll.constants import DEFAULT_GITHUB_REPO
+
+        hosts_file = tmp_path / "hosts.txt"
+        hosts_file.write_text("match.example.com\nmismatch.example.com\n")
+
+        db_path = tmp_path / "test.db"
+        db_path.touch()
+
+        # Both hosts ran puppet successfully; "match" is on the expected SHA,
+        # "mismatch" is on a different SHA -> pp_match should be Y vs N.
+        def record(sha: str) -> dict:
+            return {
+                "ts": "2026-05-28T00:00:00+00:00",
+                "ok": True,
+                "observed": {
+                    "puppet_git_sha": sha,
+                    "puppet_success": True,
+                },
+            }
+
+        latest = {
+            "match.example.com": record("test_expected_sha_1234"),
+            "mismatch.example.com": record("test_other_sha_5678"),
+        }
+
+        mock_provider = MagicMock()
+        mock_provider.load_latest_records.return_value = (latest, latest)
+        mock_provider.load_tc_workers.return_value = {}
+        mock_provider.load_github_refs.return_value = {
+            f"{DEFAULT_GITHUB_REPO}:master": {"sha": "test_expected_sha_1234"},
+        }
+        mock_provider.load_windows_pools.return_value = {}
+
+        with (
+            patch("fleetroll.db.get_db_path", return_value=db_path),
+            patch("fleetroll.db.init_db"),
+            patch("fleetroll.db.get_connection", return_value=MagicMock()),
+            patch(
+                "fleetroll.commands.monitor.entry.LocalProvider",
+                return_value=mock_provider,
+            ),
+            patch("fleetroll.commands.monitor.entry.load_latest_notes", return_value={}),
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "host-monitor",
+                    str(hosts_file),
+                    "--hostname-only",
+                    "--once",
+                    "--filter",
+                    "pp_match=n",
+                ],
+            )
+
+        assert result.exit_code == 0
+        lines = result.output.strip().splitlines()
+        assert lines == ["mismatch.example.com"]
+
 
 class TestMaintainCommand:
     """Tests for the maintain command via CliRunner."""

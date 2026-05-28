@@ -107,6 +107,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                             last_ok=latest_ok.get(h),
                             tc_data=tc_data.get(strip_fqdn(h)),
                             sha_cache=sha_cache,
+                            github_refs=github_refs,
                             notes_data=notes_data,
                         )
                         values["_host"] = h
@@ -130,6 +131,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     cap_widths=False,
                     col_sep="  ",
                     sha_cache=sha_cache,
+                    github_refs=github_refs,
                     notes_data=notes_data,
                 )
                 print(header)
