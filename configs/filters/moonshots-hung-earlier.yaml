@@ -1,0 +1,2 @@
+query: host~t-linux64-ms tc_act>1h data>1h note= sort:host:asc
+description: find hung moonshot workers (earlier)

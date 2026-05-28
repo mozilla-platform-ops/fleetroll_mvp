@@ -1,0 +1,2 @@
+query: host~linux64-ms uptime>4h data<1h tc_act>1h
+description: linux workers online, but not active in tc
