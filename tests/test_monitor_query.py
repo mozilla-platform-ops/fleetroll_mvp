@@ -446,6 +446,25 @@ def test_validate_query_known_columns_no_error():
         assert validate_query(q, f"{col}~x") is None
 
 
+def test_apply_query_filter_wt_ovr():
+    rows = [
+        _row(host="host-a", wt_ovr="Y"),
+        _row(host="host-b", wt_ovr="N"),
+        _row(host="host-c", wt_ovr="-"),
+    ]
+    result = apply_query(rows, parse_query("wt_ovr=y"))
+    assert [r["host"] for r in result] == ["host-a"]
+
+
+def test_apply_query_filter_pool_substring():
+    rows = [
+        _row(host="host-a", pool="gecko-t-linux-talos-2404-bug2031822"),
+        _row(host="host-b", pool="gecko-t-linux-talos-2404"),
+    ]
+    result = apply_query(rows, parse_query("pool~bug2031822"))
+    assert [r["host"] for r in result] == ["host-a"]
+
+
 def test_apply_query_filter_then_sort():
     rows = [
         _row(host="host-a", pp_last="30m", tc_act="2h"),

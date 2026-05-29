@@ -37,6 +37,30 @@ class RowRenderer:
         self.safe_addstr = safe_addstr
         self.colors = colors
 
+    def _addstr_wt_marked(self, row: int, col: int, text: str, base_attr: int) -> int:
+        """Draw text with base_attr, rendering a literal "*wt" marker in red.
+
+        The "*wt" suffix flags an override that sets a Taskcluster worker pool.
+        Returns the new column position.
+        """
+        marker = "*wt"
+        idx = text.find(marker)
+        if idx < 0:
+            self.safe_addstr(row, col, text, base_attr)
+            return col + len(text)
+
+        before = text[:idx]
+        after = text[idx + len(marker) :]
+        if before:
+            self.safe_addstr(row, col, before, base_attr)
+            col += len(before)
+        self.safe_addstr(row, col, marker, self.colors.red_attr())
+        col += len(marker)
+        if after:
+            self.safe_addstr(row, col, after, base_attr)
+            col += len(after)
+        return col
+
     def compute_row_render_data(
         self,
         host: str,
@@ -263,19 +287,17 @@ class RowRenderer:
                         rest = cell[paren_idx:]
                         self.safe_addstr(row, col, branch_part, marker_attr)
                         col += len(branch_part)
-                        self.safe_addstr(row, col, rest, 0)
-                        col += len(rest)
+                        # rest holds the "(sha)" plus an optional " *wt" marker.
+                        col = self._addstr_wt_marked(row, col, rest, 0)
                     elif len(full_value) >= 8:
                         sha_prefix = cell[:8]
                         rest = cell[8:]
                         self.safe_addstr(row, col, sha_prefix, marker_attr)
                         col += len(sha_prefix)
                         if rest:
-                            self.safe_addstr(row, col, rest, 0)
-                            col += len(rest)
+                            col = self._addstr_wt_marked(row, col, rest, 0)
                     else:
-                        self.safe_addstr(row, col, cell, attr)
-                        col += len(cell)
+                        col = self._addstr_wt_marked(row, col, cell, attr)
                 else:
                     self.safe_addstr(row, col, cell, attr)
                     col += len(cell)

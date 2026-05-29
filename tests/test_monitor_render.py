@@ -111,6 +111,84 @@ def test_build_row_values_sha_format() -> None:
     assert humanize(vlt, words=2) in values["vlt_sha"]
 
 
+def _worker_type_override_record() -> dict:
+    return {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_2404_talos",
+            "override_present": True,
+            "override_sha256": "abc123",
+            "vault_sha256": None,
+            "override_meta": {"mtime_epoch": "1768983854"},
+            "uptime_s": 3600,
+        },
+    }
+
+
+def test_build_row_values_worker_type_override_marker_and_fields() -> None:
+    """An override setting WORKER_TYPE_OVERRIDE marks OVR_BCH and sets wt_ovr/pool."""
+    from fleetroll.commands.monitor.cache import ShaInfoCache
+
+    sha_cache = ShaInfoCache(overrides_dir="/nonexistent", vault_dir="/nonexistent")
+    sha_cache.override_cache["abc123"] = {
+        "user": "aerickson",
+        "repo": "ronin_puppet",
+        "branch": "san-juan",
+        "worker_type_override": "gecko-t-linux-talos-2404-bug2031822",
+    }
+    tc_data = {
+        "ts": "2026-01-21T21:52:57+00:00",
+        "worker_type": "gecko-t-linux-talos-2404-bug2031822",
+    }
+
+    values = build_row_values(
+        "host1", _worker_type_override_record(), tc_data=tc_data, sha_cache=sha_cache
+    )
+    assert values["wt_ovr"] == "Y"
+    assert values["sha"].endswith("*wt")
+    assert "san-juan" in values["sha"]
+    assert values["pool"] == "gecko-t-linux-talos-2404-bug2031822"
+
+
+def test_build_row_values_override_without_worker_type() -> None:
+    """An override that does not set a worker pool gets wt_ovr=N and no marker."""
+    from fleetroll.commands.monitor.cache import ShaInfoCache
+
+    sha_cache = ShaInfoCache(overrides_dir="/nonexistent", vault_dir="/nonexistent")
+    sha_cache.override_cache["abc123"] = {
+        "user": "aerickson",
+        "repo": "ronin_puppet",
+        "branch": "san-juan",
+        "worker_type_override": None,
+    }
+
+    values = build_row_values("host1", _worker_type_override_record(), sha_cache=sha_cache)
+    assert values["wt_ovr"] == "N"
+    assert "*wt" not in values["sha"]
+
+
+def test_build_row_values_no_override_wt_ovr_dash() -> None:
+    """No override -> wt_ovr is '-' and pool reflects TC worker_type when present."""
+    record = {
+        "ok": True,
+        "ts": "2026-01-21T21:52:57+00:00",
+        "observed": {
+            "role_present": True,
+            "role": "gecko_t_linux_2404_talos",
+            "override_present": False,
+            "override_sha256": None,
+            "vault_sha256": None,
+            "uptime_s": 3600,
+        },
+    }
+    tc_data = {"ts": "2026-01-21T21:52:57+00:00", "worker_type": "gecko-t-linux-talos-2404"}
+    values = build_row_values("host1", record, tc_data=tc_data)
+    assert values["wt_ovr"] == "-"
+    assert values["pool"] == "gecko-t-linux-talos-2404"
+
+
 def test_compute_columns_drops_sha_columns_when_narrow() -> None:
     record = {
         "ok": True,

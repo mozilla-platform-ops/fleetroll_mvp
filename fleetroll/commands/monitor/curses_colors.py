@@ -218,6 +218,12 @@ class CursesColors:
             return self.curses_mod.color_pair(6)  # RED
         return 0  # gray/default for "-"
 
+    def red_attr(self) -> int:
+        """Return the RED attribute, or 0 when color is disabled."""
+        if not self.color_enabled:
+            return 0
+        return self.curses_mod.color_pair(6)  # RED
+
     def tc_j_sf_attr(self, task_state: str | None) -> int:
         """Color TC_T_DUR based on task completion state.
 

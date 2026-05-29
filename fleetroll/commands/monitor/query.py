@@ -42,6 +42,8 @@ KNOWN_COLUMNS = frozenset(
         "data",
         "healthy",
         "health",  # alias for "healthy"
+        "pool",  # actual TC worker pool name
+        "wt_ovr",  # override sets a worker pool: Y / N / -
         "note",
     }
 )

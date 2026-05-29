@@ -321,6 +321,19 @@ def build_ok_row_values(
             if vlt_info != "-":
                 vlt_symlink = vlt_info
                 vault_sha = f"{vault_sha} ({vlt_info})"
+
+    # WT_OVR: does the override set a Taskcluster worker pool?
+    #   "Y" override sets WORKER_TYPE_OVERRIDE, "N" override present but doesn't,
+    #   "-" no override. When set, mark the OVR_BCH cell with a "*wt" suffix.
+    wt_ovr = "-"
+    if override_present:
+        wt_ovr = "N"
+        if sha_cache:
+            details = sha_cache.get_override_details(sha_full)
+            if details and details.get("worker_type_override"):
+                wt_ovr = "Y"
+                sha = f"{sha} *wt"
+
     meta = observed.get("override_meta") or {}
     mtime = meta.get("mtime_epoch") if override_present else "-"
 
@@ -458,6 +471,9 @@ def build_ok_row_values(
     tc_act = "-"
     tc_j_sf = "-"
     tc_ts_age = None
+    # POOL: actual TC worker pool the host is registered in (ground truth from
+    # gather-tc, which already applies WORKER_TYPE_OVERRIDE). Filter field.
+    pool = (tc_data.get("worker_type") or "-") if tc_data else "-"
 
     if tc_data:
         # TC data scan age (for combined DATA column)
@@ -557,6 +573,8 @@ def build_ok_row_values(
         "pp_exp": pp_exp,
         "pp_match": pp_match,
         "healthy": healthy,
+        "pool": pool,
+        "wt_ovr": wt_ovr,
         "data": data,
         "note": note,
     }
@@ -584,10 +602,12 @@ def build_row_values(
 
     if record is None:
         tc_str = "-"
+        pool = "-"
         if tc_data:
             tc_ts = tc_data.get("ts")
             if tc_ts and isinstance(tc_ts, str):
                 tc_str = humanize_duration(age_seconds(tc_ts), min_unit="m")
+            pool = tc_data.get("worker_type") or "-"
         return {
             "status": "UNK",
             "host": display_host,
@@ -612,6 +632,8 @@ def build_row_values(
             "pp_exp": "?",
             "pp_match": "?",
             "healthy": "?",
+            "pool": pool,
+            "wt_ovr": "-",
             "data": f"?/{tc_str}",
             "note": note,
         }
@@ -633,10 +655,12 @@ def build_row_values(
             values["err"] = err
             return values
         tc_str = "-"
+        pool = "-"
         if tc_data:
             tc_ts = tc_data.get("ts")
             if tc_ts and isinstance(tc_ts, str):
                 tc_str = humanize_duration(age_seconds(tc_ts), min_unit="m")
+            pool = tc_data.get("worker_type") or "-"
         audit_str = "-"
         return {
             "status": "FAIL",
@@ -662,6 +686,8 @@ def build_row_values(
             "pp_exp": "-",
             "pp_match": "-",
             "healthy": "-",
+            "pool": pool,
+            "wt_ovr": "-",
             "data": f"{audit_str}/{tc_str}",
             "note": note,
         }
