@@ -199,7 +199,8 @@ Filters are space-separated conditions (all must match). Each condition is `COLU
 | `host` | | string | hostname |
 | `os` | | string | operating system |
 | `role` | | string | Puppet role |
-| `sha` | `ovr_bch`, `ovr_sha` | string | override branch / SHA |
+| `sha` | `ovr_bch`, `ovr_sha` | string | override branch / SHA (TUI marks a `*wt` suffix when the override sets a worker pool) |
+| `wt_ovr` | | string | override sets a TC worker pool: `y`/`n`/`-` (filter-only †) |
 | `vlt_sha` | | string | vault SHA |
 | `uptime` | | duration | host uptime |
 | `pp_last` | | duration | time since last Puppet run |
@@ -209,11 +210,14 @@ Filters are space-separated conditions (all must match). Each condition is `COLU
 | `tc_act` | | duration | TaskCluster last activity |
 | `tc_j_sf` | `tc_t_dur` | duration | TC job time since finish |
 | `tc_quar` | | string | TC quarantine status |
+| `pool` | | string | actual TC worker pool name (filter-only †) |
 | `data` | | duration | max(audit age, TC age) |
 | `healthy` | `health` | string | health status (`y`/`n`) |
 | `note` | | string | notes |
 
 Time columns (`pp_last`, `tc_act`, `uptime`, `tc_j_sf`, `data`) accept duration values like `20h`, `90m`, `2d`.
+
+† `wt_ovr` and `pool` can be filtered/sorted on but are not shown as columns in the display yet (e.g. `wt_ovr=y`, `pool~bug2031822`).
 
 **Special syntax**
 
@@ -230,6 +234,10 @@ healthy=n pp_last>20h
 
 # hosts with a specific override branch
 ovr_bch~05032026-1804-resolverd-wedging
+
+# hosts whose worker pool is set by an override (or in a specific pool)
+wt_ovr=y
+pool~bug2031822
 
 # Linux hosts sorted by most-stale Puppet run
 os=L sort:pp_last:desc
