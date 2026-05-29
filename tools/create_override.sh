@@ -16,7 +16,11 @@ branch_name="$1"
 script_dir=$(dirname "$0")
 # resolve user_override_dir to absolute path
 user_override_dir="$(realpath "$script_dir/../configs/overrides")"
-override_file="$user_override_dir/${branch_name}.override"
+# Branch names can contain slashes (e.g. "aerickson/san-juan"). The slash is
+# only a problem for the filename, so sanitize it for the file path while
+# keeping the real branch name in PUPPET_BRANCH below.
+safe_name="${branch_name//\//_}"
+override_file="$user_override_dir/${safe_name}.override"
 # get $user from username
 user=$(whoami)
 
