@@ -48,11 +48,15 @@ class TmuxLauncher:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(list(args), check=True, text=True)
+    def _run(self, *args: str, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            list(args),
+            check=True,
+            capture_output=capture_output,
+            text=True,
+        )
 
-    def _send(self, window: int, text: str, *, enter: bool = True) -> None:
-        target = f"{self.session_name}:{window}"
+    def _send(self, target: str, text: str, *, enter: bool = True) -> None:
         keys = [text, "C-m"] if enter else [text]
         self._run("tmux", "send-keys", "-t", target, *keys)
 
@@ -80,8 +84,8 @@ class TmuxLauncher:
 
         print(f"* No tmux session '{self.session_name}' detected. Starting...")
 
-        # Create detached session (this gives us window 0 for free).
-        self._run(
+        # Capture stable tmux window IDs so user base-index settings do not matter.
+        result = self._run(
             "tmux",
             "new-session",
             "-d",
@@ -89,34 +93,44 @@ class TmuxLauncher:
             self.session_name,
             "-c",
             str(self.root),
+            "-P",
+            "-F",
+            "#{window_id}",
+            capture_output=True,
         )
+        window_targets = [result.stdout.strip()]
 
         # Create remaining windows.
         for _ in range(1, self.num_panes):
-            self._run(
+            result = self._run(
                 "tmux",
                 "new-window",
                 "-t",
                 self.session_name,
                 "-c",
                 str(self.root),
+                "-P",
+                "-F",
+                "#{window_id}",
+                capture_output=True,
             )
+            window_targets.append(result.stdout.strip())
 
         # Configure each window.
-        for i in range(self.num_panes):
+        for i, target in enumerate(window_targets):
             spec = self.panes[i] if i < len(self.panes) else PaneSpec(name=self.default_shell)
             self._run(
                 "tmux",
                 "rename-window",
                 "-t",
-                f"{self.session_name}:{i}",
+                target,
                 spec.name,
             )
             for cmd in spec.commands:
-                self._send(i, cmd)
+                self._send(target, cmd)
 
-        # Return focus to window 0 so the user lands there on attach.
-        self._run("tmux", "select-window", "-t", f"{self.session_name}:0")
+        # Return focus to the first window so the user lands there on attach.
+        self._run("tmux", "select-window", "-t", window_targets[0])
 
         print(
             f"\nTo attach to the tmux session, run:\n   tmux attach-session -t {self.session_name}"
