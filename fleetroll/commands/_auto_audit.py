@@ -28,7 +28,7 @@ def _run_auto_audit(hosts: list[str], args: HasAutoAuditArgs, audit_log: Path) -
     from .gather_host import cmd_host_audit_batch
 
     audit_args = HostAuditArgs(
-        host="",
+        host=getattr(args, "host", ""),
         ssh_option=args.ssh_option,
         connect_timeout=args.connect_timeout,
         timeout=args.timeout,
