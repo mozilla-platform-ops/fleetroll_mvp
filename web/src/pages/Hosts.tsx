@@ -194,9 +194,15 @@ function MonitorHeader({
   const dbName = summary.db_path.split("/").pop() ?? summary.db_path;
 
   return (
-    <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 font-mono text-caption">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <span className="font-semibold text-status-online tabular-nums">
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 font-mono text-caption">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+        <span className="flex items-center gap-2 font-semibold text-status-online tabular-nums">
+          <img
+            src="/favicon.svg"
+            alt=""
+            aria-hidden="true"
+            className="size-6 shrink-0"
+          />
           fleetroll v{summary.version}
         </span>
         {showOverridesBadge && (
