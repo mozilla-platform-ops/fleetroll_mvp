@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="fleetroll">
+  <rect width="64" height="64" rx="12" fill="#202526" />
+  <rect x="9" y="10" width="46" height="44" rx="6" fill="#141718" />
+  <path d="M14 18h20" stroke="#00e5ff" stroke-width="5" stroke-linecap="round" />
+  <path d="M14 28h27" stroke="#ff00b8" stroke-width="5" stroke-linecap="round" />
+  <path d="M14 38h16" stroke="#a8ff00" stroke-width="5" stroke-linecap="round" />
+  <path d="M14 48h32" stroke="#f5f500" stroke-width="5" stroke-linecap="round" />
+  <path d="M41 18l8 8-8 8" fill="none" stroke="#a8ff00" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="50" cy="46" r="4" fill="#ff00b8" />
+</svg>

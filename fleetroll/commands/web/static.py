@@ -5,11 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 
 def mount_static(app: FastAPI, dist_dir: Path) -> None:
+    favicon_path = dist_dir / "favicon.svg"
+    if not favicon_path.exists():
+        favicon_path = dist_dir.parent / "public" / "favicon.svg"
+
+    if favicon_path.exists():
+
+        @app.get("/favicon.svg", include_in_schema=False)
+        async def _favicon() -> FileResponse:
+            return FileResponse(favicon_path, media_type="image/svg+xml")
+
     if dist_dir.exists():
         app.mount("/", StaticFiles(directory=str(dist_dir), html=True), name="static")
     else:
