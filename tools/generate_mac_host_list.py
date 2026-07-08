@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import datetime
 import shutil
 import subprocess
 import sys
@@ -27,6 +26,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
+from host_list_headers import remote_source_revision, write_if_changed
 from natural_sort import natural_key
 
 REPO = "mozilla-platform-ops/ronin_puppet"
@@ -48,6 +48,30 @@ def fetch_inventory_listing() -> list[str]:
     return [n for n in names if n.endswith(".yaml") and n not in IGNORE_FILES]
 
 
+def fetch_default_branch() -> str | None:
+    """Fetch the upstream repo default branch via GitHub CLI."""
+    gh = shutil.which("gh") or "gh"
+    result = subprocess.run(
+        [gh, "api", f"repos/{REPO}", "--jq", ".default_branch"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip() or None
+
+
+def fetch_branch_commit(branch: str) -> str | None:
+    """Fetch the upstream branch head commit via GitHub CLI."""
+    gh = shutil.which("gh") or "gh"
+    result = subprocess.run(
+        [gh, "api", f"repos/{REPO}/commits/{branch}", "--jq", ".sha"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip() or None
+
+
 def fetch_file_content(path: str) -> str:
     """Fetch and decode a file from GitHub via gh api."""
     gh = shutil.which("gh") or "gh"
@@ -67,19 +91,16 @@ def parse_inventory(raw_yaml: str) -> list[dict]:
     return data.get("groups", [])
 
 
-def generate_group_file(
-    group: dict, *, inventory_name: str, generated_at: datetime.datetime
-) -> str | None:
+def generate_group_file(group: dict, *, inventory_name: str, source_revision: str) -> str | None:
     """Build file content for one inventory group."""
     targets = group.get("targets") or []
     facts = group.get("facts") or {}
     puppet_role = facts.get("puppet_role", "")
 
-    timestamp = generated_at.strftime("%Y-%m-%d %H:%M UTC")
     lines: list[str] = [
         "# #############################################################",
         "# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.",
-        f"# Generated: {timestamp}",
+        f"# Source revision: {source_revision}",
         f"# Source:    mozilla-platform-ops/ronin_puppet inventory.d/{inventory_name}",
         "# Regenerate: uv run tools/generate_mac_host_list.py",
         "# #############################################################",
@@ -131,6 +152,8 @@ def main() -> None:
 
     print(f"Fetching inventory listing from {REPO}/{INVENTORY_DIR}...", file=sys.stderr)
     try:
+        branch = fetch_default_branch()
+        commit = fetch_branch_commit(branch) if branch else None
         filenames = fetch_inventory_listing()
     except subprocess.CalledProcessError as e:
         print(f"Error: gh api failed: {e.stderr}", file=sys.stderr)
@@ -138,7 +161,7 @@ def main() -> None:
 
     print(f"Found {len(filenames)} inventory files: {', '.join(filenames)}", file=sys.stderr)
 
-    generated_at = datetime.datetime.now(datetime.UTC)
+    source_revision = remote_source_revision(repo=REPO, branch=branch, commit=commit)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     total_hosts = 0
@@ -156,7 +179,11 @@ def main() -> None:
         groups = parse_inventory(raw_yaml)
         for group in groups:
             group_name = group.get("name", "unknown")
-            content = generate_group_file(group, inventory_name=filename, generated_at=generated_at)
+            content = generate_group_file(
+                group,
+                inventory_name=filename,
+                source_revision=source_revision,
+            )
             out_path = OUTPUT_DIR / f"{group_name}.list"
 
             if content is None:
@@ -167,12 +194,13 @@ def main() -> None:
                     print(f"  Skipped {group_name} (empty after filtering)", file=sys.stderr)
                 continue
 
-            out_path.write_text(content, encoding="utf-8")
-
             host_count = len(group.get("targets") or [])
             total_hosts += host_count
             total_groups += 1
-            print(f"  Wrote {host_count} hosts to {out_path}", file=sys.stderr)
+            if write_if_changed(out_path, content):
+                print(f"  Wrote {host_count} hosts to {out_path}", file=sys.stderr)
+            else:
+                print(f"  Unchanged {host_count} hosts in {out_path}", file=sys.stderr)
 
     print(
         f"Done: {total_groups} group files, {total_hosts} total hosts in {OUTPUT_DIR}/",

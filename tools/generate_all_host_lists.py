@@ -11,13 +11,13 @@ Usage:
 
 from __future__ import annotations
 
-import datetime
 import re
 import sys
 from pathlib import Path
 
 # Allow importing sibling tools modules
 sys.path.insert(0, str(Path(__file__).parent))
+from host_list_headers import local_source_revision, write_if_changed
 from natural_sort import natural_key
 
 BASE_DIR = Path("configs/host-lists")
@@ -97,11 +97,11 @@ def generate_os_all_list(os_dir: Path, *, only: str | None = None) -> Path:
     # each came from).
     host_source.sort(key=lambda hs: natural_key(hs[0]))
 
-    timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
+    source_revision = local_source_revision()
     lines: list[str] = [
         "# #############################################################",
         "# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.",
-        f"# Generated: {timestamp}",
+        f"# Source revision: {source_revision}",
         f"# Source:    configs/host-lists/{os_dir.name}/{only or '*.list (excluding all.list)'}",
         "# Regenerate: uv run tools/generate_all_host_lists.py",
         "# #############################################################",
@@ -127,21 +127,22 @@ def generate_os_all_list(os_dir: Path, *, only: str | None = None) -> Path:
     lines.append("")
 
     content = "\n".join(lines)
-    output.write_text(content, encoding="utf-8")
-
-    print(f"Wrote {len(host_source)} hosts to {output}", file=sys.stderr)
+    if write_if_changed(output, content):
+        print(f"Wrote {len(host_source)} hosts to {output}", file=sys.stderr)
+    else:
+        print(f"Unchanged {len(host_source)} hosts in {output}", file=sys.stderr)
     return output
 
 
 def generate_base_all_list(os_all_lists: list[tuple[str, Path]]) -> None:
     """Combine per-OS all.list files into the base all.list."""
     seen: set[str] = set()
-    timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
+    source_revision = local_source_revision()
 
     lines: list[str] = [
         "# #############################################################",
         "# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.",
-        f"# Generated: {timestamp}",
+        f"# Source revision: {source_revision}",
         "# Source:    configs/host-lists/{linux,mac,windows}/all.list",
         "# Regenerate: uv run tools/generate_all_host_lists.py",
         "# #############################################################",
@@ -169,10 +170,12 @@ def generate_base_all_list(os_all_lists: list[tuple[str, Path]]) -> None:
         lines.append("")
 
     content = "\n".join(lines)
-    OUTPUT_PATH.write_text(content, encoding="utf-8")
 
     host_lines = [ln for ln in content.splitlines() if ln and not ln.startswith("#")]
-    print(f"Wrote {len(host_lines)} hosts to {OUTPUT_PATH}", file=sys.stderr)
+    if write_if_changed(OUTPUT_PATH, content):
+        print(f"Wrote {len(host_lines)} hosts to {OUTPUT_PATH}", file=sys.stderr)
+    else:
+        print(f"Unchanged {len(host_lines)} hosts in {OUTPUT_PATH}", file=sys.stderr)
 
 
 def main() -> None:
