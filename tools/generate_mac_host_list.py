@@ -3,10 +3,10 @@
 # requires-python = ">=3.11"
 # dependencies = ["pyyaml"]
 # ///
-"""Generate configs/host-lists/mac/<group>.list from mozilla-platform-ops/ronin_puppet inventory.d.
+"""Generate configs/host-lists/mac/<group>.list from local ronin_puppet inventory.d.
 
-Fetches inventory YAML files via `gh api` (requires GitHub CLI, already authenticated),
-parses all Mac groups, and writes one host list file per group.
+Reads inventory YAML files from a local ronin_puppet checkout, parses all Mac groups,
+and writes one host list file per group.
 
 Usage:
     uv run tools/generate_mac_host_list.py
@@ -16,9 +16,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import base64
-import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -26,63 +23,25 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
-from host_list_headers import remote_source_revision, write_if_changed
+from host_list_headers import local_source_revision, write_if_changed
 from natural_sort import natural_key
 
 REPO = "mozilla-platform-ops/ronin_puppet"
 INVENTORY_DIR = "inventory.d"
+SOURCE_REPO_PATH = Path.home() / "git" / "ronin_puppet"
 OUTPUT_DIR = Path("configs/host-lists/mac")
 IGNORE_FILES = {"services.yaml"}
 
 
-def fetch_inventory_listing() -> list[str]:
-    """Fetch list of inventory YAML filenames from GitHub."""
-    gh = shutil.which("gh") or "gh"
-    result = subprocess.run(
-        [gh, "api", f"repos/{REPO}/contents/{INVENTORY_DIR}", "--jq", ".[].name"],
-        capture_output=True,
-        text=True,
-        check=True,
+def inventory_files() -> list[Path]:
+    """Return inventory YAML files from the local source checkout."""
+    source_dir = SOURCE_REPO_PATH / INVENTORY_DIR
+    if not source_dir.is_dir():
+        raise FileNotFoundError(f"missing inventory directory: {source_dir}")
+    return sorted(
+        (path for path in source_dir.glob("*.yaml") if path.name not in IGNORE_FILES),
+        key=lambda path: path.name,
     )
-    names = [n.strip() for n in result.stdout.splitlines() if n.strip()]
-    return [n for n in names if n.endswith(".yaml") and n not in IGNORE_FILES]
-
-
-def fetch_default_branch() -> str | None:
-    """Fetch the upstream repo default branch via GitHub CLI."""
-    gh = shutil.which("gh") or "gh"
-    result = subprocess.run(
-        [gh, "api", f"repos/{REPO}", "--jq", ".default_branch"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip() or None
-
-
-def fetch_branch_commit(branch: str) -> str | None:
-    """Fetch the upstream branch head commit via GitHub CLI."""
-    gh = shutil.which("gh") or "gh"
-    result = subprocess.run(
-        [gh, "api", f"repos/{REPO}/commits/{branch}", "--jq", ".sha"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip() or None
-
-
-def fetch_file_content(path: str) -> str:
-    """Fetch and decode a file from GitHub via gh api."""
-    gh = shutil.which("gh") or "gh"
-    result = subprocess.run(
-        [gh, "api", f"repos/{REPO}/contents/{path}", "--jq", ".content"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    encoded = result.stdout.strip()
-    return base64.b64decode(encoded.replace("\n", "")).decode("utf-8")
 
 
 def parse_inventory(raw_yaml: str) -> list[dict]:
@@ -150,38 +109,35 @@ def main() -> None:
                 )
                 return
 
-    print(f"Fetching inventory listing from {REPO}/{INVENTORY_DIR}...", file=sys.stderr)
+    print(f"Reading inventory files from {SOURCE_REPO_PATH / INVENTORY_DIR}...", file=sys.stderr)
     try:
-        branch = fetch_default_branch()
-        commit = fetch_branch_commit(branch) if branch else None
-        filenames = fetch_inventory_listing()
-    except subprocess.CalledProcessError as e:
-        print(f"Error: gh api failed: {e.stderr}", file=sys.stderr)
+        source_files = inventory_files()
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Found {len(filenames)} inventory files: {', '.join(filenames)}", file=sys.stderr)
+    print(
+        f"Found {len(source_files)} inventory files: "
+        f"{', '.join(path.name for path in source_files)}",
+        file=sys.stderr,
+    )
 
-    source_revision = remote_source_revision(repo=REPO, branch=branch, commit=commit)
+    source_revision = local_source_revision(cwd=SOURCE_REPO_PATH, repo=REPO)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     total_hosts = 0
     total_groups = 0
 
-    for filename in filenames:
-        path = f"{INVENTORY_DIR}/{filename}"
-        print(f"Fetching {path}...", file=sys.stderr)
-        try:
-            raw_yaml = fetch_file_content(path)
-        except subprocess.CalledProcessError as e:
-            print(f"Error: gh api failed for {path}: {e.stderr}", file=sys.stderr)
-            sys.exit(1)
+    for source_file in source_files:
+        print(f"Reading {source_file}...", file=sys.stderr)
+        raw_yaml = source_file.read_text(encoding="utf-8")
 
         groups = parse_inventory(raw_yaml)
         for group in groups:
             group_name = group.get("name", "unknown")
             content = generate_group_file(
                 group,
-                inventory_name=filename,
+                inventory_name=source_file.name,
                 source_revision=source_revision,
             )
             out_path = OUTPUT_DIR / f"{group_name}.list"
@@ -197,7 +153,7 @@ def main() -> None:
             host_count = len(group.get("targets") or [])
             total_hosts += host_count
             total_groups += 1
-            if write_if_changed(out_path, content):
+            if write_if_changed(out_path, content, force=args.force):
                 print(f"  Wrote {host_count} hosts to {out_path}", file=sys.stderr)
             else:
                 print(f"  Unchanged {host_count} hosts in {out_path}", file=sys.stderr)

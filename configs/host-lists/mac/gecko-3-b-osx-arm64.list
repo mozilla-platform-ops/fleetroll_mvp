@@ -1,6 +1,6 @@
 # #############################################################
 # THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.
-# Generated: 2026-03-16 21:02 UTC
+# Source revision: repo=mozilla-platform-ops/ronin_puppet branch=master commit=c9e6f7f8 clean
 # Source:    mozilla-platform-ops/ronin_puppet inventory.d/macmini-m4.yaml
 # Regenerate: uv run tools/generate_mac_host_list.py
 # #############################################################
@@ -11,3 +11,6 @@
 macmini-m4-120.test.releng.mdc1.mozilla.com
 macmini-m4-123.test.releng.mdc1.mozilla.com
 macmini-m4-124.test.releng.mdc1.mozilla.com
+macmini-m4-193.test.releng.mdc1.mozilla.com
+macmini-m4-195.test.releng.mdc1.mozilla.com
+macmini-m4-196.test.releng.mdc1.mozilla.com

@@ -1,6 +1,6 @@
 # #############################################################
 # THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.
-# Generated: 2026-03-16 21:02 UTC
+# Source revision: repo=mozilla-platform-ops/ronin_puppet branch=master commit=c9e6f7f8 clean
 # Source:    mozilla-platform-ops/ronin_puppet inventory.d/macmini-r8.yaml
 # Regenerate: uv run tools/generate_mac_host_list.py
 # #############################################################
@@ -18,7 +18,6 @@ macmini-r8-77.test.releng.mdc1.mozilla.com
 macmini-r8-78.test.releng.mdc1.mozilla.com
 macmini-r8-80.test.releng.mdc1.mozilla.com
 macmini-r8-81.test.releng.mdc1.mozilla.com
-macmini-r8-82.test.releng.mdc1.mozilla.com
 macmini-r8-83.test.releng.mdc1.mozilla.com
 macmini-r8-84.test.releng.mdc1.mozilla.com
 macmini-r8-86.test.releng.mdc1.mozilla.com
@@ -30,13 +29,13 @@ macmini-r8-95.test.releng.mdc1.mozilla.com
 macmini-r8-96.test.releng.mdc1.mozilla.com
 macmini-r8-97.test.releng.mdc1.mozilla.com
 macmini-r8-98.test.releng.mdc1.mozilla.com
-macmini-r8-101.test.releng.mdc1.mozilla.com
 macmini-r8-106.test.releng.mdc1.mozilla.com
 macmini-r8-107.test.releng.mdc1.mozilla.com
 macmini-r8-108.test.releng.mdc1.mozilla.com
 macmini-r8-111.test.releng.mdc1.mozilla.com
 macmini-r8-112.test.releng.mdc1.mozilla.com
 macmini-r8-113.test.releng.mdc1.mozilla.com
+macmini-r8-114.test.releng.mdc1.mozilla.com
 macmini-r8-115.test.releng.mdc1.mozilla.com
 macmini-r8-118.test.releng.mdc1.mozilla.com
 macmini-r8-128.test.releng.mdc1.mozilla.com
@@ -62,7 +61,11 @@ macmini-r8-160.test.releng.mdc1.mozilla.com
 macmini-r8-162.test.releng.mdc1.mozilla.com
 macmini-r8-177.test.releng.mdc1.mozilla.com
 macmini-r8-178.test.releng.mdc1.mozilla.com
+macmini-r8-179.test.releng.mdc1.mozilla.com
 macmini-r8-181.test.releng.mdc1.mozilla.com
+macmini-r8-182.test.releng.mdc1.mozilla.com
+macmini-r8-183.test.releng.mdc1.mozilla.com
+macmini-r8-184.test.releng.mdc1.mozilla.com
 macmini-r8-191.test.releng.mdc1.mozilla.com
 macmini-r8-192.test.releng.mdc1.mozilla.com
 macmini-r8-203.test.releng.mdc1.mozilla.com
@@ -71,7 +74,6 @@ macmini-r8-205.test.releng.mdc1.mozilla.com
 macmini-r8-208.test.releng.mdc1.mozilla.com
 macmini-r8-209.test.releng.mdc1.mozilla.com
 macmini-r8-211.test.releng.mdc1.mozilla.com
-macmini-r8-212.test.releng.mdc1.mozilla.com
 macmini-r8-213.test.releng.mdc1.mozilla.com
 macmini-r8-214.test.releng.mdc1.mozilla.com
 macmini-r8-216.test.releng.mdc1.mozilla.com
@@ -81,3 +83,6 @@ macmini-r8-220.test.releng.mdc1.mozilla.com
 macmini-r8-222.test.releng.mdc1.mozilla.com
 macmini-r8-225.test.releng.mdc1.mozilla.com
 macmini-r8-226.test.releng.mdc1.mozilla.com
+macmini-r8-367.test.releng.mdc1.mozilla.com
+macmini-r8-371.test.releng.mdc1.mozilla.com
+macmini-r8-372.test.releng.mdc1.mozilla.com

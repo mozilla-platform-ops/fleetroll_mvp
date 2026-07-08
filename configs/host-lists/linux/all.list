@@ -1,6 +1,6 @@
 # #############################################################
 # THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.
-# Generated: 2026-03-17 23:24 UTC
+# Source revision: not available in source file
 # Source:    configs/host-lists/linux/all_moonshots.list
 # Regenerate: uv run tools/generate_all_host_lists.py
 # #############################################################

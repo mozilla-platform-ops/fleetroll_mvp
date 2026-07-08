@@ -11,13 +11,14 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
 
 # Allow importing sibling tools modules
 sys.path.insert(0, str(Path(__file__).parent))
-from host_list_headers import local_source_revision, write_if_changed
+from host_list_headers import source_revision_from_file, write_if_changed
 from natural_sort import natural_key
 
 BASE_DIR = Path("configs/host-lists")
@@ -27,6 +28,7 @@ OUTPUT_PATH = BASE_DIR / "all.list"
 # Linux host lists are manually maintained per-group; only this file is used
 # as the authoritative source for linux/all.list generation.
 LINUX_SOURCE_FILE = "all_moonshots.list"
+MISSING_SOURCE_REVISION = "not available in source file"
 
 
 def read_hosts(list_file: Path) -> list[str]:
@@ -49,7 +51,22 @@ def read_hosts(list_file: Path) -> list[str]:
     return hosts
 
 
-def generate_os_all_list(os_dir: Path, *, only: str | None = None) -> Path:
+def format_source_revision_lines(source_revisions: dict[str, str | None]) -> list[str]:
+    """Format source revision metadata for generated file headers."""
+    revisions = {
+        name: revision or MISSING_SOURCE_REVISION
+        for name, revision in sorted(source_revisions.items())
+    }
+    unique_revisions = set(revisions.values())
+    if len(unique_revisions) == 1:
+        return [f"# Source revision: {next(iter(unique_revisions))}"]
+
+    lines = ["# Source revision: multiple"]
+    lines.extend(f"# Source revision: {name}: {revision}" for name, revision in revisions.items())
+    return lines
+
+
+def generate_os_all_list(os_dir: Path, *, only: str | None = None, force: bool = False) -> Path:
     """Combine .list files in os_dir (excluding all.list) into os_dir/all.list.
 
     Args:
@@ -97,11 +114,13 @@ def generate_os_all_list(os_dir: Path, *, only: str | None = None) -> Path:
     # each came from).
     host_source.sort(key=lambda hs: natural_key(hs[0]))
 
-    source_revision = local_source_revision()
+    source_revisions = {
+        list_file.name: source_revision_from_file(list_file) for list_file in list_files
+    }
     lines: list[str] = [
         "# #############################################################",
         "# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.",
-        f"# Source revision: {source_revision}",
+        *format_source_revision_lines(source_revisions),
         f"# Source:    configs/host-lists/{os_dir.name}/{only or '*.list (excluding all.list)'}",
         "# Regenerate: uv run tools/generate_all_host_lists.py",
         "# #############################################################",
@@ -127,22 +146,26 @@ def generate_os_all_list(os_dir: Path, *, only: str | None = None) -> Path:
     lines.append("")
 
     content = "\n".join(lines)
-    if write_if_changed(output, content):
+    if write_if_changed(output, content, force=force):
         print(f"Wrote {len(host_source)} hosts to {output}", file=sys.stderr)
     else:
         print(f"Unchanged {len(host_source)} hosts in {output}", file=sys.stderr)
     return output
 
 
-def generate_base_all_list(os_all_lists: list[tuple[str, Path]]) -> None:
+def generate_base_all_list(os_all_lists: list[tuple[str, Path]], *, force: bool = False) -> None:
     """Combine per-OS all.list files into the base all.list."""
     seen: set[str] = set()
-    source_revision = local_source_revision()
+    source_revisions = {
+        os_name: source_revision_from_file(list_path)
+        for os_name, list_path in os_all_lists
+        if list_path.exists()
+    }
 
     lines: list[str] = [
         "# #############################################################",
         "# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.",
-        f"# Source revision: {source_revision}",
+        *format_source_revision_lines(source_revisions),
         "# Source:    configs/host-lists/{linux,mac,windows}/all.list",
         "# Regenerate: uv run tools/generate_all_host_lists.py",
         "# #############################################################",
@@ -172,13 +195,21 @@ def generate_base_all_list(os_all_lists: list[tuple[str, Path]]) -> None:
     content = "\n".join(lines)
 
     host_lines = [ln for ln in content.splitlines() if ln and not ln.startswith("#")]
-    if write_if_changed(OUTPUT_PATH, content):
+    if write_if_changed(OUTPUT_PATH, content, force=force):
         print(f"Wrote {len(host_lines)} hosts to {OUTPUT_PATH}", file=sys.stderr)
     else:
         print(f"Unchanged {len(host_lines)} hosts in {OUTPUT_PATH}", file=sys.stderr)
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite generated files even when only volatile source metadata changed",
+    )
+    args = parser.parse_args()
+
     # Step 1: Generate per-OS all.list for linux and mac
     os_all_lists: list[tuple[str, Path]] = []
 
@@ -188,11 +219,11 @@ def main() -> None:
             print(f"Warning: {os_dir} does not exist, skipping", file=sys.stderr)
             continue
         only = LINUX_SOURCE_FILE if os_name == "linux" else None
-        all_list = generate_os_all_list(os_dir, only=only)
+        all_list = generate_os_all_list(os_dir, only=only, force=args.force)
         os_all_lists.append((os_name, all_list))
 
     # Step 2: Generate base all.list
-    generate_base_all_list(os_all_lists)
+    generate_base_all_list(os_all_lists, force=args.force)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-VOLATILE_HEADER_PREFIXES = ("# Generated:", "# Source revision:")
+VOLATILE_HEADER_PREFIXES = ("# Source revision:",)
+SOURCE_REVISION_PREFIX = "# Source revision:"
 
 
 def _run_git(args: list[str], *, cwd: Path) -> str | None:
@@ -26,14 +27,16 @@ def _run_git(args: list[str], *, cwd: Path) -> str | None:
     return result.stdout.strip() or None
 
 
-def local_source_revision(*, cwd: Path | None = None) -> str:
+def local_source_revision(*, cwd: Path | None = None, repo: str | None = None) -> str:
     """Return a compact local git source description for generated headers."""
-    repo = cwd or Path.cwd()
-    branch = _run_git(["branch", "--show-current"], cwd=repo)
-    commit = _run_git(["rev-parse", "--short", "HEAD"], cwd=repo)
-    dirty = bool(_run_git(["status", "--porcelain"], cwd=repo))
+    repo_path = cwd or Path.cwd()
+    branch = _run_git(["branch", "--show-current"], cwd=repo_path)
+    commit = _run_git(["rev-parse", "--short", "HEAD"], cwd=repo_path)
+    dirty = bool(_run_git(["status", "--porcelain", "--untracked-files=no"], cwd=repo_path))
 
     parts = []
+    if repo:
+        parts.append(f"repo={repo}")
     if branch:
         parts.append(f"branch={branch}")
     else:
@@ -47,14 +50,17 @@ def local_source_revision(*, cwd: Path | None = None) -> str:
     return " ".join(parts)
 
 
-def remote_source_revision(*, repo: str, branch: str | None, commit: str | None) -> str:
-    """Return a compact remote source description for generated headers."""
-    parts = [f"repo={repo}"]
-    if branch:
-        parts.append(f"branch={branch}")
-    if commit:
-        parts.append(f"commit={commit[:12]}")
-    return " ".join(parts)
+def source_revision_from_content(content: str) -> str | None:
+    """Extract source revision metadata from generated file content."""
+    for line in content.splitlines():
+        if line.startswith(SOURCE_REVISION_PREFIX):
+            return line.removeprefix(SOURCE_REVISION_PREFIX).strip() or None
+    return None
+
+
+def source_revision_from_file(path: Path) -> str | None:
+    """Extract source revision metadata from a generated file."""
+    return source_revision_from_content(path.read_text(encoding="utf-8"))
 
 
 def strip_volatile_header_lines(content: str) -> list[str]:
@@ -63,12 +69,15 @@ def strip_volatile_header_lines(content: str) -> list[str]:
 
 
 def content_changed(existing: str, new: str) -> bool:
-    """Compare generated files while ignoring volatile source/timestamp headers."""
+    """Compare generated files while ignoring volatile source revision headers."""
     return strip_volatile_header_lines(existing) != strip_volatile_header_lines(new)
 
 
-def write_if_changed(path: Path, content: str) -> bool:
-    """Write content only when non-volatile generated output changed."""
+def write_if_changed(path: Path, content: str, *, force: bool = False) -> bool:
+    """Write content when forced or when non-volatile generated output changed."""
+    if force:
+        path.write_text(content, encoding="utf-8")
+        return True
     if path.exists():
         existing = path.read_text(encoding="utf-8")
         if not content_changed(existing, content):

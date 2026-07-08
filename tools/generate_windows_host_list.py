@@ -3,11 +3,11 @@
 # requires-python = ">=3.11"
 # dependencies = ["pyyaml"]
 # ///
-"""Generate configs/host-lists/windows/all.list from mozilla-platform-ops/worker-images pools.yml.
+"""Generate configs/host-lists/windows/all.list from local worker-images pools.yml.
 
-Fetches pools.yml via `gh api` (requires GitHub CLI, already authenticated),
-parses all Windows pools, and writes a host list file with pool grouping comments.
-Known-BAD hosts are included with annotating comments.
+Reads pools.yml from a local worker-images checkout, parses all Windows pools, and
+writes a host list file with pool grouping comments. Known-BAD hosts are included
+with annotating comments.
 
 Usage:
     uv run tools/generate_windows_host_list.py
@@ -17,10 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import base64
 import re
-import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -28,49 +25,12 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
-from host_list_headers import remote_source_revision, write_if_changed
+from host_list_headers import local_source_revision, write_if_changed
 
 REPO = "mozilla-platform-ops/worker-images"
 POOLS_PATH = "provisioners/windows/MDC1Windows/pools.yml"
+SOURCE_REPO_PATH = Path.home() / "git" / "worker-images"
 OUTPUT_PATH = Path("configs/host-lists/windows/mdc1.list")
-
-
-def fetch_pools_yaml() -> str:
-    """Fetch pools.yml content from GitHub via gh api."""
-    gh = shutil.which("gh") or "gh"
-    result = subprocess.run(
-        [gh, "api", f"repos/{REPO}/contents/{POOLS_PATH}", "--jq", ".content"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    encoded = result.stdout.strip()
-    # GitHub returns base64 with newlines; strip them before decoding
-    return base64.b64decode(encoded.replace("\n", "")).decode("utf-8")
-
-
-def fetch_default_branch() -> str | None:
-    """Fetch the upstream repo default branch via GitHub CLI."""
-    gh = shutil.which("gh") or "gh"
-    result = subprocess.run(
-        [gh, "api", f"repos/{REPO}", "--jq", ".default_branch"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip() or None
-
-
-def fetch_branch_commit(branch: str) -> str | None:
-    """Fetch the upstream branch head commit via GitHub CLI."""
-    gh = shutil.which("gh") or "gh"
-    result = subprocess.run(
-        [gh, "api", f"repos/{REPO}/commits/{branch}", "--jq", ".sha"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip() or None
 
 
 def parse_known_bad_comments(raw_yaml: str) -> dict[str, str]:
@@ -212,16 +172,14 @@ def main() -> None:
             )
             return
 
-    print(f"Fetching {POOLS_PATH} from {REPO}...", file=sys.stderr)
-    try:
-        branch = fetch_default_branch()
-        commit = fetch_branch_commit(branch) if branch else None
-        raw_yaml = fetch_pools_yaml()
-    except subprocess.CalledProcessError as e:
-        print(f"Error: gh api failed: {e.stderr}", file=sys.stderr)
+    source_path = SOURCE_REPO_PATH / POOLS_PATH
+    print(f"Reading {source_path}...", file=sys.stderr)
+    if not source_path.is_file():
+        print(f"Error: missing source file: {source_path}", file=sys.stderr)
         sys.exit(1)
 
-    source_revision = remote_source_revision(repo=REPO, branch=branch, commit=commit)
+    raw_yaml = source_path.read_text(encoding="utf-8")
+    source_revision = local_source_revision(cwd=SOURCE_REPO_PATH, repo=REPO)
     content = generate_host_list(raw_yaml, source_revision=source_revision)
 
     output = OUTPUT_PATH
@@ -229,7 +187,7 @@ def main() -> None:
 
     # Count non-comment, non-blank lines
     host_lines = [ln for ln in content.splitlines() if ln and not ln.startswith("#")]
-    if write_if_changed(output, content):
+    if write_if_changed(output, content, force=args.force):
         print(f"Wrote {len(host_lines)} hosts to {output}", file=sys.stderr)
     else:
         print(f"Unchanged {len(host_lines)} hosts in {output}", file=sys.stderr)
