@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""start_gather_tmux.py — launch a multi-window tmux session for fleetroll gather."""
+"""start_fleetroll_tmux.py — launch Fleetroll's multi-window tmux session."""
 
 from __future__ import annotations
 
@@ -138,7 +138,7 @@ class TmuxLauncher:
 
 
 # ---------------------------------------------------------------------------
-# Script-specific configuration (mirrors start_gather_tmux.sh)
+# Script-specific configuration
 # ---------------------------------------------------------------------------
 
 
@@ -146,8 +146,8 @@ def main() -> None:
     import os
 
     launcher = TmuxLauncher(
-        session_name="fleetroll_gather",
-        num_panes=5,
+        session_name="fleetroll",
+        num_panes=6,
         root=os.path.expanduser("~/git/fleetroll_mvp"),
         default_shell="zsh",
         panes=[
@@ -174,6 +174,10 @@ def main() -> None:
                 commands=[
                     "watchp -n 15m ./tools/gather-generic.sh configs/host-lists/windows/all.list"
                 ],
+            ),
+            PaneSpec(
+                name="web",
+                commands=["uv run fleetroll web"],
             ),
         ],
     )
