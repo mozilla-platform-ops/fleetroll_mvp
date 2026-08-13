@@ -1,28 +1,32 @@
-# SQLite databases
+# Personal Beads .gitignore reference
+#
+# Curated from the generated br init template, the beads_rust checkout's
+# .beads/.gitignore, and locally observed runtime artifacts. Review against
+# both sources when updating this file.
+
+# SQLite database family
 *.db
 *.db?*
 *.db-journal
 *.db-wal
 *.db-shm
-
-# Daemon runtime files
-daemon.lock
-daemon.log
-daemon.pid
-bd.sock
-sync-state.json
-last-touched
-
-# Local version tracking (prevents upgrade notification spam after git ops)
-.local_version
-
-# Legacy database files
 db.sqlite
 bd.db
 
-# Worktree redirect file (contains relative path to main repo's .beads/)
-# Must not be committed as paths would be wrong in other clones
-redirect
+# Lock files
+*.lock
+
+# Temporary and recovery state
+last-touched
+*.tmp
+.br_recovery/
+
+# Local history backups
+.br_history/
+
+# Sync state (local-only, per-machine)
+.sync.lock
+sync_base.jsonl
 
 # Merge artifacts (temporary files from 3-way merge)
 beads.base.jsonl
@@ -32,21 +36,18 @@ beads.left.meta.json
 beads.right.jsonl
 beads.right.meta.json
 
-# Sync state (local-only, per-machine)
-# These files are machine-specific and should not be shared across clones
-.sync.lock
-sync_base.jsonl
+# Daemon runtime files
+daemon.lock
+daemon.log
+daemon.pid
+bd.sock
+sync-state.json
 
-# Local history backups
-.br_history/
+# Local version tracking
+.local_version
+
+# Worktree redirect file (contains a clone-local path)
+redirect
 
 # bv (beads viewer) lock file
 .bv.lock
-
-# NOTE: Do NOT add negation patterns (e.g., !issues.jsonl) here.
-# They would override fork protection in .git/info/exclude, allowing
-# contributors to accidentally commit upstream issue databases.
-# The JSONL files (issues.jsonl, interactions.jsonl) and config files
-# are tracked by git by default since no pattern above ignores them.
-.write.lock
-*.tmp
