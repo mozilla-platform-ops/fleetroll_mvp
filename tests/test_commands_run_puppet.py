@@ -175,6 +175,9 @@ class TestCmdHostRunPuppet:
 
         assert mock_run_ssh.call_count == 3
         output = "\n".join(captured)
+        assert "Running puppet on 3 host(s) with 3 worker(s)..." in output
+        for host in mock_args_run_puppet.hosts:
+            assert f"START {host}" in output
         assert "total=3" in output
         assert "successful=3" in output
         assert "failed=0" in output
@@ -364,6 +367,31 @@ class TestCmdHostRunPuppetOutput:
         output = "\n".join(captured)
         assert "Notice: Finished catalog run" not in output
         assert mock_args_run_puppet.hosts[0] in output
+
+    def test_quiet_batch_shows_host_starts(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        """Quiet batch mode retains live operational status lines."""
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_run_puppet.confirm = True
+        mock_args_run_puppet.hosts = ["host1.example.com", "host2.example.com"]
+        mock_args_run_puppet.host_file = None
+        mock_args_run_puppet.quiet = True
+        mock_args_run_puppet.json = False
+        mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh",
+            return_value=(0, "verbose Puppet output\nEXIT=0\n", ""),
+        )
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
+
+        cmd_host_run_puppet(mock_args_run_puppet)
+
+        output = "\n".join(captured)
+        assert "Running puppet on 2 host(s) with 2 worker(s)..." in output
+        assert "START host1.example.com" in output
+        assert "START host2.example.com" in output
+        assert "verbose Puppet output" not in output
 
     def test_json_suppresses_puppet_output_regardless_of_quiet(
         self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path

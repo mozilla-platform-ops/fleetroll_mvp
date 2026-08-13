@@ -200,22 +200,25 @@ def _run_puppet_batch(
     log_lock = threading.Lock()
     print_lock = threading.Lock()
     show_output = not args.quiet and not args.json
-    show_progress = not args.json and args.quiet
+    show_progress = not args.json
+
+    def _run_host(host: str) -> dict[str, Any]:
+        """Report a host start, then run Puppet without interleaved status lines."""
+        if not args.json:
+            with print_lock:
+                print(f"START {host}", flush=True)
+        return run_puppet_for_host(
+            host,
+            args=args,
+            ssh_opts=ssh_opts,
+            remote_cmd=remote_cmd,
+            actor=actor,
+            audit_log=audit_log,
+            log_lock=log_lock,
+        )
 
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        future_to_host = {
-            executor.submit(
-                run_puppet_for_host,
-                host,
-                args=args,
-                ssh_opts=ssh_opts,
-                remote_cmd=remote_cmd,
-                actor=actor,
-                audit_log=audit_log,
-                log_lock=log_lock,
-            ): host
-            for host in hosts
-        }
+        future_to_host = {executor.submit(_run_host, host): host for host in hosts}
         with (
             click.progressbar(
                 length=len(hosts),
@@ -337,6 +340,9 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
         return
 
     start_time = time.monotonic()
+    if not args.json:
+        workers = min(args.workers, len(hosts))
+        print(f"Running puppet on {len(hosts)} host(s) with {workers} worker(s)...", flush=True)
     results = _run_puppet_batch(
         hosts, args=args, ssh_opts=ssh_opts, remote_cmd=remote_cmd, actor=actor, audit_log=audit_log
     )
