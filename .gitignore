@@ -238,3 +238,5 @@ __marimo__/
 .gstack/
 
 .pnpm-store/
+# br doctor per-run artifacts
+.doctor/
