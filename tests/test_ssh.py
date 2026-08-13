@@ -648,11 +648,15 @@ class TestBackupCreatedMarkerInUnsetScript:
 
 
 class TestRemoteRunPuppetScript:
-    """remote_run_puppet_script emits the puppet command and exit marker."""
+    """remote_run_puppet_script requests one attempt and emits an exit marker."""
 
     def test_invokes_run_puppet_with_sudo(self):
         script = remote_run_puppet_script()
-        assert "sudo -n run-puppet.sh" in script
+        assert "sudo -n env FLEETROLL_SINGLE_RUN=1 run-puppet.sh" in script
+
+    def test_requests_single_run_mode(self):
+        script = remote_run_puppet_script()
+        assert "FLEETROLL_SINGLE_RUN=1" in script
 
     def test_emits_exit_marker(self):
         script = remote_run_puppet_script()
