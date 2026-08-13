@@ -119,6 +119,85 @@ class TestCmdHostRunPuppet:
         assert output["ok"] is False
         assert output["observed"]["puppet_exit"] == 4
 
+    def test_single_host_ssh_exception_is_audited_with_duration(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        """A local SSH/PTY error is an audited, nonzero per-host failure."""
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_run_puppet.json = True
+        mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh",
+            side_effect=OSError("could not allocate pty"),
+        )
+        mocker.patch("fleetroll.commands.run_puppet.time.monotonic", side_effect=[10.0, 12.34])
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
+
+        with pytest.raises(CommandFailureError):
+            cmd_host_run_puppet(mock_args_run_puppet)
+
+        output = json.loads(captured[0])
+        assert output["ok"] is False
+        assert output["ssh_rc"] is None
+        assert output["error"] == "OSError: could not allocate pty"
+        assert output["observed"]["duration_s"] == 2.34
+        audit_record = json.loads(Path(mock_args_run_puppet.audit_log).read_text())
+        assert audit_record["error"] == output["error"]
+
+    def test_single_host_ssh_timeout_is_audited(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        """The SSH timeout result remains an audited nonzero failure."""
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_run_puppet.json = True
+        mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh",
+            return_value=(124, "", "ssh timeout"),
+        )
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
+
+        with pytest.raises(CommandFailureError):
+            cmd_host_run_puppet(mock_args_run_puppet)
+
+        output = json.loads(captured[0])
+        assert output["ssh_rc"] == 124
+        assert output["stderr"] == "ssh timeout"
+        audit_record = json.loads(Path(mock_args_run_puppet.audit_log).read_text())
+        assert audit_record["ssh_rc"] == 124
+
+    def test_batch_ssh_exception_is_audited_per_host(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
+    ):
+        """One transport exception does not discard other batch results."""
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        mock_args_run_puppet.confirm = True
+        mock_args_run_puppet.hosts = ["host1.example.com", "host2.example.com"]
+        mock_args_run_puppet.host_file = None
+        mock_args_run_puppet.json = True
+
+        def fake_run_ssh(host: str, *args, **kwargs):
+            if host == "host1.example.com":
+                raise OSError("could not allocate pty")
+            return 0, "EXIT=0\n", ""
+
+        mocker.patch("fleetroll.commands.run_puppet.run_ssh", side_effect=fake_run_ssh)
+        captured = []
+        mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
+
+        with pytest.raises(CommandFailureError):
+            cmd_host_run_puppet(mock_args_run_puppet)
+
+        output = json.loads(captured[0])
+        results = {result["host"]: result for result in output}
+        assert results["host1.example.com"]["error"] == "OSError: could not allocate pty"
+        assert results["host2.example.com"]["ok"] is True
+        audit_records = [
+            json.loads(line)
+            for line in Path(mock_args_run_puppet.audit_log).read_text().splitlines()
+        ]
+        assert {record["host"] for record in audit_records} == set(mock_args_run_puppet.hosts)
+
     def test_records_reason(self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path):
         """Result includes reason when provided."""
         mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")

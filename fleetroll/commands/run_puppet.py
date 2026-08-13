@@ -90,31 +90,52 @@ def run_puppet_for_host(
     # width (which made the pretty-printer emit absurd padding). Mode-change
     # ANSI escapes that would corrupt the user's terminal are stripped below
     # via _strip_ansi; SGR color codes are preserved.
-    rc, out, err = run_ssh(
-        host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout, force_tty=True
-    )
-    duration_s = round(time.monotonic() - start, 2)
-
-    puppet_exit = _parse_puppet_exit(out)
-    ok = rc == 0 and puppet_exit in _PUPPET_SUCCESS_EXITS
-
-    result: dict[str, Any] = {
-        "ts": utc_now_iso(),
-        "actor": actor,
-        "action": "host.run_puppet",
-        "host": host,
-        "ok": ok,
-        "ssh_rc": rc,
-        "stderr": err.strip(),
-        "observed": {
-            "puppet_exit": puppet_exit,
-            "changes_applied": (puppet_exit == 2),
-            "duration_s": duration_s,
-        },
-        "parameters": {
-            "reason": args.reason,
-        },
-    }
+    try:
+        rc, out, err = run_ssh(
+            host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout, force_tty=True
+        )
+    except Exception as exc:
+        duration_s = round(time.monotonic() - start, 2)
+        result: dict[str, Any] = {
+            "ts": utc_now_iso(),
+            "actor": actor,
+            "action": "host.run_puppet",
+            "host": host,
+            "ok": False,
+            "ssh_rc": None,
+            "stderr": "",
+            "error": f"{type(exc).__name__}: {exc}",
+            "observed": {
+                "puppet_exit": None,
+                "changes_applied": False,
+                "duration_s": duration_s,
+            },
+            "parameters": {
+                "reason": args.reason,
+            },
+        }
+        out = ""
+    else:
+        duration_s = round(time.monotonic() - start, 2)
+        puppet_exit = _parse_puppet_exit(out)
+        ok = rc == 0 and puppet_exit in _PUPPET_SUCCESS_EXITS
+        result = {
+            "ts": utc_now_iso(),
+            "actor": actor,
+            "action": "host.run_puppet",
+            "host": host,
+            "ok": ok,
+            "ssh_rc": rc,
+            "stderr": err.strip(),
+            "observed": {
+                "puppet_exit": puppet_exit,
+                "changes_applied": (puppet_exit == 2),
+                "duration_s": duration_s,
+            },
+            "parameters": {
+                "reason": args.reason,
+            },
+        }
 
     if log_lock:
         with log_lock:
@@ -263,7 +284,7 @@ def _run_puppet_batch(
                     with log_lock:
                         append_jsonl(audit_log, result)
                     results.append(result)
-                if show_progress:
+                if bar is not None:
                     bar.update(1)
 
     return results
