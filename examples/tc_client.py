@@ -25,14 +25,13 @@ class TaskclusterClient:
         """
         self.root_url = root_url
         self.queue_v1_base = f"{root_url}/api/queue/v1"
-        self.graphql_url = f"{root_url}/graphql"
         self.credentials = self._load_credentials(credentials_path)
-        self.queue = taskcluster.Queue(
-            {
-                "rootUrl": root_url,
-                "credentials": self.credentials,
-            }
-        )
+        options = {
+            "rootUrl": root_url,
+            "credentials": self.credentials,
+        }
+        self.queue = taskcluster.Queue(options)
+        self.worker_manager = taskcluster.WorkerManager(options)
 
     def _load_credentials(self, credentials_path: str) -> dict[str, str]:
         """Load Taskcluster credentials from file."""
@@ -51,7 +50,7 @@ class TaskclusterClient:
 
         return creds
 
-    def get_quarantine_details_graphql(
+    def get_quarantine_details(
         self,
         provisioner_id: str,
         worker_type: str,
@@ -59,7 +58,7 @@ class TaskclusterClient:
         worker_id: str,
     ) -> dict[str, Any] | None:
         """
-        Get quarantine details for a worker using GraphQL API.
+        Get quarantine details for a worker using the Worker Manager REST API.
 
         Args:
             provisioner_id: Provisioner ID
@@ -71,66 +70,14 @@ class TaskclusterClient:
             Quarantine details dict with updatedAt, clientId, quarantineUntil, quarantineInfo
             Returns None if worker not found or not quarantined
         """
-        worker_pool_id = f"{provisioner_id}/{worker_type}"
-
-        headers = {"content-type": "application/json"}
-
-        payload = {
-            "operationName": "ViewWorker",
-            "variables": {
-                "provisionerId": provisioner_id,
-                "workerType": worker_type,
-                "workerGroup": worker_group,
-                "workerId": worker_id,
-            },
-            "query": """
-                query ViewWorker($provisionerId: String!, $workerType: String!, $workerGroup: String!, $workerId: ID!) {
-                  worker(
-                    provisionerId: $provisionerId
-                    workerType: $workerType
-                    workerGroup: $workerGroup
-                    workerId: $workerId
-                  ) {
-                    workerId
-                    workerGroup
-                    quarantineUntil
-                    quarantineDetails {
-                      updatedAt
-                      clientId
-                      quarantineUntil
-                      quarantineInfo
-                      __typename
-                    }
-                    __typename
-                  }
-                }
-            """,
-        }
-
-        # Remove None values from variables
-        variables = payload.get("variables")
-        if isinstance(variables, dict):
-            payload["variables"] = {k: v for k, v in variables.items() if v is not None}
-
         try:
-            response = requests.post(self.graphql_url, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-
-            if "data" in data and "worker" in data["data"]:
-                worker_data = data["data"]["worker"]
-                quarantine_details = worker_data.get("quarantineDetails")
-                return quarantine_details
-            return None
-        except requests.exceptions.HTTPError as e:
-            # Log the actual error response for debugging
-            try:
-                error_data = response.json()
-                logger.warning(f"Failed to fetch quarantine details for {worker_id}: {e}")
-                logger.debug(f"GraphQL error response: {error_data}")
-            except:
-                logger.warning(f"Failed to fetch quarantine details for {worker_id}: {e}")
-            return None
+            worker = self.worker_manager.getWorker(
+                provisioner_id,
+                worker_type,
+                worker_group,
+                worker_id,
+            )
+            return worker.get("quarantineDetails")
         except Exception as e:
             logger.warning(f"Failed to fetch quarantine details for {worker_id}: {e}")
             return None
@@ -165,14 +112,13 @@ class TaskclusterClient:
             if not continuation_token:
                 break
 
-        # If fetch_details is True, get quarantine details via GraphQL
+        # If fetch_details is True, get quarantine details from Worker Manager
         if fetch_details:
             for worker in workers:
                 worker_id = worker.get("workerId")
                 worker_group = worker.get("workerGroup")
 
-                # Fetch quarantine details via GraphQL
-                quarantine_details_list = self.get_quarantine_details_graphql(
+                quarantine_details_list = self.get_quarantine_details(
                     provisioner_id, worker_type, worker_group, worker_id
                 )
 
@@ -383,16 +329,6 @@ class TaskclusterClient:
         except requests.exceptions.RequestException:
             return None
 
-    # similar to get_quarantine_details_graphql(), but for tasks
-    def get_task_details_graphql(self, task_id: str) -> dict[str, Any] | None:
-        # Example curl command (sanitized - use your own credentials):
-        # curl 'https://firefox-ci-tc.services.mozilla.com/graphql' \
-        #   -X POST \
-        #   -H 'Authorization: Bearer YOUR_TOKEN_HERE' \
-        #   -H 'content-type: application/json' \
-        #   --data-binary '{"operationName":"Task","variables":{"taskId":"TASK_ID"},"query":"query Task..."}'
-        pass
-
     def get_worker_quarantine_info(
         self,
         provisioner_id: str,
@@ -417,8 +353,7 @@ class TaskclusterClient:
             logger.debug(f"Worker {worker_id} not found: {e}")
             return False, None
 
-        # Fetch detailed quarantine info using GraphQL
-        quarantine_details = self.get_quarantine_details_graphql(
+        quarantine_details = self.get_quarantine_details(
             provisioner_id, worker_type, worker_group, worker_id
         )
 

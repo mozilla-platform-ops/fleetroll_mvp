@@ -14,7 +14,12 @@ import click
 
 from ..constants import DEFAULT_TC_PROVISIONER, OVERRIDES_DIR_NAME, ROLE_TO_TASKCLUSTER
 from ..exceptions import FleetRollError
-from ..taskcluster import fetch_worker_type_names, fetch_workers, load_tc_credentials
+from ..taskcluster import (
+    create_tc_clients,
+    fetch_worker_type_names,
+    fetch_workers,
+    load_tc_credentials,
+)
 from ..utils import (
     default_audit_log_path,
     format_elapsed_time,
@@ -28,6 +33,25 @@ if TYPE_CHECKING:
     from ..cli_types import TcFetchArgs
 
 logger = logging.getLogger(__name__)
+
+
+def build_task_run_cache(
+    tc_records: dict[str, dict[str, Any]],
+) -> dict[tuple[str, int], dict[str, Any]]:
+    """Build a cache of resolved task runs from the latest stored worker records."""
+    result: dict[tuple[str, int], dict[str, Any]] = {}
+    for record in tc_records.values():
+        task_id = record.get("task_id")
+        run_id = record.get("task_run_id")
+        resolved = record.get("task_resolved")
+        if not isinstance(task_id, str) or not isinstance(run_id, int) or not resolved:
+            continue
+        result[(task_id, run_id)] = {
+            "started": record.get("task_started"),
+            "resolved": resolved,
+            "state": record.get("task_state"),
+        }
+    return result
 
 
 def format_status_indicator(emoji: str, status: str, color: str) -> str:
@@ -359,17 +383,21 @@ def match_workers_to_hosts(
         worker_data = workers_map.get(short_host)
 
         if worker_data:
-            # Extract fields from GraphQL response
+            # Extract fields from the Worker Manager REST response.
             state = worker_data.get("state")
             last_date_active = worker_data.get("lastDateActive")
             quarantine_until = worker_data.get("quarantineUntil")
 
-            # Extract task data from latestTask.run (GraphQL structure)
+            # Queue status enrichment is nested under latestTask.run.
+            task_id = None
+            task_run_id = None
             task_started = None
             task_resolved = None
             task_state = None
             latest_task = worker_data.get("latestTask")
             if latest_task:
+                task_id = latest_task.get("taskId")
+                task_run_id = latest_task.get("runId")
                 run = latest_task.get("run")
                 if run:
                     task_started = run.get("started")
@@ -385,6 +413,8 @@ def match_workers_to_hosts(
                 "worker_type": worker_type,
                 "state": state,
                 "last_date_active": last_date_active,
+                "task_id": task_id,
+                "task_run_id": task_run_id,
                 "task_started": task_started,
                 "task_resolved": task_resolved,
                 "task_state": task_state,
@@ -414,6 +444,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
 
     # Load credentials
     credentials = load_tc_credentials()
+    clients = create_tc_clients(credentials)
 
     # Parse host list
     hosts = []
@@ -426,7 +457,13 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         click.echo(f"Fetching TaskCluster data for {len(hosts)} host(s)...")
 
     # Initialize SQLite database
-    from ..db import get_connection, get_db_path, init_db, insert_tc_worker
+    from ..db import (
+        get_connection,
+        get_db_path,
+        get_latest_tc_workers,
+        init_db,
+        insert_tc_worker,
+    )
 
     db_path = get_db_path()
     init_db(db_path)
@@ -476,6 +513,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             host_to_override_pool=host_to_override_pool,
         )
         worker_type_to_hosts = invert_host_worker_types(host_to_worker_type)
+        task_run_cache = build_task_run_cache(get_latest_tc_workers(db_conn, hosts))
 
         if verbose >= 1 and not quiet:
             for host, pool in host_to_override_pool.items():
@@ -513,14 +551,25 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         # Fetch data for each workerType
         ts = utc_now_iso()
         worker_type_to_workers: dict[tuple[str, str], dict[str, Any]] = {}
+        task_status_errors = 0
+        successful_pool_requests = 0
 
         for provisioner, worker_type in worker_type_to_hosts:
+            worker_type_key = (provisioner, worker_type)
             if not quiet:
                 click.echo(f"Querying workerType {provisioner}/{worker_type}...", nl=False)
             try:
-                workers_list = fetch_workers(
-                    provisioner, worker_type, credentials, verbose=(verbose >= 2 and not quiet)
+                fetch_result = fetch_workers(
+                    provisioner,
+                    worker_type=worker_type,
+                    clients=clients,
+                    worker_ids={strip_fqdn(host) for host in worker_type_to_hosts[worker_type_key]},
+                    cached_task_runs=task_run_cache,
+                    verbose=(verbose >= 2 and not quiet),
                 )
+                workers_list = fetch_result.workers
+                task_status_errors += fetch_result.status_errors
+                successful_pool_requests += 1
 
                 if verbose >= 2 and not quiet:
                     click.echo(f"\n  Raw API response: {len(workers_list)} worker(s)")
@@ -544,7 +593,12 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
 
                 worker_type_to_workers[(provisioner, worker_type)] = workers_map
                 if not quiet:
-                    click.echo(f" {len(workers_map)} worker(s) found")
+                    status_warning = (
+                        f", {fetch_result.status_errors} task status error(s)"
+                        if fetch_result.status_errors
+                        else ""
+                    )
+                    click.echo(f" {len(workers_map)} worker(s) found{status_warning}")
 
             except FleetRollError as e:
                 api_errors += 1
@@ -552,6 +606,11 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                     click.echo(f" FAILED: {e}", err=True)
                 # Store empty result so we still write scan record
                 worker_type_to_workers[(provisioner, worker_type)] = {}
+
+        if worker_type_to_hosts and successful_pool_requests == 0:
+            raise FleetRollError(
+                f"All {len(worker_type_to_hosts)} Taskcluster worker pool REST request(s) failed"
+            )
 
         worker_records_written = 0
         scan_records_written = 0
@@ -615,6 +674,12 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 warning_list.append(f"{hosts_without_roles} hosts without role data")
             if api_errors > 0:
                 warning_list.append(f"{api_errors} API errors" if api_errors > 1 else "1 API error")
+            if task_status_errors > 0:
+                warning_list.append(
+                    f"{task_status_errors} task status errors"
+                    if task_status_errors > 1
+                    else "1 task status error"
+                )
 
             output = format_tc_fetch_quiet(
                 worker_count=worker_records_written,

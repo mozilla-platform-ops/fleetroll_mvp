@@ -166,6 +166,7 @@ class DataFreshnessArgs:
     stale_threshold: int | None
     min_fresh_pct: int
     json: bool
+    require_fresh: bool = False
 
 
 @dataclass

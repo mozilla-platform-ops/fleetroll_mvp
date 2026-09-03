@@ -890,6 +890,11 @@ def maintain(audit_log: str | None, confirm: bool, force: bool):
     help="Emit machine-readable JSON to stdout.",
 )
 @click.option(
+    "--require-fresh",
+    is_flag=True,
+    help="Exit 1 when either source does not meet the freshness policy.",
+)
+@click.option(
     "--stale-threshold",
     type=int,
     default=None,
@@ -900,21 +905,21 @@ def maintain(audit_log: str | None, confirm: bool, force: bool):
     type=int,
     default=80,
     show_default=True,
-    help="Minimum percentage of hosts that must have a fresh ok observation.",
+    help="Minimum percentage of hosts that must have fresh data from each source.",
 )
 def data_freshness(
     hosts_file: str | None,
     all_hosts: bool,
     json_output: bool,
+    require_fresh: bool,
     stale_threshold: int | None,
     min_fresh_pct: int,
 ):
-    """Report audit data freshness status.
+    """Report host and Taskcluster data freshness status.
 
-    Checks whether host audit data is fresh by requiring a minimum percentage
-    of the target hosts to have a recent ok observation. Exits 0 if fresh,
-    1 if stale or no data — suitable for use in scripts that need to verify
-    data reliability before acting on it.
+    Reports host audit and Taskcluster observation freshness independently.
+    A successful report exits 0 regardless of freshness; --require-fresh turns
+    the combined freshness policy into an assertion suitable for automation.
 
     Specify either HOSTS_FILE (a list of expected hosts) or --all (every host
     in the database). Exactly one is required.
@@ -929,6 +934,7 @@ def data_freshness(
         stale_threshold=stale_threshold,
         min_fresh_pct=min_fresh_pct,
         json=json_output,
+        require_fresh=require_fresh,
     )
     cmd_data_freshness(args)
 

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fleetroll.exceptions import FleetRollError
 from fleetroll.taskcluster import (
-    TaskClusterCredentials,
+    TaskClusterClients,
     fetch_workers,
     load_tc_credentials,
 )
@@ -83,106 +83,126 @@ class TestLoadTCCredentials:
 class TestFetchWorkers:
     """Tests for fetching workers from TaskCluster API."""
 
-    @patch("fleetroll.taskcluster.requests.post")
-    def test_fetch_workers_success(self, mock_post):
-        """Successfully fetch workers from GraphQL API."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "data": {
-                "workers": {
-                    "edges": [
-                        {
-                            "node": {
-                                "workerId": "test-worker-01",
-                                "workerGroup": "releng-hardware",
-                                "state": "running",
-                                "lastDateActive": "2026-01-27T00:00:00Z",
-                                "quarantineUntil": None,
-                                "latestTask": {
-                                    "run": {
-                                        "started": "2026-01-27T00:00:00Z",
-                                        "resolved": "2026-01-27T00:10:00Z",
-                                        "state": "completed",
-                                    }
-                                },
-                            }
-                        }
-                    ],
-                    "pageInfo": {"hasNextPage": False},
-                }
+    def test_fetch_workers_paginates_and_enriches_latest_task(self):
+        """List workers through REST and enrich requested workers with Queue status."""
+        worker_manager = MagicMock()
+        worker_manager.listWorkers.side_effect = [
+            {
+                "workers": [
+                    {
+                        "workerId": "test-worker-01",
+                        "workerGroup": "mdc1",
+                        "state": "running",
+                        "latestTask": {"taskId": "task_01", "runId": 0},
+                    },
+                    {"workerId": "unrequested-worker", "workerGroup": "mdc1"},
+                ],
+                "continuationToken": "next-page",
+            },
+            {
+                "workers": [{"workerId": "test-worker-02", "workerGroup": "mdc1"}],
+            },
+        ]
+        queue = MagicMock()
+        queue.status.return_value = {
+            "status": {
+                "runs": [
+                    {
+                        "runId": 0,
+                        "started": "2026-01-27T00:00:00Z",
+                        "resolved": "2026-01-27T00:10:00Z",
+                        "state": "completed",
+                    }
+                ]
             }
         }
-        mock_post.return_value = mock_response
 
-        creds = TaskClusterCredentials("test-client", "test-token")
-        result = fetch_workers("releng-hardware", "gecko-t-linux-talos-1804", creds)
+        result = fetch_workers(
+            "releng-hardware",
+            worker_type="gecko-t-linux-talos-1804",
+            clients=TaskClusterClients(queue=queue, worker_manager=worker_manager),
+            worker_ids={"test-worker-01", "test-worker-02"},
+        )
 
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert result[0]["workerId"] == "test-worker-01"
-        assert result[0]["state"] == "running"
-        assert result[0]["latestTask"]["run"]["started"] == "2026-01-27T00:00:00Z"
-
-        # Verify GraphQL API was called correctly
-        mock_post.assert_called_once()
-        call_args = mock_post.call_args
-        assert call_args[0][0] == "https://firefox-ci-tc.services.mozilla.com/graphql"
-        assert call_args[1]["headers"]["Content-Type"] == "application/json"
-        assert "Authorization" not in call_args[1]["headers"]  # GraphQL endpoint is public
-        assert call_args[1]["json"]["variables"]["provisionerId"] == "releng-hardware"
-        assert call_args[1]["json"]["variables"]["workerType"] == "gecko-t-linux-talos-1804"
-
-    @patch("fleetroll.taskcluster.requests.post")
-    def test_fetch_workers_partial_data_with_errors(self, mock_post):
-        """Handle partial data when some tasks are deleted."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "data": {
-                "workers": {
-                    "edges": [
-                        {
-                            "node": {
-                                "workerId": "test-worker-01",
-                                "state": "running",
-                            }
-                        },
-                        {
-                            "node": {
-                                "workerId": "test-worker-02",
-                                "state": "stopped",
-                            }
-                        },
-                    ],
-                    "pageInfo": {"hasNextPage": False},
-                }
-            },
-            "errors": [
-                {
-                    "message": "Task does not exist",
-                    "path": ["workers", "edges", 0, "node", "latestTask"],
-                }
-            ],
+        assert [worker["workerId"] for worker in result.workers] == [
+            "test-worker-01",
+            "test-worker-02",
+        ]
+        assert result.workers[0]["latestTask"]["run"]["state"] == "completed"
+        assert result.status_errors == 0
+        assert worker_manager.listWorkers.call_args_list[1].kwargs["query"] == {
+            "limit": 1000,
+            "continuationToken": "next-page",
         }
-        mock_post.return_value = mock_response
+        queue.status.assert_called_once_with("task_01")
 
-        creds = TaskClusterCredentials("test-client", "test-token")
-        result = fetch_workers("releng-hardware", "gecko-t-linux-talos-1804", creds)
+    def test_fetch_workers_reuses_cached_resolved_task(self):
+        """Avoid a Queue status request for an unchanged resolved task."""
+        worker_manager = MagicMock()
+        worker_manager.listWorkers.return_value = {
+            "workers": [
+                {
+                    "workerId": "test-worker-01",
+                    "workerGroup": "mdc1",
+                    "latestTask": {"taskId": "task_cached", "runId": 1},
+                }
+            ]
+        }
+        queue = MagicMock()
+        cached_run = {
+            "started": "2026-01-27T00:00:00Z",
+            "resolved": "2026-01-27T00:10:00Z",
+            "state": "completed",
+        }
 
-        # Should still return the workers despite errors
-        assert isinstance(result, list)
-        assert len(result) == 2
-        assert result[0]["workerId"] == "test-worker-01"
-        assert result[1]["workerId"] == "test-worker-02"
+        result = fetch_workers(
+            "releng-hardware",
+            worker_type="gecko-t-linux-talos-1804",
+            clients=TaskClusterClients(queue=queue, worker_manager=worker_manager),
+            worker_ids={"test-worker-01"},
+            cached_task_runs={("task_cached", 1): cached_run},
+        )
 
-    @patch("fleetroll.taskcluster.requests.post")
-    def test_fetch_workers_api_error(self, mock_post):
-        """Raise error when API request fails."""
-        import requests
+        assert result.workers[0]["latestTask"]["run"] == cached_run
+        queue.status.assert_not_called()
 
-        mock_post.side_effect = requests.exceptions.RequestException("API Error")
+    def test_fetch_workers_preserves_worker_when_status_fails(self):
+        """A per-task error must not discard otherwise-fresh worker data."""
+        worker_manager = MagicMock()
+        worker_manager.listWorkers.return_value = {
+            "workers": [
+                {
+                    "workerId": "test-worker-01",
+                    "workerGroup": "mdc1",
+                    "lastDateActive": "2026-01-27T00:00:00Z",
+                    "latestTask": {"taskId": "task_missing", "runId": 0},
+                }
+            ]
+        }
+        queue = MagicMock()
+        queue.status.side_effect = RuntimeError("task expired")
 
-        creds = TaskClusterCredentials("test-client", "test-token")
-        with pytest.raises(FleetRollError, match="Failed to fetch workers"):
-            fetch_workers("releng-hardware", "gecko-t-linux-talos-1804", creds)
+        result = fetch_workers(
+            "releng-hardware",
+            worker_type="gecko-t-linux-talos-1804",
+            clients=TaskClusterClients(queue=queue, worker_manager=worker_manager),
+            worker_ids={"test-worker-01"},
+        )
+
+        assert len(result.workers) == 1
+        assert result.workers[0]["lastDateActive"] == "2026-01-27T00:00:00Z"
+        assert "run" not in result.workers[0]["latestTask"]
+        assert result.status_errors == 1
+
+    def test_fetch_workers_api_error(self):
+        """Raise an actionable error when the worker listing fails."""
+        worker_manager = MagicMock()
+        worker_manager.listWorkers.side_effect = RuntimeError("API Error")
+
+        with pytest.raises(FleetRollError, match="Failed to list workers through REST"):
+            fetch_workers(
+                "releng-hardware",
+                worker_type="gecko-t-linux-talos-1804",
+                clients=TaskClusterClients(queue=MagicMock(), worker_manager=worker_manager),
+                worker_ids={"test-worker-01"},
+            )

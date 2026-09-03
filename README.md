@@ -145,6 +145,27 @@ uv run fleetroll gather-tc configs/host-lists/1804.list
 uv run fleetroll gather-tc -v configs/host-lists/1804.list
 ```
 
+#### Data freshness
+
+`data-freshness` reports host-audit and Taskcluster observation freshness
+separately. Producing a report exits successfully even when data is stale or
+missing; use `--require-fresh` when freshness is a prerequisite for automation.
+
+```bash
+# Human-readable report for a host population
+uv run fleetroll data-freshness configs/host-lists/1804.list
+
+# Fail closed unless every host has fresh host and TC data
+uv run fleetroll data-freshness \
+  --min-fresh-pct 100 \
+  --require-fresh \
+  --json \
+  configs/host-lists/1804.list
+```
+
+Taskcluster freshness uses the stored observation timestamp, not the worker's
+last-activity timestamp.
+
 #### Data Storage
 
 Fleetroll uses a hybrid storage architecture optimized for different data access patterns:

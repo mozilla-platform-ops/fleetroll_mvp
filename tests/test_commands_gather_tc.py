@@ -7,6 +7,7 @@ from unittest.mock import patch
 from fleetroll.commands.gather_tc import (
     build_host_override_pools,
     build_role_to_hosts_mapping,
+    build_task_run_cache,
     build_windows_role_mapping,
     format_tc_fetch_quiet,
     get_host_roles_bulk,
@@ -414,10 +415,13 @@ class TestMatchWorkersToHosts:
                     "lastDateActive": "2024-01-15T10:00:00Z",
                     "quarantineUntil": None,
                     "latestTask": {
+                        "taskId": "task_01",
+                        "runId": 2,
                         "run": {
                             "started": "2024-01-15T09:00:00Z",
                             "resolved": "2024-01-15T09:30:00Z",
-                        }
+                            "state": "completed",
+                        },
                     },
                 },
                 "host2": {
@@ -449,8 +453,11 @@ class TestMatchWorkersToHosts:
         assert record1["worker_type"] == "gecko-t-linux"
         assert record1["state"] == "running"
         assert record1["last_date_active"] == "2024-01-15T10:00:00Z"
+        assert record1["task_id"] == "task_01"
+        assert record1["task_run_id"] == 2
         assert record1["task_started"] == "2024-01-15T09:00:00Z"
         assert record1["task_resolved"] == "2024-01-15T09:30:00Z"
+        assert record1["task_state"] == "completed"
         assert record1["quarantine_until"] is None
 
         # Check second record
@@ -572,6 +579,37 @@ class TestMatchWorkersToHosts:
         )
 
         assert records == []
+
+
+class TestBuildTaskRunCache:
+    """Tests for reusing terminal task runs across scans."""
+
+    def test_includes_only_resolved_runs_with_stable_identity(self):
+        records = {
+            "resolved": {
+                "task_id": "task_resolved",
+                "task_run_id": 1,
+                "task_started": "2026-01-27T00:00:00Z",
+                "task_resolved": "2026-01-27T00:10:00Z",
+                "task_state": "completed",
+            },
+            "running": {
+                "task_id": "task_running",
+                "task_run_id": 0,
+                "task_started": "2026-01-27T01:00:00Z",
+                "task_resolved": None,
+                "task_state": "running",
+            },
+            "legacy": {"task_resolved": "2026-01-27T02:00:00Z"},
+        }
+
+        assert build_task_run_cache(records) == {
+            ("task_resolved", 1): {
+                "started": "2026-01-27T00:00:00Z",
+                "resolved": "2026-01-27T00:10:00Z",
+                "state": "completed",
+            }
+        }
 
 
 class TestBuildWindowsRoleMapping:

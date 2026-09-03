@@ -3,21 +3,54 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import requests
 
+import taskcluster
+
 from .exceptions import FleetRollError
 
+logger = logging.getLogger(__name__)
+TASK_STATUS_WORKERS = 20
+TC_REQUEST_TIMEOUT_SECONDS = 30
 
+
+class _TimeoutSession(requests.Session):
+    """Requests session that prevents Taskcluster SDK calls from hanging."""
+
+    def request(self, *args: Any, **kwargs: Any) -> requests.Response:
+        kwargs.setdefault("timeout", TC_REQUEST_TIMEOUT_SECONDS)
+        return super().request(*args, **kwargs)
+
+
+@dataclass(frozen=True)
 class TaskClusterCredentials:
     """TaskCluster API credentials."""
 
-    def __init__(self, client_id: str, access_token: str):
-        self.client_id = client_id
-        self.access_token = access_token
+    client_id: str
+    access_token: str
+
+
+@dataclass(frozen=True)
+class TaskClusterClients:
+    """Authenticated Taskcluster REST clients used during a collection."""
+
+    queue: Any
+    worker_manager: Any
+
+
+@dataclass(frozen=True)
+class WorkerFetchResult:
+    """Workers returned by REST plus non-fatal task-status failures."""
+
+    workers: list[dict[str, Any]]
+    status_errors: int
 
 
 def load_tc_credentials() -> TaskClusterCredentials:
@@ -65,153 +98,137 @@ def load_tc_credentials() -> TaskClusterCredentials:
     return TaskClusterCredentials(client_id=client_id, access_token=access_token)
 
 
+def create_tc_clients(credentials: TaskClusterCredentials) -> TaskClusterClients:
+    """Create authenticated Queue and Worker Manager REST clients."""
+    options = {
+        "rootUrl": "https://firefox-ci-tc.services.mozilla.com",
+        "credentials": {
+            "clientId": credentials.client_id,
+            "accessToken": credentials.access_token,
+        },
+    }
+    return TaskClusterClients(
+        queue=taskcluster.Queue(options, session=_TimeoutSession()),
+        worker_manager=taskcluster.WorkerManager(options, session=_TimeoutSession()),
+    )
+
+
+def _find_run(status_response: dict[str, Any], run_id: int) -> dict[str, Any] | None:
+    """Extract one run from a Queue status response."""
+    status = status_response.get("status") or {}
+    for run in status.get("runs") or []:
+        if run.get("runId") == run_id:
+            return {
+                "started": run.get("started"),
+                "resolved": run.get("resolved"),
+                "state": run.get("state"),
+            }
+    return None
+
+
+def _fetch_task_run(queue: Any, task_key: tuple[str, int]) -> dict[str, Any]:
+    """Fetch one latest task run through the Queue REST API."""
+    task_id, run_id = task_key
+    run = _find_run(queue.status(task_id), run_id)
+    if run is None:
+        raise FleetRollError(f"Task {task_id} has no run {run_id}")
+    return run
+
+
 def fetch_workers(
     provisioner: str,
+    *,
     worker_type: str,
-    _credentials: TaskClusterCredentials,
+    clients: TaskClusterClients,
+    worker_ids: set[str],
+    cached_task_runs: dict[tuple[str, int], dict[str, Any]] | None = None,
     verbose: bool = False,
-) -> list[dict[str, Any]]:
-    """Fetch workers for a given provisioner/workerType using GraphQL API.
+) -> WorkerFetchResult:
+    """Fetch requested workers and their latest task runs through REST.
 
     Args:
         provisioner: The provisioner ID (e.g., "releng-hardware")
         worker_type: The worker type (e.g., "gecko-t-linux-talos-1804")
-        credentials: TaskCluster credentials
+        clients: Authenticated Taskcluster REST clients
+        worker_ids: Short worker IDs requested by the caller
+        cached_task_runs: Previously resolved runs keyed by ``(taskId, runId)``
+        verbose: Print REST pagination and task-status diagnostics
 
     Returns:
-        List of worker dicts with workerId, state, quarantineUntil, latestTask, etc.
+        Requested worker records and the count of non-fatal status failures
 
     Raises:
-        FleetRollError: If the API request fails
+        FleetRollError: If the worker-list request fails
     """
-    graphql_url = "https://firefox-ci-tc.services.mozilla.com/graphql"
-
-    # GraphQL query - simplified to only use required variables
-    query = """query ViewWorkers($provisionerId: String!, $workerType: String!, $workersConnection: PageConnection) {
-  workers(
-    provisionerId: $provisionerId
-    workerType: $workerType
-    connection: $workersConnection
-  ) {
-    pageInfo {
-      hasNextPage
-      nextCursor
-    }
-    edges {
-      node {
-        workerId
-        workerGroup
-        latestTask {
-          run {
-            taskId
-            runId
-            started
-            resolved
-            state
-          }
-        }
-        firstClaim
-        quarantineUntil
-        lastDateActive
-        state
-        capacity
-        providerId
-        workerPoolId
-      }
-    }
-  }
-}"""
-
-    workers = []
-    cursor = None
-
+    workers: list[dict[str, Any]] = []
+    query: dict[str, Any] = {"limit": 1000}
     try:
         while True:
-            variables = {
-                "provisionerId": provisioner,
-                "workerType": worker_type,
-                "workersConnection": {"limit": 1000},
-            }
-
-            if cursor:
-                variables["workersConnection"]["cursor"] = cursor
-
-            payload = {
-                "operationName": "ViewWorkers",
-                "variables": variables,
-                "query": query,
-            }
-
-            headers = {
-                "Content-Type": "application/json",
-                "Accept": "*/*",
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:147.0) Gecko/20100101 Firefox/147.0",
-                "Origin": "https://firefox-ci-tc.services.mozilla.com",
-                "Referer": "https://firefox-ci-tc.services.mozilla.com/",
-            }
-
+            response = clients.worker_manager.listWorkers(
+                provisioner,
+                worker_type,
+                query=query,
+            )
+            page_workers = response.get("workers") or []
+            workers.extend(
+                dict(worker) for worker in page_workers if worker.get("workerId") in worker_ids
+            )
+            continuation_token = response.get("continuationToken")
             if verbose:
-                print("\n[DEBUG] GraphQL Request:")
-                print(f"  URL: {graphql_url}")
-                print(f"  Variables: {json.dumps(variables, indent=2)}")
-                print(f"  Headers: {json.dumps(headers, indent=2)}")
-
-            response = requests.post(graphql_url, json=payload, headers=headers, timeout=30)
-
-            # Check for HTTP errors
-            if response.status_code != 200:
-                try:
-                    error_data = response.json()
-                    raise FleetRollError(
-                        f"GraphQL API returned {response.status_code}: {error_data}"
-                    )
-                except ValueError:
-                    raise FleetRollError(
-                        f"GraphQL API returned {response.status_code}: {response.text}"
-                    )
-
-            data = response.json()
-
-            # Check if we have any data at all
-            if "data" not in data or not data["data"]:
-                if "errors" in data:
-                    raise FleetRollError(f"GraphQL errors: {data['errors']}")
-                raise FleetRollError("No data returned from GraphQL API")
-
-            # GraphQL can return partial data with errors (e.g., deleted tasks)
-            # We'll use whatever data we got and log errors if verbose
-            if "errors" in data:
-                if verbose:
-                    print(
-                        f"\n[WARNING] GraphQL returned {len(data['errors'])} errors (using partial data):"
-                    )
-                    for error in data["errors"][:3]:  # Show first 3 errors
-                        print(f"  - {error.get('message', 'Unknown error')}")
-                    if len(data["errors"]) > 3:
-                        print(f"  ... and {len(data['errors']) - 3} more errors")
-
-            workers_data = data.get("data", {}).get("workers", {})
-            edges = workers_data.get("edges", [])
-
-            for edge in edges:
-                node = edge.get("node", {})
-                if node:  # Skip null nodes
-                    workers.append(node)
-
-            page_info = workers_data.get("pageInfo", {})
-            if not page_info.get("hasNextPage"):
+                print(
+                    f"\n[DEBUG] REST worker page: {len(page_workers)} worker(s), "
+                    f"continuation={bool(continuation_token)}"
+                )
+            if not continuation_token:
                 break
-
-            cursor = page_info.get("nextCursor")
-            if not cursor:
-                break
-
-        return workers
-
-    except requests.exceptions.RequestException as e:
-        raise FleetRollError(f"Failed to fetch workers from GraphQL API: {e}")
+            query = {"limit": 1000, "continuationToken": continuation_token}
     except Exception as e:
-        raise FleetRollError(f"Failed to fetch workers from TaskCluster API: {e}")
+        raise FleetRollError(
+            f"Failed to list workers through REST for {provisioner}/{worker_type}: {e}"
+        ) from e
+
+    cached_task_runs = cached_task_runs or {}
+    task_keys: set[tuple[str, int]] = set()
+    for worker in workers:
+        latest_task = worker.get("latestTask") or {}
+        task_id = latest_task.get("taskId")
+        run_id = latest_task.get("runId")
+        if isinstance(task_id, str) and isinstance(run_id, int):
+            task_keys.add((task_id, run_id))
+
+    runs_by_key = {key: cached_task_runs[key] for key in task_keys if key in cached_task_runs}
+    uncached_keys = task_keys - runs_by_key.keys()
+    status_errors = 0
+    if uncached_keys:
+        with ThreadPoolExecutor(
+            max_workers=min(TASK_STATUS_WORKERS, len(uncached_keys))
+        ) as executor:
+            future_to_key = {
+                executor.submit(_fetch_task_run, clients.queue, key): key for key in uncached_keys
+            }
+            for future in as_completed(future_to_key):
+                key = future_to_key[future]
+                try:
+                    runs_by_key[key] = future.result()
+                except Exception as e:
+                    status_errors += 1
+                    log = logger.warning if verbose else logger.debug
+                    log("Failed to fetch Taskcluster status for %s/%s: %s", *key, e)
+
+    for worker in workers:
+        latest_task = worker.get("latestTask")
+        if not isinstance(latest_task, dict):
+            continue
+        task_id = latest_task.get("taskId")
+        run_id = latest_task.get("runId")
+        if isinstance(task_id, str) and isinstance(run_id, int):
+            run = runs_by_key.get((task_id, run_id))
+            if run is not None:
+                latest_task = dict(latest_task)
+                latest_task["run"] = run
+                worker["latestTask"] = latest_task
+
+    return WorkerFetchResult(workers=workers, status_errors=status_errors)
 
 
 def fetch_worker_type_names(
