@@ -1,0 +1,11 @@
+# If you place this file at `/etc/puppet/ronin_settings`
+# the `run-puppet.sh` script will use the values here.
+# Intended role: gecko_t_linux_2404_talos (X11)
+
+# puppet overrides
+PUPPET_REPO="https://github.com/mozilla-platform-ops/ronin_puppet.git"
+PUPPET_BRANCH="20260826-netperf_remove_caddy_sudoers_rule"
+PUPPET_MAIL="aerickson@mozilla.com"
+
+# taskcluster overrides
+WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-2404-relops'
