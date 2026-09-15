@@ -4,6 +4,40 @@
 
 Read README.md for any relevant information.
 
+## Use Fleetroll for Fleet Operations
+
+Prefer Fleetroll commands for inspecting or changing managed hosts.
+This includes checking roles, overrides, Puppet state, worker pools,
+and deploying or removing overrides and vault files.
+
+- Start with README.md and `uv run fleetroll --help`.
+- Use `<command> --help` to check flags before presenting commands.
+- Use direct SSH or custom scripts only when Fleetroll lacks the
+  required capability or when debugging Fleetroll itself.
+
+### Inspecting hosts
+
+Use Fleetroll's recorded observations first:
+
+    uv run fleetroll host-monitor <hostname> --once --json
+
+Report the observation timestamp so the user knows how fresh it is.
+If current live state is needed, refresh through Fleetroll:
+
+    uv run fleetroll gather-host <hostname>
+    uv run fleetroll host-monitor <hostname> --once --json
+
+### Deploying overrides
+
+Preview the exact deployment using Fleetroll's dry run:
+
+    uv run fleetroll host-set-override --from-file <file> <hostname>
+
+After deployment, check the refreshed observations to verify the override
+SHA and metadata match the intended file. Distinguish “override written”
+from “Puppet successfully applied it”; confirm the latter from Puppet
+state before claiming it.
+
 ## Python Environment
 
 This project uses `uv` for Python environment management. Always use `uv run` prefix for Python commands:
