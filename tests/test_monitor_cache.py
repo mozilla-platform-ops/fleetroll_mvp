@@ -3,11 +3,50 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 from fleetroll.commands.monitor.cache import (
     ShaInfoCache,
     find_vault_symlink,
     parse_override_file,
 )
+
+
+@pytest.mark.parametrize("quote", ["", "'", '"'])
+def test_parse_override_literal_assignments(tmp_path, quote):
+    override_file = tmp_path / "override"
+    override_file.write_text(
+        "# PUPPET_BRANCH=ignored\n"
+        f"PUPPET_REPO={quote}https://github.com/aerickson/ronin_puppet-private.git{quote}\n"
+        f"PUPPET_BRANCH={quote}20260922-harden_puppet{quote} # branch comment\n"
+        f"WORKER_TYPE_OVERRIDE={quote}gecko-t-linux-talos-2404-relops-aje{quote}\n"
+    )
+    assert parse_override_file(override_file) == {
+        "user": "aerickson",
+        "repo": "ronin_puppet-private",
+        "branch": "20260922-harden_puppet",
+        "worker_type_override": "gecko-t-linux-talos-2404-relops-aje",
+    }
+
+
+@pytest.mark.parametrize(
+    "assignment",
+    ["'unterminated", "\"mismatched'", "$(echo branch)", "$BRANCH", "branch; echo other"],
+)
+def test_parse_override_rejects_nonliteral_branch(tmp_path, assignment):
+    override_file = tmp_path / "override"
+    override_file.write_text(f"PUPPET_BRANCH={assignment}\n")
+    assert parse_override_file(override_file) is None
+
+
+def test_parse_override_export_and_literal_hash(tmp_path):
+    override_file = tmp_path / "override"
+    override_file.write_text(
+        "  export PUPPET_BRANCH=topic#literal  # comment\n  # WORKER_TYPE_OVERRIDE=ignored\n"
+    )
+    result = parse_override_file(override_file)
+    assert result is not None
+    assert result["branch"] == "topic#literal"
+    assert result["worker_type_override"] is None
 
 
 def test_parse_override_file_valid():

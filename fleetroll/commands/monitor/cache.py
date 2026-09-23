@@ -7,6 +7,19 @@ from pathlib import Path
 from typing import cast
 
 
+def _literal_assignment(content: str, *, name: str) -> str | None:
+    """Read a literal shell assignment without evaluating shell expressions."""
+    pattern = (
+        rf"^[ \t]*(?:export[ \t]+)?{re.escape(name)}="
+        r"(?:'([^'\n]*)'|\"([^\"\n$`\\]*)\"|([^\s'\"$`\\;|&<>()]+))"
+        r"(?:[ \t]+#[^\n]*)?[ \t]*$"
+    )
+    match = re.search(pattern, content, re.MULTILINE)
+    if match is None:
+        return None
+    return next(value for value in match.groups() if value is not None) or None
+
+
 def parse_override_file(path: Path) -> dict[str, str | None] | None:
     """Parse override file to extract user/branch/repo/worker-pool info.
 
@@ -25,29 +38,23 @@ def parse_override_file(path: Path) -> dict[str, str | None] | None:
         return None
 
     # Extract PUPPET_REPO and PUPPET_BRANCH
-    repo_match = re.search(r"^PUPPET_REPO=['\"](.+?)['\"]", content, re.MULTILINE)
-    branch_match = re.search(r"^PUPPET_BRANCH=['\"](.+?)['\"]", content, re.MULTILINE)
+    repo_url = _literal_assignment(content, name="PUPPET_REPO")
+    branch = _literal_assignment(content, name="PUPPET_BRANCH")
 
-    if not branch_match:
+    if not branch:
         return None
-
-    branch = branch_match.group(1)
 
     # Extract username and repo name from GitHub URL if available
     # e.g., https://github.com/rcurranmoz/ronin_puppet.git -> rcurranmoz, ronin_puppet
     user = None
     repo_name = None
-    if repo_match:
-        repo_url = repo_match.group(1)
+    if repo_url:
         user_match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", repo_url)
         if user_match:
             user = user_match.group(1)
             repo_name = user_match.group(2)
 
-    # Extract WORKER_TYPE_OVERRIDE if present. The anchored ^ ensures commented
-    # lines (e.g. "# WORKER_TYPE_OVERRIDE=...") are ignored.
-    worker_match = re.search(r"^WORKER_TYPE_OVERRIDE=['\"](.+?)['\"]", content, re.MULTILINE)
-    worker_type_override = worker_match.group(1) if worker_match else None
+    worker_type_override = _literal_assignment(content, name="WORKER_TYPE_OVERRIDE")
 
     return {
         "user": user,
@@ -162,7 +169,7 @@ class ShaInfoCache:
 
         if info:
             # branch is always str (never None) because parse_override_file returns
-            # None if branch_match fails, so when info exists, branch is always set
+            # None if branch parsing fails, so when info exists, branch is always set
             return cast("str", info["branch"])
         return "-"
 
