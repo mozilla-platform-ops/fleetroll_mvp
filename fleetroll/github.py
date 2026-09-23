@@ -87,24 +87,10 @@ def collect_repo_branches(overrides_dir: Path) -> dict[tuple[str, str], set[str]
             if not override_info:
                 continue
 
-            # Read file content directly to extract PUPPET_REPO
-            try:
-                content = item.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-
-            repo_match = re.search(r"^PUPPET_REPO=['\"](.+?)['\"]", content, re.MULTILINE)
-            if not repo_match:
-                continue
-
-            repo_url = repo_match.group(1)
-            parsed = parse_github_repo_url(repo_url)
-            if not parsed:
-                continue
-
-            owner, repo = parsed
+            owner = override_info.get("user")
+            repo = override_info.get("repo")
             branch = override_info.get("branch")
-            if not branch:
+            if not owner or not repo or not branch:
                 continue
 
             repo_key = (owner, repo)

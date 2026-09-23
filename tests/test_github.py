@@ -162,6 +162,19 @@ class TestShouldFetch:
 class TestCollectRepoBranches:
     """Tests for collect_repo_branches function."""
 
+    def test_unquoted_override(self, tmp_path):
+        """Discover the same private repo and branch as the monitor parser."""
+        (tmp_path / "override").write_text(
+            "PUPPET_REPO=https://github.com/test-user/private-repo.git\n"
+            "PUPPET_BRANCH=test-branch\n"
+            "PUPPET_MAIL='test@example.com'\n"
+        )
+
+        assert collect_repo_branches(tmp_path) == {
+            ("mozilla-platform-ops", "ronin_puppet"): {"master"},
+            ("test-user", "private-repo"): {"test-branch"},
+        }
+
     def test_empty_directory(self, tmp_path):
         """Should return only default repo when directory is empty."""
         overrides_dir = tmp_path / "overrides"
