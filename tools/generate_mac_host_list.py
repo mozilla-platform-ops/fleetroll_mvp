@@ -10,12 +10,16 @@ and writes one host list file per group.
 
 Usage:
     uv run tools/generate_mac_host_list.py
+    uv run tools/generate_mac_host_list.py --inventory-path /path/to/inventory.d
     uv run tools/generate_mac_host_list.py --force
+
+Set FLEETROLL_INVENTORY_PATH to use a different inventory directory by default.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -29,30 +33,41 @@ from natural_sort import natural_key
 REPO = "mozilla-platform-ops/ronin_puppet"
 INVENTORY_DIR = "inventory.d"
 SOURCE_REPO_PATH = Path.home() / "git" / "ronin_puppet"
-OUTPUT_DIR = Path("configs/host-lists/mac")
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "configs/host-lists/mac"
 IGNORE_FILES = {"services.yaml"}
 
 
-def inventory_files() -> list[Path]:
+def inventory_files(inventory_path: Path) -> list[Path]:
     """Return inventory YAML files from the local source checkout."""
-    source_dir = SOURCE_REPO_PATH / INVENTORY_DIR
-    if not source_dir.is_dir():
-        raise FileNotFoundError(f"missing inventory directory: {source_dir}")
+    if not inventory_path.is_dir():
+        raise FileNotFoundError(f"missing inventory directory: {inventory_path}")
     return sorted(
-        (path for path in source_dir.glob("*.yaml") if path.name not in IGNORE_FILES),
+        (path for path in inventory_path.glob("*.yaml") if path.name not in IGNORE_FILES),
         key=lambda path: path.name,
     )
 
 
 def parse_inventory(raw_yaml: str) -> list[dict]:
     """Parse inventory YAML and return the groups list."""
-    data = yaml.safe_load(raw_yaml)
+    data = yaml.safe_load(raw_yaml) or {}
     return data.get("groups", [])
+
+
+def group_targets(group: dict) -> list[str]:
+    """Return unique, active host targets in natural order."""
+    targets = {
+        str(target)
+        for target in group.get("targets") or []
+        if target
+        and not str(target).lstrip().startswith("#")
+        and not str(target).endswith(".local")
+    }
+    return sorted(targets, key=natural_key)
 
 
 def generate_group_file(group: dict, *, inventory_name: str, source_revision: str) -> str | None:
     """Build file content for one inventory group."""
-    targets = group.get("targets") or []
+    targets = group_targets(group)
     facts = group.get("facts") or {}
     puppet_role = facts.get("puppet_role", "")
 
@@ -72,12 +87,10 @@ def generate_group_file(group: dict, *, inventory_name: str, source_revision: st
 
     lines.append("")
 
-    filtered = [t for t in targets if not str(t).endswith(".local")]
-    if not filtered:
+    if not targets:
         return None
 
-    sorted_targets = sorted(filtered, key=natural_key)
-    lines.extend(str(t) for t in sorted_targets)
+    lines.extend(targets)
 
     lines.append("")
 
@@ -92,7 +105,14 @@ def main() -> None:
         action="store_true",
         help="Regenerate even if output files were updated within the last 60 minutes",
     )
+    parser.add_argument(
+        "--inventory-path",
+        type=Path,
+        default=Path(os.environ.get("FLEETROLL_INVENTORY_PATH", SOURCE_REPO_PATH / INVENTORY_DIR)),
+        help="Path to ronin_puppet inventory.d (overrides FLEETROLL_INVENTORY_PATH)",
+    )
     args = parser.parse_args()
+    inventory_path = args.inventory_path.expanduser()
 
     if not args.force and OUTPUT_DIR.exists():
         # Check the most recently modified .list file
@@ -109,9 +129,9 @@ def main() -> None:
                 )
                 return
 
-    print(f"Reading inventory files from {SOURCE_REPO_PATH / INVENTORY_DIR}...", file=sys.stderr)
+    print(f"Reading inventory files from {inventory_path}...", file=sys.stderr)
     try:
-        source_files = inventory_files()
+        source_files = inventory_files(inventory_path)
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -122,7 +142,7 @@ def main() -> None:
         file=sys.stderr,
     )
 
-    source_revision = local_source_revision(cwd=SOURCE_REPO_PATH, repo=REPO)
+    source_revision = local_source_revision(cwd=inventory_path.parent, repo=REPO)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     total_hosts = 0
@@ -150,7 +170,7 @@ def main() -> None:
                     print(f"  Skipped {group_name} (empty after filtering)", file=sys.stderr)
                 continue
 
-            host_count = len(group.get("targets") or [])
+            host_count = len(group_targets(group))
             total_hosts += host_count
             total_groups += 1
             if write_if_changed(out_path, content, force=args.force):
