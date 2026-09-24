@@ -240,6 +240,24 @@ Time columns (`pp_last`, `tc_act`, `uptime`, `tc_j_sf`, `data`) accept duration 
 
 † `wt_ovr` and `pool` can be filtered/sorted on but are not shown as columns in the display yet (e.g. `wt_ovr=y`, `pool~bug2031822`).
 
+##### Private Puppet repositories and HEALTHY
+
+Fleetroll compares the Puppet revision reported by a host (`PP_SHA`) with the
+expected branch revision fetched by `gather-gh` (`PP_EXP`). For an override that
+points to a private GitHub repository, Fleetroll's local GitHub API token must
+have read access to that repository. The host's own Git credentials do not
+provide access to the local `gather-gh` process.
+
+If `gather-gh` cannot fetch the private branch, the override branch and applied
+Puppet revision can still appear, but `PP_EXP`, `PP_MATCH`, and `HEALTHY` show
+`-` when no expected revision is stored. This means Fleetroll cannot determine
+health from its current data; it does not mean Puppet failed. To enable the
+comparison, configure a token with repository read access under `[github]`
+`api_token` in `~/.fleetroll/config.toml`, then run
+`uv run fleetroll gather-gh --override-delay`. `HEALTHY` becomes `Y` only when
+Puppet successfully applied the expected revision and Taskcluster activity is
+less than one hour old.
+
 **Special syntax**
 
 - `col=` — match rows where column is missing/empty
