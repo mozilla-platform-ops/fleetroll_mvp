@@ -281,6 +281,21 @@ def test_row_data_column_unknown():
     assert not row_matches_condition(row, cond)
 
 
+def test_data_empty_filter_requires_a_parseable_age():
+    missing = FilterCondition(column="data", op="=", value="")
+    present = FilterCondition(column="data", op="!=", value="")
+
+    for value in ("?/-", "-/-", "?/ ?", ""):
+        row = _row(data=value)
+        assert row_matches_condition(row, missing)
+        assert not row_matches_condition(row, present)
+
+    for value in ("5m/-", "?/2h", "5m/2h"):
+        row = _row(data=value)
+        assert not row_matches_condition(row, missing)
+        assert row_matches_condition(row, present)
+
+
 # ---------------------------------------------------------------------------
 # apply_conditions
 # ---------------------------------------------------------------------------

@@ -238,7 +238,10 @@ def row_matches_condition(row: dict[str, str], cond: FilterCondition) -> bool:
 
     # Empty-match shortcut: col= means "is missing", col!= means "is set".
     if not cond.value and cond.op in ("=", "!="):
-        is_empty = normalize_for_filter(col_value) == ""
+        if cond.column == "data":
+            is_empty = _get_data_seconds(row) is None
+        else:
+            is_empty = normalize_for_filter(col_value) == ""
         return is_empty if cond.op == "=" else not is_empty
 
     if cond.column == "data":

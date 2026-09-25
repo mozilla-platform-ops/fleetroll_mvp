@@ -262,6 +262,7 @@ less than one hour old.
 
 - `col=` — match rows where column is missing/empty
 - `col!=` — match rows where column has a value
+- For `data`, a value means at least one parseable host-audit or Taskcluster age; `?/-` and `-/-` count as empty.
 - `os=M|L` — pipe-separated alternatives for `=` and `!=`
 - `sort:COL[:asc|desc][,COL...]` — sort by one or more columns (unknown values sort last)
 
