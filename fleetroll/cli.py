@@ -125,7 +125,7 @@ def cli(ctx: click.Context, debug: bool):
 
 
 @cli.command("gather-host")
-@click.argument("host", metavar="HOST_OR_FILE")
+@click.argument("host", metavar="HOST_OR_FILE...", nargs=-1, required=True)
 @common_options
 @click.option(
     "--no-content",
@@ -158,7 +158,7 @@ def cli(ctx: click.Context, debug: bool):
     help="Single-line output.",
 )
 def gather_host(
-    host: str,
+    host: tuple[str, ...],
     ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
@@ -170,16 +170,18 @@ def gather_host(
     verbose: bool,
     quiet: bool,
 ):
-    """Audit a host (role + override presence + optionally contents).
+    """Audit one or more hosts (role + override presence + optionally contents).
 
-    HOST_OR_FILE can be a hostname, user@hostname, or a file containing hosts
-    (one per line for batch mode).
+    HOST_OR_FILE can be one or more hostnames, user@hostname values, or a file
+    containing hosts (one per line for batch mode). A host file cannot be mixed
+    with bare hostnames.
     """
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
 
+    hosts, host_file = resolve_host_args(host)
     args = HostAuditArgs(
-        host=host,
+        host=str(host_file) if host_file else hosts[0],
         ssh_option=list(ssh_option) if ssh_option else None,
         connect_timeout=connect_timeout,
         timeout=timeout,
@@ -190,6 +192,8 @@ def gather_host(
         batch_timeout=batch_timeout,
         verbose=verbose,
         quiet=quiet,
+        hosts=hosts,
+        host_file=host_file,
     )
     cmd_host_audit(args)
 

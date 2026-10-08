@@ -607,8 +607,12 @@ def cmd_host_audit(args: HostAuditArgs) -> None:
     quiet = getattr(args, "quiet", False)
 
     # Determine hosts to audit
-    host_file = None
-    if is_host_file(args.host):
+    resolved_hosts = getattr(args, "hosts", None)
+    host_file = getattr(args, "host_file", None)
+    if resolved_hosts is not None:
+        hosts = resolved_hosts
+        is_batch = host_file is not None or len(hosts) > 1
+    elif is_host_file(args.host):
         host_file = Path(args.host)
         hosts = parse_host_list(host_file)
         is_batch = True

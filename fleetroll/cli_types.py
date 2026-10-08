@@ -22,6 +22,8 @@ class HostAuditArgs:
     batch_timeout: int
     verbose: bool
     quiet: bool
+    hosts: list[str] | None = None
+    host_file: Path | None = None
 
 
 @dataclass
