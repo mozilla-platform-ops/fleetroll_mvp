@@ -13,6 +13,7 @@ from .cli_types import (
     DataFreshnessArgs,
     HostAuditArgs,
     HostMonitorArgs,
+    HostRebootIfIdleArgs,
     HostRunPuppetArgs,
     HostSetOverrideArgs,
     HostSetVaultArgs,
@@ -28,6 +29,7 @@ from .commands import (
     cmd_gh_fetch,
     cmd_host_audit,
     cmd_host_monitor,
+    cmd_host_reboot_if_idle,
     cmd_host_run_puppet,
     cmd_host_set,
     cmd_host_set_vault,
@@ -713,6 +715,39 @@ def host_run_puppet(
         quiet=quiet,
     )
     cmd_host_run_puppet(args)
+
+
+@cli.command("host-reboot-if-idle")
+@click.argument("host", metavar="HOST")
+@common_options(timeout_default=30)
+@click.option(
+    "--confirm",
+    is_flag=True,
+    help="Run the live gwhc check and request reboot when it reports IDLE.",
+)
+def host_reboot_if_idle(
+    host: str,
+    ssh_option: tuple[str, ...],
+    connect_timeout: int,
+    timeout: int,
+    audit_log: str | None,
+    json_output: bool,
+    confirm: bool,
+) -> None:
+    """Request reboot for one Linux host only when live gwhc reports IDLE.
+
+    This best-effort operator command does not quarantine or recheck the worker.
+    """
+    args = HostRebootIfIdleArgs(
+        host=host,
+        ssh_option=list(ssh_option) if ssh_option else None,
+        connect_timeout=connect_timeout,
+        timeout=timeout,
+        audit_log=audit_log,
+        json=json_output,
+        confirm=confirm,
+    )
+    cmd_host_reboot_if_idle(args)
 
 
 @cli.command("gather-tc")

@@ -26,6 +26,7 @@ class TestCliHelp:
         result = runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
         assert "gather-host" in result.output
+        assert "host-reboot-if-idle" in result.output
         assert "debug-host-script" in result.output
         assert "show-vault" in result.output
         assert "host-set-override" in result.output

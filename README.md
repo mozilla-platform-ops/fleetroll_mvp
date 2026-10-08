@@ -342,6 +342,27 @@ uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d
 uv run fleetroll host-unset-override configs/host-lists/1804.list
 ```
 
+### Rebooting an idle worker
+
+`host-reboot-if-idle` checks a Linux host's live `sudo gwhc --json` output and
+requests a reboot only when its top-level `state` is exactly `IDLE`. It targets
+one host per invocation and requires `--confirm` to run the check and request
+reboot:
+
+```bash
+# preview the target and action
+uv run fleetroll host-reboot-if-idle t-linux64-ms-001
+
+# check gwhc and request reboot when state is IDLE
+uv run fleetroll host-reboot-if-idle t-linux64-ms-001 --confirm
+```
+
+This operator-triggered best-effort command does not quarantine the worker or
+recheck its state. A task may be claimed after the check, and current `gwhc`
+heuristics may report stale or unknown state as `IDLE`. Do not use it for
+unattended or fleet-wide reboot policy. Fleetroll reports that a reboot was
+requested; it does not claim the host recovered.
+
 ### vault.yaml management
 
 ```bash

@@ -671,3 +671,80 @@ def remote_run_puppet_script() -> str:
     """
     body = "sudo -n env FLEETROLL_SINGLE_RUN=1 run-puppet.sh 2>&1; echo EXIT=$?"
     return "sh -c " + shlex.quote(body)
+
+
+def remote_reboot_if_idle_script() -> str:
+    """Build a one-session Linux/gwhc check and immediate reboot request."""
+    body = r"""marker() { printf 'FLEETROLL_REBOOT_IF_IDLE_%s=%s\n' "$1" "$2"; }
+
+os_type=$(uname -s 2>/dev/null)
+if [ "$?" -ne 0 ]; then
+  marker RESULT unknown
+  marker REASON os_detection_failed
+  exit 0
+fi
+marker OS_TYPE "$os_type"
+if [ "$os_type" != "Linux" ]; then
+  marker RESULT refused
+  marker REASON non_linux_host
+  exit 0
+fi
+
+if ! command -v gwhc >/dev/null 2>&1; then
+  marker GWHC_PRESENT 0
+  marker RESULT refused
+  marker REASON gwhc_missing
+  exit 0
+fi
+marker GWHC_PRESENT 1
+
+gwhc_json=$(sudo -n gwhc --json)
+gwhc_rc=$?
+marker GWHC_EXIT "$gwhc_rc"
+if [ "$gwhc_rc" -ne 0 ]; then
+  marker RESULT refused
+  marker REASON gwhc_failed
+  exit 0
+fi
+
+state=$(
+  printf '%s' "$gwhc_json" | python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+state = data.get("state") if isinstance(data, dict) else None
+if not isinstance(state, str):
+    sys.exit(1)
+print(state)
+' 2>/dev/null
+)
+json_rc=$?
+if [ "$json_rc" -ne 0 ]; then
+  marker JSON_VALID 0
+  marker RESULT refused
+  marker REASON invalid_or_missing_state
+  exit 0
+fi
+marker JSON_VALID 1
+case "$state" in
+  IDLE|BUSY|UNKNOWN) marker GWHC_STATE "$state" ;;
+  *) marker GWHC_STATE other ;;
+esac
+if [ "$state" != "IDLE" ]; then
+  marker RESULT refused
+  marker REASON state_not_idle
+  exit 0
+fi
+
+sudo -n systemctl --no-block reboot
+reboot_rc=$?
+marker REBOOT_EXIT "$reboot_rc"
+if [ "$reboot_rc" -eq 0 ]; then
+  marker RESULT requested
+else
+  marker RESULT failed
+  marker REASON reboot_request_failed
+fi
+exit 0"""
+    return "sh -c " + shlex.quote(body)
