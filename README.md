@@ -131,9 +131,16 @@ The `gather-host` command stores host observations in SQLite (`~/.fleetroll/flee
 # audit a single host
 uv run fleetroll gather-host t-linux64-ms-238.test.releng.mdc1.mozilla.com
 
+# audit several hosts in one invocation
+uv run fleetroll gather-host t-linux64-ms-001 t-linux64-ms-173
+
 # audit a list of hosts
 uv run fleetroll gather-host configs/host-lists/1804.list
 ```
+
+`gather-host` accepts one or more hostnames, or a host-list file. When gathering
+multiple hosts, pass all hostnames in the same command; use a host-list file for
+larger sets.
 
 #### TaskCluster data
 

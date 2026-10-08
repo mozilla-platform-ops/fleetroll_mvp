@@ -27,6 +27,11 @@ If current live state is needed, refresh through Fleetroll:
     uv run fleetroll gather-host <hostname>
     uv run fleetroll host-monitor <hostname> --once --json
 
+For multiple hosts, pass all hostnames to one gather command (or use a host-list
+file for larger sets):
+
+    uv run fleetroll gather-host <hostname1> <hostname2>
+
 ### Deploying overrides
 
 Preview the exact deployment using Fleetroll's dry run:
