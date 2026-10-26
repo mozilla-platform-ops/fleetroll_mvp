@@ -152,6 +152,29 @@ uv run fleetroll gather-tc configs/host-lists/1804.list
 uv run fleetroll gather-tc -v configs/host-lists/1804.list
 ```
 
+#### Reviewing jobs after override deployment
+
+`scripts/check_override_jobs.py` compares each host's recent Taskcluster runs
+with the deployment time of its currently observed override. Refresh host state
+first so the active override and worker type are current:
+
+```bash
+uv run fleetroll gather-host configs/host-lists/linux/canary-all.list
+uv run python scripts/check_override_jobs.py configs/host-lists/linux/canary-all.list
+
+# Check every host with an override in the latest successful Fleetroll observations
+uv run python scripts/check_override_jobs.py --all-overrides
+
+# Machine-readable output
+uv run python scripts/check_override_jobs.py --json configs/host-lists/linux/canary-all.list
+```
+
+The script needs the local Taskcluster credentials in `~/.tc_token`. It queries
+the Worker Manager's recent task list and Queue task status; the worker history
+contains at most 20 tasks per host, so a full 20-task window may not cover every
+job since deployment. The exit status is nonzero when a host cannot be checked
+or a post-deployment task failed, raised an exception, or has an unknown state.
+
 #### Data freshness
 
 `data-freshness` reports host-audit and Taskcluster observation freshness
