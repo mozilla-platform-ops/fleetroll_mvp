@@ -258,6 +258,7 @@ def collect_host_report(
     observation: dict[str, Any],
     deployed_at: dt.datetime,
     sha: str,
+    override_branch: str,
     worker_type: tuple[str, str],
     worker_group: str,
 ) -> dict[str, Any]:
@@ -269,6 +270,7 @@ def collect_host_report(
         "recorded_host": host,
         "observation_ts": observation.get("ts"),
         "override_sha256": sha,
+        "override_branch": override_branch,
         "deployed_at": deployed_at.isoformat().replace("+00:00", "Z"),
         "worker_type": pool,
         "worker_group": worker_group,
@@ -310,35 +312,53 @@ def collect_host_report(
 
 
 def print_human_report(reports: list[dict[str, Any]], errors: list[str]) -> None:
-    """Print a compact per-host report and noteworthy task details."""
-    print(
-        f"{'HOST':<24} {'WORKER TYPE':<36} {'DEPLOYED UTC':<17} {'JOBS':>4} "
-        f"{'COMPLETED':>9} {'FAILED':>6} {'EXCEPTION':>9} {'RUNNING':>7} {'OTHER':>5}"
-    )
+    """Print host summaries grouped by override, followed by any issues."""
+    grouped_reports: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for report in reports:
-        outcomes = report["outcomes"]
-        other = outcomes.get("pending", 0) + outcomes.get("unknown", 0)
-        host = strip_fqdn(report["host"])
-        pool = report["worker_type"]
-        deployed_at = report["deployed_at"][:16].replace("T", " ")
+        key = (report["override_branch"], report["override_sha256"])
+        grouped_reports.setdefault(key, []).append(report)
+
+    issues: list[tuple[str, str, dict[str, Any]]] = []
+    for branch, sha in sorted(grouped_reports):
+        group_reports = sorted(grouped_reports[(branch, sha)], key=lambda item: item["host"])
+        print(f"Override: {branch} ({sha[:8]}) — {len(group_reports)} host(s)")
         print(
-            f"{host:<24} {pool:<36} {deployed_at:<17} {report['post_deploy_jobs']:>4} "
-            f"{outcomes.get('completed', 0):>9} {outcomes.get('failed', 0):>6} "
-            f"{outcomes.get('exception', 0):>9} {outcomes.get('running', 0):>7} {other:>5}"
+            f"{'HOST':<24} {'WORKER TYPE':<36} {'DEPLOYED UTC':<17} {'JOBS':>4} "
+            f"{'COMPLETED':>9} {'FAILED':>6} {'EXCEPTION':>9} {'RUNNING':>7} {'OTHER':>5}"
         )
-        if report.get("history_may_be_truncated"):
-            print("  Recent-task window is full; earlier post-deployment jobs may be omitted.")
-        for task in report["jobs"]:
-            if task["outcome"] in {"failed", "exception", "unknown"}:
-                print(
-                    f"  {task['outcome'].upper()}: {task.get('name') or task['task_id']} "
-                    f"started={task.get('started')} resolved={task.get('resolved')} "
-                    f"https://firefox-ci-tc.services.mozilla.com/tasks/{task['task_id']}"
-                )
-        if report["post_deploy_jobs"] == 0:
-            print("  No post-deployment tasks in the worker's recent task history.")
+        for report in group_reports:
+            outcomes = report["outcomes"]
+            other = outcomes.get("pending", 0) + outcomes.get("unknown", 0)
+            host = strip_fqdn(report["host"])
+            pool = report["worker_type"]
+            timestamp = parse_timestamp(report["deployed_at"])
+            deployed_at = timestamp.strftime("%Y-%m-%d %H:%MZ") if timestamp else "unknown"
+            print(
+                f"{host:<24} {pool:<36} {deployed_at:<17} {report['post_deploy_jobs']:>4} "
+                f"{outcomes.get('completed', 0):>9} {outcomes.get('failed', 0):>6} "
+                f"{outcomes.get('exception', 0):>9} {outcomes.get('running', 0):>7} {other:>5}"
+            )
+            if report.get("history_may_be_truncated"):
+                print("  Recent-task window is full; earlier post-deployment jobs may be omitted.")
+            if report["post_deploy_jobs"] == 0:
+                print("  No post-deployment tasks in the worker's recent task history.")
+            issues.extend(
+                (task["outcome"], report["host"], task)
+                for task in report["jobs"]
+                if task["outcome"] in {"failed", "exception", "unknown"}
+            )
+
+    if issues or errors:
+        print("\nIssues")
+        for outcome, host, task in sorted(issues, key=lambda item: (item[0], item[1])):
+            task_name = task.get("name") or task["task_id"]
+            print(f"  {outcome.upper()}: {strip_fqdn(host)} — {task_name}")
+            started = task.get("started") or "unknown"
+            resolved = task.get("resolved") or "—"
+            print(f"    Started {started}; resolved {resolved}")
+            print(f"    https://firefox-ci-tc.services.mozilla.com/tasks/{task['task_id']}")
     for error in errors:
-        print(f"ERROR: {error}", file=sys.stderr)
+        print(f"  ERROR: {error}")
 
 
 def main() -> int:
@@ -402,6 +422,8 @@ def main() -> int:
                 errors.append(f"could not create Taskcluster client: {exc}")
                 break
         try:
+            override_info = parse_override_file(overrides_dir / sha[:12]) or {}
+            override_branch = override_info.get("branch") or "unknown branch"
             reports.append(
                 collect_host_report(
                     clients,
@@ -410,6 +432,7 @@ def main() -> int:
                     observation=observation,
                     deployed_at=deployed_at,
                     sha=sha,
+                    override_branch=override_branch,
                     worker_type=worker_type,
                     worker_group=args.worker_group,
                 )
