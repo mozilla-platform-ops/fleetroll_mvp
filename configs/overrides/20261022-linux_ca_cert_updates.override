@@ -12,4 +12,4 @@ PUPPET_BRANCH="20261022-linux_ca_cert_updates"
 PUPPET_MAIL="aerickson@mozilla.com"
 
 # taskcluster overrides
-WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-2404-relops-aje'
+# WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-2404-relops-aje'
