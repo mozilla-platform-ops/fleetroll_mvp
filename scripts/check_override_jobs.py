@@ -34,6 +34,34 @@ from fleetroll.utils import default_audit_log_path, is_host_file, parse_host_lis
 
 OUTCOMES = {"completed", "failed", "exception", "running", "pending"}
 RECENT_TASK_LIMIT = 20
+PROGRESS_BAR_WIDTH = 24
+
+
+class HostProgress:
+    """Show a single-line host progress bar when stderr is an interactive terminal."""
+
+    def __init__(self, *, total: int, label: str) -> None:
+        self.total = total
+        self.label = label
+        self.enabled = total > 0 and sys.stderr.isatty()
+        self.line_width = 0
+
+    def update(self, *, completed: int, host: str) -> None:
+        """Render the current progress and host being checked."""
+        if not self.enabled:
+            return
+        fraction = completed / self.total
+        filled = int(PROGRESS_BAR_WIDTH * fraction)
+        bar = "#" * filled + "-" * (PROGRESS_BAR_WIDTH - filled)
+        line = f"{self.label} [{bar}] {completed}/{self.total} {strip_fqdn(host)}"
+        self.line_width = max(self.line_width, len(line))
+        print(f"\r{line:<{self.line_width}}", end="", file=sys.stderr, flush=True)
+
+    def finish(self) -> None:
+        """Complete the bar and end its terminal line."""
+        if self.enabled:
+            self.update(completed=self.total, host="done")
+            print(file=sys.stderr, flush=True)
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,12 +70,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "hosts",
         nargs="*",
-        help="Hostnames or one host-list file; omit only when using --all-overrides.",
+        help="Hostnames or one host-list file; omit when using --worker-type.",
     )
     parser.add_argument(
-        "--all-overrides",
-        action="store_true",
-        help="Check every host with an override in the latest successful Fleetroll observations.",
+        "--worker-type",
+        help=(
+            "Compare all currently overridden hosts in this worker pool with hosts in the "
+            "same pool that have no override. Uses one shared time window."
+        ),
+    )
+    parser.add_argument(
+        "--provisioner",
+        default=DEFAULT_TC_PROVISIONER,
+        help=f"Taskcluster provisioner for --worker-type (default: {DEFAULT_TC_PROVISIONER}).",
     )
     parser.add_argument(
         "--worker-group",
@@ -74,16 +109,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def parse_requested_hosts(host_args: list[str], *, all_overrides: bool) -> list[str] | None:
-    """Return requested hostnames, or None when all hosts are requested."""
-    if all_overrides:
-        if host_args:
-            raise ValueError("Pass hostnames or --all-overrides, not both.")
-        return None
+def parse_requested_hosts(host_args: list[str]) -> list[str]:
+    """Return requested hostnames from arguments or one host-list file."""
     if len(host_args) == 1 and is_host_file(host_args[0]):
         return parse_host_list(Path(host_args[0]))
     if not host_args:
-        raise ValueError("Pass hostnames, a host-list file, or --all-overrides.")
+        raise ValueError("Pass hostnames, a host-list file, or --worker-type.")
     return list(dict.fromkeys(host_args))
 
 
@@ -100,17 +131,10 @@ def load_latest_successful_observations(
 
 
 def resolve_requested_hosts(
-    requested: list[str] | None,
+    requested: list[str],
     observations: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, str], list[str]]:
     """Map input names to recorded hostnames and return lookup errors."""
-    if requested is None:
-        return {
-            host: host
-            for host, record in observations.items()
-            if (record.get("observed") or {}).get("override_present")
-        }, []
-
     resolved: dict[str, str] = {}
     errors: list[str] = []
     for name in requested:
@@ -261,6 +285,8 @@ def collect_host_report(
     override_branch: str,
     worker_type: tuple[str, str],
     worker_group: str,
+    cohort: str = "override",
+    host_deployed_at: dt.datetime | None = None,
 ) -> dict[str, Any]:
     """Fetch recent worker task runs and summarize their outcomes."""
     provisioner, pool = worker_type
@@ -271,7 +297,13 @@ def collect_host_report(
         "observation_ts": observation.get("ts"),
         "override_sha256": sha,
         "override_branch": override_branch,
-        "deployed_at": deployed_at.isoformat().replace("+00:00", "Z"),
+        "deployed_at": (
+            host_deployed_at.isoformat().replace("+00:00", "Z")
+            if host_deployed_at
+            else (None if cohort == "control" else deployed_at.isoformat().replace("+00:00", "Z"))
+        ),
+        "comparison_cutoff": deployed_at.isoformat().replace("+00:00", "Z"),
+        "cohort": cohort,
         "worker_type": pool,
         "worker_group": worker_group,
         "history_window": 0,
@@ -309,6 +341,204 @@ def collect_host_report(
         len(task_refs) >= RECENT_TASK_LIMIT and report["post_deploy_jobs"] >= RECENT_TASK_LIMIT
     )
     return report
+
+
+def resolve_worker_type_cohort(
+    worker_type_name: str,
+    provisioner_name: str,
+    observations: dict[str, dict[str, Any]],
+    overrides_dir: Path,
+    deployment_events: dict[tuple[str, str], dt.datetime],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """Select overridden hosts and no-override controls for one effective worker pool."""
+    overridden: list[dict[str, Any]] = []
+    controls: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for host, observation in observations.items():
+        observed = observation.get("observed") or {}
+        try:
+            resolved_type = worker_type_for_host(host, observation, overrides_dir)
+        except (FileNotFoundError, ValueError) as exc:
+            if observed.get("override_present"):
+                errors.append(f"{host}: {exc}")
+            continue
+        if resolved_type != (provisioner_name, worker_type_name):
+            continue
+
+        entry = {"host": host, "observation": observation, "worker_type": resolved_type}
+        if observed.get("override_present"):
+            deployed_at, sha = deployment_time(host, observation, deployment_events)
+            if not sha:
+                errors.append(f"{host}: no override SHA in the latest successful observation")
+                continue
+            if not deployed_at:
+                errors.append(f"{host}: cannot determine the override deployment time")
+                continue
+            entry.update(deployed_at=deployed_at, sha=sha)
+            override_info = parse_override_file(overrides_dir / sha[:12]) or {}
+            entry["branch"] = override_info.get("branch") or "unknown branch"
+            overridden.append(entry)
+        else:
+            controls.append(entry)
+
+    return overridden, controls, errors
+
+
+def print_comparison_report(
+    reports: list[dict[str, Any]],
+    *,
+    worker_type: str,
+    provisioner: str,
+    cutoff: dt.datetime,
+    errors: list[str],
+) -> None:
+    """Print overridden and control cohorts side by side, with task issues last."""
+    print(f"Worker type: {worker_type}")
+    print(f"Provisioner: {provisioner}")
+    print(f"Shared comparison cutoff UTC: {cutoff.strftime('%Y-%m-%d %H:%MZ')}")
+    issues: list[tuple[str, str, dict[str, Any]]] = []
+    for cohort in ("override", "control"):
+        cohort_reports = sorted(
+            (report for report in reports if report["cohort"] == cohort),
+            key=lambda report: report["host"],
+        )
+        label = "OVERRIDDEN HOSTS" if cohort == "override" else "NO-OVERRIDE CONTROLS"
+        print(f"\n{label} ({len(cohort_reports)} host(s))")
+        print(
+            f"{'HOST':<24} {'OVERRIDE':<30} {'DEPLOYED UTC':<17} {'JOBS':>4} "
+            f"{'COMPLETED':>9} {'FAILED':>6} {'EXCEPTION':>9} {'RUNNING':>7} {'OTHER':>5}"
+        )
+        for report in cohort_reports:
+            outcomes = report["outcomes"]
+            other = outcomes.get("pending", 0) + outcomes.get("unknown", 0)
+            deployed = parse_timestamp(report.get("deployed_at"))
+            deployed_text = deployed.strftime("%Y-%m-%d %H:%MZ") if deployed else "—"
+            override = report.get("override_branch") or "none"
+            sha = report.get("override_sha256")
+            if sha:
+                override = f"{override} ({sha[:8]})"
+            print(
+                f"{strip_fqdn(report['host']):<24} {override[:30]:<30} {deployed_text:<17} "
+                f"{report['post_deploy_jobs']:>4} {outcomes.get('completed', 0):>9} "
+                f"{outcomes.get('failed', 0):>6} {outcomes.get('exception', 0):>9} "
+                f"{outcomes.get('running', 0):>7} {other:>5}"
+            )
+            if report.get("history_may_be_truncated"):
+                print(
+                    "  Recent-task window is full; earlier jobs in the comparison window may be omitted."
+                )
+            issues.extend(
+                (task["outcome"], report["host"], task)
+                for task in report["jobs"]
+                if task["outcome"] in {"failed", "exception", "unknown"}
+            )
+
+    if issues or errors:
+        print("\nIssues")
+        for outcome, host, task in sorted(issues, key=lambda item: (item[0], item[1])):
+            task_name = task.get("name") or task["task_id"]
+            print(f"  {outcome.upper()}: {strip_fqdn(host)} — {task_name}")
+            print(
+                f"    Started {task.get('started') or 'unknown'}; resolved {task.get('resolved') or '—'}"
+            )
+            print(f"    https://firefox-ci-tc.services.mozilla.com/tasks/{task['task_id']}")
+        for error in errors:
+            print(f"  ERROR: {error}")
+
+
+def run_worker_type_comparison(
+    args: argparse.Namespace,
+    *,
+    observations: dict[str, dict[str, Any]],
+    deployment_events: dict[tuple[str, str], dt.datetime],
+    overrides_dir: Path,
+) -> int:
+    """Run the automatic overridden-versus-control comparison for a worker type."""
+    overridden, controls, errors = resolve_worker_type_cohort(
+        args.worker_type,
+        args.provisioner,
+        observations,
+        overrides_dir,
+        deployment_events,
+    )
+    if not overridden:
+        errors.append(f"no overridden hosts found for worker type {args.worker_type}")
+    if not controls:
+        errors.append(f"no no-override control hosts found for worker type {args.worker_type}")
+
+    cutoff = max((entry["deployed_at"] for entry in overridden), default=None)
+    reports: list[dict[str, Any]] = []
+    clients = None
+    entries_to_check = [
+        (cohort, entry)
+        for cohort, entries in (("override", overridden), ("control", controls))
+        for entry in entries
+    ]
+    progress = HostProgress(total=len(entries_to_check), label="Checking workers")
+    if cutoff:
+        for index, (cohort, entry) in enumerate(entries_to_check, start=1):
+            host = entry["host"]
+            progress.update(completed=index - 1, host=host)
+            try:
+                if not clients:
+                    clients = create_tc_clients(load_tc_credentials())
+                reports.append(
+                    collect_host_report(
+                        clients,
+                        input_name=host,
+                        host=host,
+                        observation=entry["observation"],
+                        deployed_at=cutoff,
+                        sha=entry.get("sha", ""),
+                        override_branch=entry.get("branch", "none"),
+                        worker_type=entry["worker_type"],
+                        worker_group=args.worker_group,
+                        cohort=cohort,
+                        host_deployed_at=entry.get("deployed_at"),
+                    )
+                )
+            except Exception as exc:
+                errors.append(f"{host}: Taskcluster query failed: {exc}")
+        progress.finish()
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "worker_type": args.worker_type,
+                    "provisioner": args.provisioner,
+                    "comparison_cutoff": cutoff.isoformat().replace("+00:00", "Z")
+                    if cutoff
+                    else None,
+                    "hosts": reports,
+                    "errors": errors,
+                },
+                indent=2,
+            )
+        )
+    elif cutoff:
+        print_comparison_report(
+            reports,
+            worker_type=args.worker_type,
+            provisioner=args.provisioner,
+            cutoff=cutoff,
+            errors=errors,
+        )
+    else:
+        print(
+            f"Worker type: {args.worker_type}\n"
+            f"Provisioner: {args.provisioner}\n"
+            "Shared comparison cutoff UTC: unavailable"
+        )
+        for error in errors:
+            print(f"  ERROR: {error}")
+
+    has_bad_outcome = any(
+        report["outcomes"].get(outcome, 0)
+        for report in reports
+        for outcome in ("failed", "exception", "unknown")
+    )
+    return 1 if errors or has_bad_outcome else 0
 
 
 def print_human_report(reports: list[dict[str, Any]], errors: list[str]) -> None:
@@ -364,8 +594,17 @@ def print_human_report(reports: list[dict[str, Any]], errors: list[str]) -> None
 def main() -> int:
     """Run the recent post-deployment Taskcluster health report."""
     args = parse_args()
+    if args.worker_type and args.hosts:
+        print(
+            "ERROR: --worker-type cannot be combined with hostnames.",
+            file=sys.stderr,
+        )
+        return 2
+    if not args.worker_type and args.provisioner != DEFAULT_TC_PROVISIONER:
+        print("ERROR: --provisioner can only be used with --worker-type.", file=sys.stderr)
+        return 2
     try:
-        requested = parse_requested_hosts(args.hosts, all_overrides=args.all_overrides)
+        requested = [] if args.worker_type else parse_requested_hosts(args.hosts)
     except (ValueError, OSError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
@@ -383,13 +622,10 @@ def main() -> int:
     finally:
         conn.close()
 
-    resolved_hosts, errors = resolve_requested_hosts(requested, observations)
-    if args.all_overrides:
-        resolved_hosts = {
-            host: host
-            for host, record in observations.items()
-            if (record.get("observed") or {}).get("override_present")
-        }
+    if args.worker_type:
+        resolved_hosts, errors = {}, []
+    else:
+        resolved_hosts, errors = resolve_requested_hosts(requested, observations)
     if not resolved_hosts and not errors:
         errors.append("no hosts with overrides found in successful Fleetroll observations")
 
@@ -398,7 +634,17 @@ def main() -> int:
     clients = None
     reports: list[dict[str, Any]] = []
 
-    for input_name, host in resolved_hosts.items():
+    if args.worker_type:
+        return run_worker_type_comparison(
+            args,
+            observations=observations,
+            deployment_events=deployment_events,
+            overrides_dir=overrides_dir,
+        )
+
+    progress = HostProgress(total=len(resolved_hosts), label="Checking workers")
+    for index, (input_name, host) in enumerate(resolved_hosts.items(), start=1):
+        progress.update(completed=index - 1, host=host)
         observation = observations[host]
         deployed_at, sha = deployment_time(host, observation, deployment_events)
         if not sha:
@@ -439,6 +685,8 @@ def main() -> int:
             )
         except Exception as exc:
             errors.append(f"{input_name}: Taskcluster query failed: {exc}")
+
+    progress.finish()
 
     if args.json:
         print(json.dumps({"hosts": reports, "errors": errors}, indent=2))
