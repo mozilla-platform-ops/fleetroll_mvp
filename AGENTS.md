@@ -43,6 +43,33 @@ SHA and metadata match the intended file. Distinguish “override written”
 from “Puppet successfully applied it”; confirm the latter from Puppet
 state before claiming it.
 
+## Agent Mail
+
+This repository has a persistent Agent Mail identity:
+
+- Server: http://127.0.0.1:8765/mcp/
+- Project: /Users/aerickson/git/fleetroll_mvp
+- Agent: BlueRiver
+- Purpose: Primary maintainer and coordination contact for Fleetroll.
+
+At session start:
+
+1. Call macro_start_session with this project's absolute path,
+   agent_name="BlueRiver", and your actual program and model.
+2. Check your inbox and read relevant messages before starting work.
+
+Reuse this identity across replacement sessions. If the user indicates another
+session is working concurrently, create a separate identity for your task
+rather than sharing this one.
+
+Discover other projects and agents when coordination is needed. Use a consistent
+thread ID for each topic, reply to questions, and acknowledge messages that
+request it. Check your inbox between substantial work steps and before finishing.
+
+Before finishing, leave useful handoff context in Agent Mail, including current
+status, outstanding requests, and next steps for the replacement session.
+If Agent Mail is unavailable, report it and continue independent work.
+
 ## Python Environment
 
 This project uses `uv` for Python environment management. Always use `uv run` prefix for Python commands:
