@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
   use: {
-    baseURL: "http://127.0.0.1:8765",
+    baseURL: "http://127.0.0.1:23847",
   },
   projects: [
     {
@@ -15,7 +15,7 @@ export default defineConfig({
   // Start backend and built frontend before running e2e tests
   webServer: {
     command: "uv run fleetroll web",
-    url: "http://127.0.0.1:8765/api/health",
+    url: "http://127.0.0.1:23847/api/health",
     reuseExistingServer: !process.env["CI"],
     cwd: "../",
   },

@@ -354,7 +354,7 @@ uv run fleetroll host-monitor configs/host-lists/1804.list
 ```bash
 # single process (uses pre-built frontend)
 uv run fleetroll web
-# open http://localhost:8765
+# open http://localhost:23847
 
 # dev mode (live frontend reloading)
 uv run fleetroll web --dev          # terminal 1

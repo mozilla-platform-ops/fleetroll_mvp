@@ -1063,7 +1063,7 @@ def show_notes(
 
 @cli.command("web")
 @click.option("--host", default="127.0.0.1", show_default=True, help="Bind address.")
-@click.option("--port", default=8765, show_default=True, help="TCP port.")
+@click.option("--port", default=23847, show_default=True, help="TCP port.")
 @click.option("--dev", is_flag=True, help="Enable CORS for Vite dev server.")
 def web(host: str, port: int, dev: bool) -> None:
     """Start the fleetroll web interface."""

@@ -80,7 +80,7 @@ browser → GET /api/hello
 
 ```
 browser → Vite dev server (localhost:5173)
-        → /api/* proxy → FastAPI (localhost:8765)
+        → /api/* proxy → FastAPI (localhost:23847)
         → same handler chain
 ```
 
@@ -116,7 +116,7 @@ Add one entry in `fleetroll/cli.py`:
 ```python
 @main.command("web")
 @click.option("--host", default="127.0.0.1", show_default=True)
-@click.option("--port", default=8765, show_default=True)
+@click.option("--port", default=23847, show_default=True)
 @click.option("--dev", is_flag=True, help="Enable CORS for Vite dev server")
 def cmd_web(host: str, port: int, dev: bool) -> None:
     """Start the fleetroll web interface."""
@@ -157,7 +157,7 @@ Every response uses `response_model=` so FastAPI validates output and generates 
 ```python
 class WebSettings(BaseSettings):
     web_host: str = "127.0.0.1"
-    web_port: int = 8765
+    web_port: int = 23847
     web_dev: bool = False
 
     model_config = SettingsConfigDict(env_prefix="FLEETROLL_")
@@ -209,7 +209,7 @@ Top-level sibling directory — entirely separate from the Python package.
 web/
 ├── package.json
 ├── tsconfig.json          # "strict": true
-├── vite.config.ts         # dev proxy: /api → localhost:8765
+├── vite.config.ts         # dev proxy: /api → localhost:23847
 ├── tailwind.config.ts     # closed color token set
 ├── postcss.config.js
 ├── index.html
@@ -298,7 +298,7 @@ Thin wrapper over `fetch` with typed request/response shapes drawn from `types.g
 ```ts
 server: {
   proxy: {
-    "/api": "http://127.0.0.1:8765",
+    "/api": "http://127.0.0.1:23847",
   },
 },
 ```
@@ -325,7 +325,7 @@ pnpm --dir web dev
 ```bash
 pnpm --dir web build          # outputs web/dist/
 uv run fleetroll web          # serves API + static from web/dist/
-# Opens http://localhost:8765
+# Opens http://localhost:23847
 ```
 
 ### OpenAPI type codegen
@@ -371,7 +371,7 @@ Run web tests: `uv run pytest -m web -v`
 ### Frontend (Vitest + Playwright)
 
 - **Vitest unit**: smoke test for `Hello.tsx` — mocks `/api/hello`, asserts "Hello, fleetroll" renders.
-- **Playwright e2e**: single smoke test — starts backend + built frontend, loads `http://localhost:8765`, asserts heading text.
+- **Playwright e2e**: single smoke test — starts backend + built frontend, loads `http://localhost:23847`, asserts heading text.
 
 ### CI gates
 
