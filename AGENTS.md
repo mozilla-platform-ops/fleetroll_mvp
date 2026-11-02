@@ -64,15 +64,10 @@ rather than sharing this one.
 
 Discover other projects and agents when coordination is needed. Use a consistent
 thread ID for each topic, reply to questions, and acknowledge messages that
-request it. Check your inbox between substantial work steps and before finishing
-when participating in an active coordination thread.
+request it. Check your inbox between substantial work steps and before finishing.
 
-Send Agent Mail messages only for topics that need coordination, such as
-concurrent work, shared blockers, outstanding questions, or a handoff another
-agent needs to act on. Do not send routine progress updates, completion notices,
-or messages to yourself for independent tasks. A session ending does not by
-itself require a handoff message. When a handoff is needed, include current
-status, outstanding requests, and next steps.
+Before finishing, leave useful handoff context in Agent Mail, including current
+status, outstanding requests, and next steps for the replacement session.
 If Agent Mail is unavailable, report it and continue independent work.
 
 ## Python Environment
