@@ -78,6 +78,7 @@ class HostSetOverrideArgs:
     ignore_state: bool
     force: bool
     no_audit: bool = False
+    allow_worker_type_mismatch: bool = False
 
 
 @dataclass

@@ -30,6 +30,7 @@ from ..utils import (
     utc_now_iso,
 )
 from ._auto_audit import _maybe_auto_audit
+from .override_safety import check_worker_type, enforce_worker_type
 
 if TYPE_CHECKING:
     from ..cli_types import HostSetOverrideArgs
@@ -79,6 +80,7 @@ def set_override_for_host(
             "backup": (not args.no_backup),
             "backup_suffix": backup_suffix,
             "reason": args.reason,
+            "allow_worker_type_mismatch": args.allow_worker_type_mismatch,
         },
     }
 
@@ -132,6 +134,7 @@ def _build_skip_result(
             "backup": (not args.no_backup),
             "backup_suffix": backup_suffix,
             "reason": args.reason,
+            "allow_worker_type_mismatch": args.allow_worker_type_mismatch,
         },
     }
 
@@ -251,11 +254,25 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
     hosts = args.hosts
     host_file = args.host_file
     is_batch = host_file is not None or len(hosts) > 1
+    worker_type_checks = check_worker_type(data, hosts=hosts)
+    if worker_type_checks and not args.json:
+        if args.allow_worker_type_mismatch:
+            print("Worker type compatibility enforcement BYPASSED (--allow-worker-type-mismatch)")
+        for check in worker_type_checks:
+            status = "OK" if check["compatible"] else "INCOMPATIBLE"
+            print(
+                f"Worker type {status} {check['host']}: expected={check['expected']} "
+                f"requested={check['requested']} role={check['role']} "
+                f"observed_at={check['observed_at']}"
+                + (f" ({check['reason']})" if check["reason"] else "")
+            )
 
     if not args.confirm:
         if args.json:
             summary = {
                 "dry_run": True,
+                "worker_type_checks": worker_type_checks,
+                "allow_worker_type_mismatch": args.allow_worker_type_mismatch,
                 "action": "host.set_override",
                 "host_count": len(hosts),
                 "host": None if is_batch else hosts[0],
@@ -324,6 +341,8 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                     sys.exit(1)
                 raise
 
+        enforce_worker_type(worker_type_checks, bypass=args.allow_worker_type_mismatch)
+
         # Dry-run: warn about hosts that already have an override (when --force not set)
         if not args.force and not args.json:
             try:
@@ -350,6 +369,8 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
     if args.validate:
         validate_override_syntax(data)
         validate_override_semantics(data)
+
+    enforce_worker_type(worker_type_checks, bypass=args.allow_worker_type_mismatch)
 
     # Client-side pre-flight: block if override exists (unless --force)
     if not args.force:
@@ -511,6 +532,7 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                             "backup": (not args.no_backup),
                             "backup_suffix": backup_suffix,
                             "reason": args.reason,
+                            "allow_worker_type_mismatch": args.allow_worker_type_mismatch,
                         },
                     }
                     with log_lock:

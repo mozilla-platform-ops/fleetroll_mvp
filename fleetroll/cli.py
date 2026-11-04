@@ -465,6 +465,11 @@ def debug_host_script(
     is_flag=True,
     help="Skip the automatic gather-host run after the override is written.",
 )
+@click.option(
+    "--allow-worker-type-mismatch",
+    is_flag=True,
+    help="Bypass worker type compatibility checks, including unknown host roles.",
+)
 def host_set_override(
     host: tuple[str, ...],
     ssh_option: tuple[str, ...],
@@ -484,6 +489,7 @@ def host_set_override(
     ignore_state: bool,
     force: bool,
     no_audit: bool,
+    allow_worker_type_mismatch: bool,
 ):
     """Set the override file on one or more hosts (atomic write).
 
@@ -511,6 +517,7 @@ def host_set_override(
         ignore_state=ignore_state,
         force=force,
         no_audit=no_audit,
+        allow_worker_type_mismatch=allow_worker_type_mismatch,
     )
     cmd_host_set(args)
 

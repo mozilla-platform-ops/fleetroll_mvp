@@ -401,6 +401,14 @@ To rebuild the frontend after changes: `pnpm --dir web build`
 
 ### Override management
 
+When an override sets `WORKER_TYPE_OVERRIDE`, `host-set-override` checks each
+host's latest successful recorded role against its normal worker type. The base
+type or a nonempty hyphenated suffix is accepted. Unknown roles and mismatches
+block the entire deployment; use `--allow-worker-type-mismatch` for intentional
+exceptions. Previews show the role observation timestamp so operators can decide
+whether to refresh with `gather-host`. There is no freshness cutoff or automatic
+refresh. See [worker type safety](docs/override-worker-type-safety.md) for details.
+
 Summarize override coverage for a recorded Puppet role or Taskcluster pool:
 
 ```bash
