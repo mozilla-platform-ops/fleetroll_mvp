@@ -1258,6 +1258,8 @@ def print_cohort_table(cohorts, *, labels, width):
 def comparison_statements(comparison):
     """Describe differences in either direction without assuming rollout direction."""
     if comparison["status"] != "comparable":
+        if comparison.get("sample_status") == "insufficient":
+            return ["Comparison unavailable: insufficient shared-window sample"]
         return ["Comparison unavailable"]
     master, override = comparison["master_results"], comparison["override_results"]
     statements = []
@@ -1286,6 +1288,8 @@ def print_compact_comparison(comparison, *, labels, details):
         print(
             f"  Finished: master {left['finished']}/{minimum} · override {right['finished']}/{minimum}"
         )
+        if left["finished"] < minimum or right["finished"] < minimum:
+            print(f"  Minimum: {minimum} finished tasks per side; adjust with --min-finished.")
         if comparison["status"] == "comparable":
             print(
                 f"  Failure rates: master {percentage(left['failure_rate'])} · "
@@ -1571,7 +1575,7 @@ def print_indented(render, *, indent, **kwargs):
     print(textwrap.indent(output.getvalue(), " " * indent), end="")
 
 
-def write_report_text(value, *, stream, width, color):
+def write_report_text(value, *, stream, width, color, population_headings=()):
     """Wrap before styling; explicit CRLF works even when a TTY has OPOST/ONLCR off."""
     lines = []
     for line in value.splitlines():
@@ -1595,17 +1599,12 @@ def write_report_text(value, *, stream, width, color):
                     physical = click.style(physical, fg="red", bold=True)
                 elif "⚠" in line:
                     physical = click.style(physical, fg="yellow")
-                elif line.lstrip().startswith(
-                    (
-                        "◈",
-                        "COHORT HEALTH",
-                        "COMPARISON",
-                        "CURRENT QUEUE",
-                        "EVIDENCE LIMITS",
-                        "DETAILS",
-                    )
+                elif line.strip() in population_headings or line.lstrip().startswith(
+                    ("◈", "CURRENT QUEUE", "EVIDENCE LIMITS", "DETAILS")
                 ):
                     physical = click.style(physical, fg="cyan", bold=True)
+                elif line.lstrip().startswith(("COHORT HEALTH", "COMPARISON")):
+                    physical = click.style(physical, bold=True)
             lines.append(physical)
     tty = stream.isatty()
     newline = "\r\n" if tty else "\n"
@@ -1619,6 +1618,7 @@ def print_report(report, *, details=False, verbose=False, color=None, width=None
         color = report_color_enabled()
     width = max(20, width or min(shutil.get_terminal_size(fallback=(100, 24)).columns, 120))
     labels = cohort_labels(report["summary"]["cohorts"])
+    population_headings = set()
     output = StringIO()
     with redirect_stdout(output):
         print("◈ FLEETROLL / ROLLOUT REPORT")
@@ -1630,7 +1630,9 @@ def print_report(report, *, details=False, verbose=False, color=None, width=None
         scopes = {tuple(group["configuration"]["scope"]) for group in report["summary"]["cohorts"]}
         show_group = len({scope[3] for scope in scopes}) > 1
         for scope in sorted(scopes):
-            print("\n  " + population_label(scope, show_group=show_group))
+            heading = population_label(scope, show_group=show_group)
+            population_headings.add(heading)
+            print("\n  " + heading)
             cohorts = [
                 group
                 for group in report["summary"]["cohorts"]
@@ -1651,9 +1653,13 @@ def print_report(report, *, details=False, verbose=False, color=None, width=None
         if not scopes:
             selection = report.get("selection", {})
             if selection.get("role"):
-                print(f"\n  Role: {selection['role']}")
+                heading = f"Role: {selection['role']}"
+                population_headings.add(heading)
+                print(f"\n  {heading}")
             elif selection.get("worker_type"):
-                print(f"\n  Pool: {selection['provisioner']}/{selection['worker_type']}")
+                heading = f"Pool: {selection['provisioner']}/{selection['worker_type']}"
+                population_headings.add(heading)
+                print(f"\n  {heading}")
             print("\n    COHORT HEALTH")
             print("      ⚠ No verified cohorts available to assess.")
             print("      Comparison unavailable")
@@ -1670,7 +1676,13 @@ def print_report(report, *, details=False, verbose=False, color=None, width=None
             print(
                 "  Use --details for revisions, task breakdowns, and history; --verbose for individual runs."
             )
-    write_report_text(output.getvalue(), stream=sys.stdout, width=width, color=color)
+    write_report_text(
+        output.getvalue(),
+        stream=sys.stdout,
+        width=width,
+        color=color,
+        population_headings=population_headings,
+    )
 
 
 def cli_timestamp(value: str) -> dt.datetime:

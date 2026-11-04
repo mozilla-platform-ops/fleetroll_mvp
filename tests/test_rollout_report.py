@@ -1365,3 +1365,51 @@ def test_no_threshold_hint_for_unavailable_attribution(env, capsys):
     text = capsys.readouterr().out
     assert "--min-coverage" not in text
     assert "Comparison unavailable" in text
+
+
+@pytest.mark.parametrize("minimum", [5, 20])
+@pytest.mark.parametrize("details", [False, True])
+def test_small_comparison_sample_explains_blocker_and_offers_flag(env, capsys, minimum, details):
+    seed(env, "master")
+    seed(env, "override", sha=override(env, "branch"))
+    for host, count in (("master", 5), ("override", 13)):
+        for _ in range(count):
+            task(env, host)
+    invoke(env, "--role", ROLE, min_finished=minimum)
+    result = read(capsys)
+    report.print_report(result, color=False, details=details, width=120)
+    text = capsys.readouterr().out
+    assert f"Finished: master 5/{minimum} · override 13/{minimum}" in text
+    if minimum == 20:
+        assert "Comparison unavailable: insufficient shared-window sample" in text
+        assert "Minimum: 20 finished tasks per side; adjust with --min-finished." in text
+        assert text.count("--min-finished") == 1
+    else:
+        assert "Comparison unavailable" not in text
+        assert "--min-finished" not in text
+
+
+def test_absent_control_does_not_suggest_lowering_sample_threshold(env, capsys):
+    seed(env, "host")
+    task(env, "host")
+    invoke(env, "host")
+    report.print_report(read(capsys), color=False)
+    text = capsys.readouterr().out
+    assert "master or override cohort absent" in text
+    assert "--min-finished" not in text
+
+
+def test_population_heading_is_bold_cyan_and_nested_headings_are_quieter(env, capsys):
+    seed(env, "host")
+    invoke(env, "--role", ROLE)
+    result = read(capsys)
+    report.print_report(result, color=True, width=120)
+    colored = capsys.readouterr().out
+    heading = next(line for line in colored.splitlines() if f"{ROLE}: releng-hardware/" in line)
+    assert "\x1b[36m" in heading
+    assert "\x1b[1m" in heading
+    nested = next(line for line in colored.splitlines() if "COHORT HEALTH" in line)
+    assert "\x1b[1m" in nested
+    assert "\x1b[36m" not in nested
+    report.print_report(result, color=False, width=120)
+    assert capsys.readouterr().out == report.click.unstyle(colored)

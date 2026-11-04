@@ -8,6 +8,8 @@ deploy, remove overrides, advance a rollout, or write history.
 
 The default output shows a compact cohort table and one comparison per pair,
 followed by evidence limits. Population headings use `role: provisioner/pool`;
+they use bold cyan when color is enabled, while nested cohort/comparison headings
+use bold text without an accent color.
 `[worker-group]` appears when multiple groups occur in the report. Details and JSON
 always retain the group. Hosts in the table are currently verified; task counts
 use verified historical membership over the full report window. `Done` means
@@ -22,6 +24,12 @@ Signed failure-rate differences are override minus master; positive means a
 higher override rate, negative means a higher master rate. These are descriptions
 of verified samples, not causal findings, statistical significance, or rollout
 approval. No deployment/removal direction is inferred.
+
+When either side has too few finished tasks, the comparison explicitly reports an
+insufficient shared-window sample, shows counts against the minimum, and points
+to `--min-finished` to adjust it. This sample setting is separate from the
+`--min-coverage` attribution warning threshold. Other comparison blockers remain
+visible even when the sample minimum is lowered.
 
 Evidence limits keep coverage, excluded failures/exceptions/unknown outcomes,
 query errors, observation freshness, unverified configurations, and retrieval
