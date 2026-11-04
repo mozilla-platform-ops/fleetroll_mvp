@@ -79,10 +79,23 @@ distributions. Pairwise comparisons use their overlapping verified time range
 inside the requested report window. Jobs are filtered to that same window on
 both sides. The report shows rates and percentage-point differences, never an
 automatic recommendation to advance. Multiple applied revisions, unknown
-outcomes, query errors, low attribution coverage, or too few finished tasks
+outcomes, unresolved task queries, low attribution coverage, or too few finished tasks
 qualify the comparison as insufficient evidence. Defaults require 20 finished
 tasks per side and 80% attribution coverage; these are configurable evidence
 thresholds, not statistical significance tests.
+
+Partial host observations do not automatically veto the assessment. At least
+80% of selected hosts must be successfully queried by default, configurable with
+`--min-host-coverage`. Comparisons apply this threshold within their role/pool/group
+scope. Missing host queries and unverified current configurations remain explicit
+warnings; tasks enter comparisons only through verified historical intervals.
+Thus six unavailable hosts out of 132 pass the host-query threshold (95.5%), while
+task-attribution coverage is checked independently. Current configuration warnings
+do not invalidate otherwise verified historical work. Collection errors remain in
+JSON and retain their nonzero exit status even when the available sample is comparable.
+The assessment and comparison JSON include `warnings` and `host_query_coverage`
+with queried/requested counts, the observed fraction, and the minimum fraction.
+Human-readable blockers state the measured coverage and required threshold.
 
 Rates use completed + failed + exception as their denominator. Failed and
 exception rates remain separate. Pending/running/unknown outcomes do not count

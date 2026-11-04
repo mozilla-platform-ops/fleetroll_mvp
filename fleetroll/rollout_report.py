@@ -608,7 +608,31 @@ def cohort_candidates(hosts, *, config_id, start, end):
     return candidates
 
 
-def compare_cohorts(hosts, *, summary, since, until, min_finished, min_coverage):
+def assess_host_queries(queried: int, *, requested: int, minimum: float) -> dict[str, Any]:
+    """Allow partial host evidence, while retaining an explicit population bound."""
+    fraction = queried / requested if requested else None
+    reasons, warnings = [], []
+    if fraction is None or fraction < minimum:
+        reasons.append(
+            f"host query coverage {percentage(fraction)} below required {percentage(minimum)}"
+        )
+    if queried < requested:
+        warnings.append(
+            f"{requested - queried}/{requested} hosts not queried; their task counts are unknown"
+        )
+    return {
+        "queried_hosts": queried,
+        "requested_hosts": requested,
+        "fraction": fraction,
+        "minimum_fraction": minimum,
+        "reasons": reasons,
+        "warnings": warnings,
+    }
+
+
+def compare_cohorts(
+    hosts, *, summary, since, until, min_finished, min_coverage, min_host_coverage=0.8
+):
     comparisons = []
     by_scope = defaultdict(list)
     for group in summary["cohorts"]:
@@ -702,19 +726,33 @@ def compare_cohorts(hosts, *, summary, since, until, min_finished, min_coverage)
                 coverage(cohort_candidates(hosts, config_id=config_id, start=start, end=end))
                 for config_id in configs
             ]
+            host_coverage = assess_host_queries(
+                sum(host["query_ok"] for host in relevant),
+                requested=len(relevant),
+                minimum=min_host_coverage,
+            )
+            reasons.extend(host_coverage["reasons"])
+            warnings = list(host_coverage["warnings"])
+            unverified = sum(not host["configuration"] for host in relevant)
+            if unverified:
+                warnings.append(f"{unverified} current host configuration(s) unverified")
             for label, jobs, stat, evidence in zip(
                 ("master", "override"), pair_jobs, stats, side_coverage, strict=True
             ):
                 if stat["finished"] < min_finished:
                     reasons.append(f"{label}: fewer than {min_finished} finished tasks")
                 if evidence["fraction"] is None or evidence["fraction"] < min_coverage:
-                    reasons.append(f"{label}: insufficient configuration attribution coverage")
+                    reasons.append(
+                        f"{label}: configuration attribution coverage "
+                        f"{percentage(evidence['fraction'])} below required {percentage(min_coverage)}"
+                    )
                 if len({job["configuration"]["git_sha"] for job in jobs}) > 1:
                     reasons.append(f"{label}: multiple applied revisions in the comparison")
             if pair_coverage["fraction"] is None or pair_coverage["fraction"] < min_coverage:
-                reasons.append("insufficient configuration attribution coverage")
-            if any(not host["query_ok"] or not host["configuration"] for host in relevant):
-                reasons.append("host queries or current configuration evidence incomplete")
+                reasons.append(
+                    f"overall: configuration attribution coverage "
+                    f"{percentage(pair_coverage['fraction'])} below required {percentage(min_coverage)}"
+                )
             if any(job.get("query_error") or job["outcome"] == "unknown" for job in candidates):
                 reasons.append("unresolved task queries or outcomes")
             differences = {}
@@ -734,23 +772,34 @@ def compare_cohorts(hosts, *, summary, since, until, min_finished, min_coverage)
                     "coverage": pair_coverage,
                     "master_coverage": side_coverage[0],
                     "override_coverage": side_coverage[1],
+                    "host_query_coverage": host_coverage,
                     "status": "insufficient evidence" if reasons else "comparable",
                     "reasons": reasons,
+                    "warnings": warnings,
                     **differences,
                 }
             )
     return comparisons
 
 
-def evidence_status(summary, *, min_finished, min_coverage):
-    reasons = []
-    if summary["queried_hosts"] < summary["requested_hosts"]:
-        reasons.append("host query coverage incomplete (missing task counts unknown)")
+def evidence_status(summary, *, min_finished, min_coverage, min_host_coverage=0.8):
+    host_coverage = assess_host_queries(
+        summary["queried_hosts"],
+        requested=summary["requested_hosts"],
+        minimum=min_host_coverage,
+    )
+    reasons = list(host_coverage["reasons"])
+    warnings = list(host_coverage["warnings"])
     if summary["unverified_hosts"]:
-        reasons.append("some current host configurations are unverified")
+        warnings.append(
+            f"{len(summary['unverified_hosts'])} current host configuration(s) unverified"
+        )
     fraction = summary["coverage"]["fraction"]
     if fraction is None or fraction < min_coverage:
-        reasons.append("insufficient configuration attribution coverage")
+        reasons.append(
+            f"configuration attribution coverage {percentage(fraction)} "
+            f"below required {percentage(min_coverage)}"
+        )
     if not summary["cohorts"] or any(
         group["finished"] < min_finished for group in summary["cohorts"]
     ):
@@ -760,6 +809,8 @@ def evidence_status(summary, *, min_finished, min_coverage):
     return {
         "status": "insufficient evidence" if reasons else "sample available",
         "reasons": reasons,
+        "warnings": warnings,
+        "host_query_coverage": host_coverage,
     }
 
 
@@ -952,6 +1003,24 @@ def print_unverified_hosts(report, *, details):
         print("  Use --details or --verbose for host names.")
 
 
+def print_assessment(evidence, *, style):
+    verdict = evidence["status"]
+    verdict_color = "yellow" if verdict == "insufficient evidence" else "cyan"
+    symbol = "⚠" if verdict == "insufficient evidence" else "◆"
+    print("  " + style(f"{symbol}  {verdict.upper()}", fg=verdict_color, bold=True))
+    print("   Evidence assessment only; not automatic rollout approval.")
+    for reason in evidence["reasons"]:
+        print(f"   • {reason}")
+    for warning in evidence.get("warnings", []):
+        print(f"   ⚠ {warning}")
+    host_coverage = evidence.get("host_query_coverage")
+    if host_coverage:
+        print(
+            f"   Host query coverage: {percentage(host_coverage['fraction'])}; "
+            f"minimum {percentage(host_coverage['minimum_fraction'])}"
+        )
+
+
 def print_report(report, *, details=False, verbose=False, color=None):
     if color is None:
         color = report_color_enabled()
@@ -974,13 +1043,7 @@ def print_report(report, *, details=False, verbose=False, color=None):
         for line in render_queue_counts(report["queue_counts"], color=color, include_heading=False):
             print(f"  {line}")
     heading("Rollout assessment")
-    verdict = summary["evidence"]["status"]
-    verdict_color = "yellow" if verdict == "insufficient evidence" else "cyan"
-    symbol = "⚠" if verdict == "insufficient evidence" else "◆"
-    print("  " + style(f"{symbol}  {verdict.upper()}", fg=verdict_color, bold=True))
-    print("   Evidence assessment only; not automatic rollout approval.")
-    for reason in summary["evidence"]["reasons"]:
-        print(f"   • {reason}")
+    print_assessment(summary["evidence"], style=style)
     heading("Fleet override status")
     print_fleet_override_status(report["fleet_override_status"])
     heading("Coverage")
@@ -1065,10 +1128,9 @@ def print_report(report, *, details=False, verbose=False, color=None):
                 else "  Failure-rate difference unavailable"
             )
         for reason in comparison["reasons"]:
-            label = (
-                "overall: " if reason == "insufficient configuration attribution coverage" else ""
-            )
-            print(f"  {label}{reason}")
+            print(f"  {reason}")
+        for warning in comparison.get("warnings", []):
+            print(f"  ⚠ {warning}")
     for pattern in summary["failure_patterns"]:
         print(f"\nFailure pattern: {pattern['name']}; {len(pattern['hosts'])} host(s)")
         counts = {labels[key]: count for key, count in pattern["cohorts"].items()}
@@ -1161,6 +1223,12 @@ def parse_args(argv=None, *, prog=None):
         help="Minimum classified recent-run coverage percent (default 80).",
     )
     parser.add_argument(
+        "--min-host-coverage",
+        type=float,
+        default=80,
+        help="Minimum successfully queried host percent (default 80); missing hosts remain warnings.",
+    )
+    parser.add_argument(
         "--workers", type=int, default=4, help="Concurrent host queries (1-20, default 4)."
     )
     parser.add_argument(
@@ -1200,6 +1268,7 @@ def parse_args(argv=None, *, prog=None):
         or not 0 < args.max_observation_gap <= 366 * 86400
         or args.min_finished < 1
         or not 0 <= args.min_coverage <= 100
+        or not 0 <= args.min_host_coverage <= 100
     ):
         parser.error("invalid workers, observation gap, minimum finished, or coverage threshold")
     now = dt.datetime.now(dt.UTC)
@@ -1283,7 +1352,10 @@ def main(argv=None, *, prog=None) -> int:
         warnings.extend(f"{host['host']}: {warning}" for warning in host["warnings"])
     summary = summarize(hosts)
     summary["evidence"] = evidence_status(
-        summary, min_finished=args.min_finished, min_coverage=args.min_coverage / 100
+        summary,
+        min_finished=args.min_finished,
+        min_coverage=args.min_coverage / 100,
+        min_host_coverage=args.min_host_coverage / 100,
     )
     if summary["truncated_hosts"]:
         warnings.append(
@@ -1311,6 +1383,7 @@ def main(argv=None, *, prog=None) -> int:
             until=args.until,
             min_finished=args.min_finished,
             min_coverage=args.min_coverage / 100,
+            min_host_coverage=args.min_host_coverage / 100,
         ),
         "errors": errors,
         "warnings": warnings,

@@ -442,6 +442,9 @@ def test_explicit_failed_identity_blocks_role_fallback(env, capsys):
         ["host", "--since", "bad"],
         ["host", "--workers", "0"],
         ["host", "--max-observation-gap", "nan"],
+        ["host", "--min-host-coverage", "nan"],
+        ["host", "--min-host-coverage", "101"],
+        ["host", "--min-host-coverage", "-1"],
         ["--worker-type", "/pool"],
         ["--worker-type", "a/b/c"],
         ["--worker-type", "other/pool", "--provisioner", "releng-hardware"],
@@ -640,6 +643,61 @@ def test_one_low_coverage_override_cannot_hide_behind_large_master_sample(env, c
     assert invoke(env, "--role", ROLE, min_finished=1) == 0
     result = read(capsys)
     assert result["comparisons"][0]["status"] == "insufficient evidence"
+
+
+@pytest.mark.parametrize("missing_kind", ["unavailable", "unverified"])
+def test_partial_host_evidence_warns_without_vetoing_valid_comparison(env, capsys, missing_kind):
+    sha = override(env, "branch")
+    for number in range(8):
+        host = f"healthy-{number}"
+        seed(env, host, sha=sha if number % 2 else None)
+        task(env, host, minute=80)
+    if missing_kind == "unavailable":
+        for number in range(2):
+            host = f"unavailable-{number}"
+            seed(env, host, stamp=UNTIL - dt.timedelta(minutes=10))
+            insert_host_observation(
+                env.conn,
+                {"host": host, "ts": UNTIL.isoformat(), "ok": False, "observed": {}},
+            )
+        env.conn.commit()
+    else:
+        seed(env, "unverified", puppet_success=False)
+        task(env, "unverified", minute=80)
+    assert invoke(env, "--role", ROLE, min_finished=1) == int(missing_kind == "unavailable")
+    result = read(capsys)
+    evidence = result["summary"]["evidence"]
+    assert evidence["status"] == "sample available"
+    assert evidence["reasons"] == []
+    assert evidence["warnings"]
+    comparison = result["comparisons"][0]
+    assert comparison["status"] == "comparable"
+    assert comparison["reasons"] == []
+    assert comparison["warnings"]
+    report.print_report(result, color=False)
+    output = capsys.readouterr().out
+    assert "current host configuration(s) unverified" in output
+    if missing_kind == "unavailable":
+        assert "Host query coverage: 80.0%; minimum 80.0%" in output
+        assert "2/10 hosts not queried" in output
+
+
+def test_host_query_threshold_still_blocks_severely_incomplete_population(env, capsys):
+    sha = override(env, "branch")
+    seed(env, "master")
+    seed(env, "override", sha=sha)
+    for host in ("master", "override"):
+        task(env, host, minute=80)
+    seed(env, "offline", stamp=SINCE)
+    assert invoke(env, "--role", ROLE, min_finished=1) == 1
+    result = read(capsys)
+    assert result["summary"]["evidence"]["status"] == "insufficient evidence"
+    assert result["comparisons"][0]["status"] == "insufficient evidence"
+    assert "host query coverage 66.7% below required 80.0%" in result["comparisons"][0]["reasons"]
+    assert invoke(env, "--role", ROLE, min_finished=1, min_host_coverage=60) == 1
+    result = read(capsys)
+    assert result["comparisons"][0]["status"] == "comparable"
+    assert result["summary"]["evidence"]["status"] == "sample available"
 
 
 def test_comparison_without_intervals_in_requested_window_does_not_crash(env, capsys):
