@@ -397,6 +397,20 @@ To rebuild the frontend after changes: `pnpm --dir web build`
 
 ### Override management
 
+Summarize override coverage for a recorded Puppet role or Taskcluster pool:
+
+```bash
+uv run fleetroll fleet-status --role gecko_t_linux_2404_talos
+uv run fleetroll fleet-status --worker-type releng-hardware/gecko-t-linux-talos-2404 --json
+uv run fleetroll fleet-status --role gecko_t_linux_2404_talos configs/host-lists/linux/all.list
+```
+
+Percentages use confirmed matching hosts as the denominator. Unknown membership,
+failed refreshes, and Fleetroll writes awaiting verification are reported separately.
+The latest successful observations are used regardless of age; manual changes after
+an observation may not be reflected. Without a host list, the population consists of
+hosts identifiable from Fleetroll's recorded observations.
+
 ```bash
 # show stored override contents by sha prefix or human hash
 uv run fleetroll show-override 0328af8c9d6f

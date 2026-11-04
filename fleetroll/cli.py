@@ -281,6 +281,26 @@ def host_monitor(
     cmd_host_monitor(args)
 
 
+@cli.command("fleet-status")
+@click.argument("hosts_file", required=False, type=click.Path(exists=True, dir_okay=False))
+@click.option("--role", help="Puppet role to select.")
+@click.option("--worker-type", help="Taskcluster provisioner/worker-type to select.")
+@click.option("--json", "json_output", is_flag=True, help="Emit machine-readable JSON.")
+def fleet_status(
+    hosts_file: str | None, role: str | None, worker_type: str | None, json_output: bool
+):
+    """Summarize recorded override status for a role or worker pool."""
+    from .commands.fleet_status import run_fleet_status
+
+    if bool(role) == bool(worker_type):
+        raise click.UsageError("Specify exactly one of --role or --worker-type")
+    if worker_type and (worker_type.count("/") != 1 or not all(worker_type.split("/"))):
+        raise click.UsageError("--worker-type must be provisioner/worker-type")
+    run_fleet_status(
+        hosts_file=hosts_file, role=role, worker_type=worker_type, json_output=json_output
+    )
+
+
 @cli.command("show-override")
 @click.argument("sha_prefix")
 @click.option(

@@ -1,0 +1,209 @@
+"""Summarize recorded override and Puppet state for a fleet population."""
+
+from __future__ import annotations
+
+import json
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+import click
+
+from ..audit import iter_audit_records
+from ..db import get_connection, get_db_path, get_latest_host_observations
+from ..rollout_history import (
+    WRITE_ACTIONS,
+    applied_time,
+    override_info,
+    parse_timestamp,
+    worker_identity,
+)
+from ..utils import default_audit_log_path, parse_host_list
+
+
+def build_report(
+    *,
+    hosts: list[str],
+    latest: dict,
+    successful: dict,
+    writes: dict,
+    role: str | None,
+    worker_type: str | None,
+    overrides_dir: Path,
+    scoped: bool,
+) -> dict[str, Any]:
+    """Build the report from recorded evidence without refreshing hosts."""
+    groups: dict[str | None, dict[str, Any]] = {}
+    unresolved, nonmatching, missing = [], [], []
+    failed, pending, legacy, timestamps = [], [], [], []
+    for host in sorted(set(hosts)):
+        record = successful.get(host)
+        if not record:
+            missing.append(host)
+            unresolved.append(host)
+            continue
+        observed = record.get("observed") or {}
+        if role:
+            membership = observed.get("role")
+            match = membership == role if membership else None
+        else:
+            identity, _ = worker_identity(record, overrides_dir=overrides_dir)
+            match = f"{identity.provisioner}/{identity.pool}" == worker_type if identity else None
+            if match and identity and identity.legacy:
+                legacy.append(host)
+        if match is None:
+            unresolved.append(host)
+            continue
+        if not match:
+            nonmatching.append(host)
+            continue
+        stamp = parse_timestamp(record.get("ts"))
+        timestamps.append(record.get("ts"))
+        newer = parse_timestamp((latest.get(host) or {}).get("ts"))
+        if latest.get(host) and not latest[host].get("ok") and newer and stamp and newer > stamp:
+            failed.append(host)
+        write = writes.get(host.split(".")[0].lower())
+        changed = bool(write and (not stamp or write > stamp))
+        if changed:
+            pending.append(host)
+        present = observed.get("override_present")
+        sha = observed.get("override_sha256") if present is True else None
+        key = (
+            sha
+            if present is True and isinstance(sha, str) and sha
+            else None
+            if present is False
+            else "unknown"
+        )
+        if key not in groups:
+            info = override_info(key, overrides_dir) if key and key != "unknown" else None
+            groups[key] = {
+                "override_sha256": key if key != "unknown" else None,
+                "state": "unknown" if key == "unknown" else "present" if key else "absent",
+                "branch": info.get("branch") if info else None,
+                "hosts": [],
+                "puppet_status": Counter(),
+            }
+        group = groups[key]
+        group["hosts"].append(host)
+        success = observed.get("puppet_success")
+        applied = observed.get("puppet_override_sha_applied")
+        puppet_time = applied_time(observed)
+        if (
+            changed
+            or not puppet_time
+            or (write and puppet_time <= write)
+            or success is None
+            or "puppet_override_sha_applied" not in observed
+            or key == "unknown"
+        ):
+            status = "unknown"
+        elif success is False:
+            status = "failed"
+        elif success is not True:
+            status = "unknown"
+        elif applied == (sha if present else None):
+            status = "applied"
+        else:
+            status = "mismatch"
+        group["puppet_status"][status] += 1
+    total = sum(len(group["hosts"]) for group in groups.values())
+    for group in groups.values():
+        group["count"] = len(group["hosts"])
+        group["percentage"] = round(100 * group["count"] / total, 1) if total else None
+        group["puppet_status"] = {
+            k: group["puppet_status"][k] for k in ("applied", "mismatch", "failed", "unknown")
+        }
+    totals = {}
+    for state in ("present", "absent", "unknown"):
+        count = sum(group["count"] for group in groups.values() if group["state"] == state)
+        totals[state] = {
+            "count": count,
+            "percentage": round(100 * count / total, 1) if total else None,
+        }
+    return {
+        "schema_version": 1,
+        "selector": {"role": role, "worker_type": worker_type},
+        "population_source": "host_list" if scoped else "recorded_hosts",
+        "matching_hosts": total,
+        "override_totals": totals,
+        "nonmatching_hosts": nonmatching,
+        "unresolved_hosts": unresolved,
+        "missing_successful_observations": missing,
+        "newer_failed_gathers": failed,
+        "unverified_writes": pending,
+        "legacy_mapped_hosts": legacy,
+        "observation_range": {
+            "earliest": min((t for t in timestamps if t), default=None),
+            "latest": max((t for t in timestamps if t), default=None),
+        },
+        "groups": sorted(groups.values(), key=lambda g: (g["state"], g["override_sha256"] or "")),
+        "note": "Manual changes after observation may not be reflected.",
+    }
+
+
+def run_fleet_status(
+    *, hosts_file: str | None, role: str | None, worker_type: str | None, json_output: bool
+) -> None:
+    path = get_db_path()
+    if not path.exists():
+        raise click.ClickException(f"Database not found: {path}")
+    conn = get_connection(path)
+    try:
+        known = [row[0] for row in conn.execute("SELECT DISTINCT host FROM host_observations")]
+        if hosts_file:
+            hosts = []
+            for host in parse_host_list(Path(hosts_file)):
+                matches = [name for name in known if name.split(".")[0].lower() == host.lower()]
+                hosts.append(matches[0] if host not in known and len(matches) == 1 else host)
+        else:
+            hosts = known
+        latest, successful = get_latest_host_observations(conn, hosts)
+    finally:
+        conn.close()
+    writes = {}
+    for event in iter_audit_records(default_audit_log_path()):
+        if not isinstance(event, dict) or event.get("action") not in WRITE_ACTIONS:
+            continue
+        host, stamp = event.get("host"), parse_timestamp(event.get("ts"))
+        if isinstance(host, str) and stamp:
+            key = host.split(".")[0].lower()
+            if key not in writes or stamp > writes[key]:
+                writes[key] = stamp
+    report = build_report(
+        hosts=hosts,
+        latest=latest,
+        successful=successful,
+        writes=writes,
+        role=role,
+        worker_type=worker_type,
+        overrides_dir=path.parent / "overrides",
+        scoped=hosts_file is not None,
+    )
+    if json_output:
+        click.echo(json.dumps(report, indent=2, sort_keys=True))
+        return
+    click.echo(f"Matching hosts: {report['matching_hosts']} ({report['population_source']})")
+    for state, data in report["override_totals"].items():
+        click.echo(f"Override {state}: {data['count']} ({data['percentage']}%)")
+    click.echo(
+        f"Observations: {report['observation_range']['earliest']} to {report['observation_range']['latest']}"
+    )
+    for group in report["groups"]:
+        label = group["override_sha256"] or group["state"]
+        click.echo(
+            f"{label}  branch={group['branch'] or 'unknown'}  "
+            f"{group['count']} ({group['percentage']}%)  Puppet: {group['puppet_status']}"
+        )
+    for key in (
+        "nonmatching_hosts",
+        "unresolved_hosts",
+        "missing_successful_observations",
+        "newer_failed_gathers",
+        "unverified_writes",
+        "legacy_mapped_hosts",
+    ):
+        click.echo(
+            f"{key}: {len(report[key])}" + (f" ({', '.join(report[key])})" if report[key] else "")
+        )
+    click.echo(report["note"])
