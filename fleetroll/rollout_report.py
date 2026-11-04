@@ -23,6 +23,7 @@ from .commands.fleet_status import build_report as build_fleet_status
 from .configuration_history import read_evidence, state_payload
 from .constants import DEFAULT_TC_PROVISIONER, OVERRIDES_DIR_NAME
 from .db import get_db_path
+from .queue_counts import collect_queue_counts, render_queue_counts
 from .rollout_history import (
     WRITE_ACTIONS,
     Configuration,
@@ -977,6 +978,10 @@ def print_report(report, *, details=False, verbose=False, color=None):
         print(f"   • {reason}")
     heading("Fleet override status")
     print_fleet_override_status(report["fleet_override_status"])
+    if "queue_counts" in report:
+        print()
+        for line in render_queue_counts(report["queue_counts"]):
+            print(f"  {line}")
     heading("Coverage")
     print(f"  Hosts queried: {summary['queried_hosts']}/{summary['requested_hosts']}")
     evidence = summary["coverage"]
@@ -1285,7 +1290,7 @@ def main(argv=None, *, prog=None) -> int:
         )
     if summary["coverage"]["excluded"]:
         warnings.append("Excluded jobs are unknown configuration evidence, not successful work.")
-    report = {
+    report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "configuration_history": history_metadata,
         "fleet_override_status": fleet_override_status(
@@ -1309,6 +1314,18 @@ def main(argv=None, *, prog=None) -> int:
         "errors": errors,
         "warnings": warnings,
     }
+    successful = {
+        host: entry
+        for host, entries in records.items()
+        for entry in entries
+        if entry.get("action", "host.audit") == "host.audit" and entry.get("ok")
+    }
+    report["queue_counts"] = collect_queue_counts(
+        report["fleet_override_status"],
+        observations=successful,
+        overrides_dir=overrides_dir,
+        queue=clients.queue,
+    )
     if args.json:
         print(json.dumps(report, indent=2))
     else:

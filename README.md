@@ -414,6 +414,15 @@ an observation may not be reflected. Without a host list, the population consist
 hosts identifiable from Fleetroll's recorded observations.
 Use `--verbose` to show host lists, or `--json` for machine-readable details.
 
+Both `fleet-status` and `rollout-report` fetch the current approximate number of
+pending Taskcluster tasks for each effective worker pool. Counts cover the whole
+pool, including workers outside the selected hosts or role, and include a fetch
+timestamp. Pools are resolved from recorded worker identities, with legacy
+role/override mapping for older observations. Queue lookup failures appear as
+unavailable and do not prevent the recorded report from rendering or change its
+exit status. Public queue counts need network access but no Taskcluster credentials
+(`rollout-report` still needs credentials for its worker/task queries).
+
 ```bash
 # show stored override contents by sha prefix or human hash
 uv run fleetroll show-override 0328af8c9d6f

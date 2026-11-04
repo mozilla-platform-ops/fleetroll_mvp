@@ -62,6 +62,15 @@ unverified writes indicate when those recorded states may be stale. This split i
 distinct from the verified historical cohorts used for task comparisons. Explicit
 host selections describe only the selected hosts, not the whole fleet.
 
+Current queue depth lists approximate pending task counts per effective worker
+pool, fetched once per pool via Taskcluster `taskQueueCounts`. Each count includes
+its fetch timestamp and covers the whole pool, including hosts outside the report
+selection. These are live counts even with historical `--until`; they are separate
+from historical task outcomes and cohort attribution. Pool selection uses the
+recorded identities at the report horizon. Unknown identities and legacy mapping
+are identified; failed queue lookups show unavailable, never zero, and do not
+change the report exit status.
+
 Master and each override SHA have separate summaries, with applied revision
 distributions. Pairwise comparisons use their overlapping verified time range
 inside the requested report window. Jobs are filtered to that same window on
@@ -79,12 +88,17 @@ root-cause classifications. Each host query retains up to 20 recent task runs,
 so the tool does not claim complete historical coverage. A full recent-history
 window always produces a truncation warning.
 
-JSON has `schema_version`, `configuration_history`, `fleet_override_status`, `window`, `hosts`, `summary`, `comparisons`, `errors`,
+JSON has `schema_version`, `configuration_history`, `fleet_override_status`, `queue_counts`, `window`, `hosts`, `summary`, `comparisons`, `errors`,
 and `warnings`. Host results retain jobs and per-job exclusion reasons. Summary
 coverage reports fetched, in-window, classified, excluded, and unresolved task
 counts, requested/queried hosts, and observation freshness. Query failures have
 unknown task counts; they are never zero-job successes. Missing comparison
 cohorts still produce useful standalone summaries.
+
+`queue_counts` contains `scope: "whole_pool"`, `approximate: true`, `pools`,
+`unresolved_hosts`, and `legacy_mapped_hosts`. Each pool has `worker_pool`,
+`pending_tasks` (null when unavailable), `checked_at`, and `error`. The same
+additive field is included in fleet-status JSON; schema version remains 1.
 
 The human report also shows all retrieved in-window outcomes across configurations,
 including unattributed runs, and counts the reasons those runs were excluded from

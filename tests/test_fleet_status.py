@@ -1,8 +1,11 @@
 import hashlib
+import json
+from unittest.mock import Mock
 
 from click.testing import CliRunner
 from fleetroll.cli import cli
 from fleetroll.commands.fleet_status import build_report, render_report
+from fleetroll.db import insert_host_observation
 from fleetroll.rollout_history import parse_timestamp
 
 
@@ -101,3 +104,45 @@ def test_worker_identity_and_absent_override(tmp_path):
     )
     assert report["override_totals"]["absent"]["count"] == 1
     assert report["groups"][0]["puppet_status"]["applied"] == 1
+
+
+def test_cli_fetches_public_queue_counts_in_text_and_json(temp_db, db_conn, monkeypatch):
+    monkeypatch.setattr("fleetroll.commands.fleet_status.get_db_path", lambda: temp_db)
+    queue = Mock()
+    queue.taskQueueCounts.return_value = {"pendingTasks": 0}
+    factory = Mock(return_value=queue)
+    monkeypatch.setattr("fleetroll.queue_counts.taskcluster.Queue", factory)
+    insert_host_observation(
+        db_conn,
+        {
+            "host": "worker",
+            "ok": True,
+            "ts": "2026-01-01T02:00:00Z",
+            "observed": {
+                "role": "talos",
+                "override_present": False,
+                "tc_worker_identity_status": "ok",
+                "tc_worker_identity": {
+                    "provisionerId": "prov",
+                    "workerType": "pool",
+                    "workerGroup": "group",
+                    "workerId": "worker",
+                },
+            },
+        },
+    )
+    db_conn.commit()
+    runner = CliRunner()
+    result = runner.invoke(cli, ["fleet-status", "--role", "talos", "--json"])
+    assert result.exit_code == 0, result.output
+    counts = json.loads(result.output)["queue_counts"]
+    assert counts["pools"][0]["pending_tasks"] == 0
+    assert "credentials" not in factory.call_args.args[0]
+    result = runner.invoke(cli, ["fleet-status", "--role", "talos"])
+    assert result.exit_code == 0
+    assert "prov/pool: 0 pending (checked " in result.output
+    queue.taskQueueCounts.side_effect = RuntimeError("offline")
+    result = runner.invoke(cli, ["fleet-status", "--role", "talos"])
+    assert result.exit_code == 0
+    assert "prov/pool: unavailable" in result.output
+    assert "Matching hosts: 1" in result.output

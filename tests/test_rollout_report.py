@@ -62,6 +62,7 @@ def env(tmp_path, temp_db, db_conn, monkeypatch):
     directory = tmp_path / "overrides"
     directory.mkdir()
     clients = SimpleNamespace(queue=Mock(), worker_manager=Mock())
+    clients.queue.taskQueueCounts.return_value = {"pendingTasks": 12}
     clients.worker_manager.getWorker.return_value = {"recentTasks": []}
     monkeypatch.setattr(report, "load_tc_credentials", Mock())
     monkeypatch.setattr(report, "create_tc_clients", Mock(return_value=clients))
@@ -147,6 +148,27 @@ def invoke(env, *selection, **options):
 
 def read(capsys):
     return json.loads(capsys.readouterr().out)
+
+
+def test_live_queue_counts_separate_pools_and_preserve_report_on_failure(env, capsys):
+    seed(env, "master")
+    seed(env, "second")
+    seed(env, "isolated", tc_worker_identity=identity("isolated", pool="isolated-pool"))
+    env.clients.queue.taskQueueCounts.side_effect = [
+        RuntimeError("queue unavailable"),
+        {"pendingTasks": 1234},
+    ]
+    assert invoke(env, "--role", ROLE) == 0
+    result = read(capsys)
+    counts = result["queue_counts"]
+    assert len(counts["pools"]) == 2
+    assert env.clients.queue.taskQueueCounts.call_count == 2
+    assert counts["pools"][0]["pending_tasks"] is None
+    assert counts["pools"][1]["pending_tasks"] == 1234
+    report.print_report(result, color=False)
+    output = capsys.readouterr().out
+    assert "releng-hardware/talos-pool: 1,234 pending" in output
+    assert "releng-hardware/isolated-pool: unavailable" in output
 
 
 def test_role_report_compares_each_override_with_master_and_separates_failures(env, capsys):

@@ -11,6 +11,7 @@ import click
 
 from ..audit import iter_audit_records
 from ..db import get_connection, get_db_path, get_latest_host_observations
+from ..queue_counts import collect_queue_counts, render_queue_counts
 from ..rollout_history import (
     WRITE_ACTIONS,
     applied_time,
@@ -152,6 +153,8 @@ def render_report(report: dict[str, Any], *, verbose: bool = False) -> str:
     total = report["matching_hosts"]
     source = "host list" if report["population_source"] == "host_list" else "recorded hosts"
     lines.append(f"Matching hosts: {total}  (source: {source})")
+    if "queue_counts" in report:
+        lines.extend(["", *render_queue_counts(report["queue_counts"])])
     lines.append("")
     lines.append("Overrides")
     for state, label in (("present", "Present"), ("absent", "Absent"), ("unknown", "Unknown")):
@@ -254,6 +257,9 @@ def run_fleet_status(
         worker_type=worker_type,
         overrides_dir=path.parent / "overrides",
         scoped=hosts_file is not None,
+    )
+    report["queue_counts"] = collect_queue_counts(
+        report, observations=successful, overrides_dir=path.parent / "overrides"
     )
     if json_output:
         click.echo(json.dumps(report, indent=2, sort_keys=True))
