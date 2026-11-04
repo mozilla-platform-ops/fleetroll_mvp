@@ -482,13 +482,53 @@ def outcome_summary(jobs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def coverage(jobs: list[dict[str, Any]]) -> dict[str, Any]:
+def scope_host_history(
+    host: dict[str, Any],
+    *,
+    role: str | None = None,
+    worker_type: str | None = None,
+    provisioner: str | None = None,
+) -> dict[str, Any]:
+    """Partition verified evidence without guessing the scope of unknown jobs.
+
+    Attribution has already checked the full timeline, so filtering cannot bridge
+    transitions or turn an unknown run into verified work.
+    """
+    if not role and not worker_type:
+        return host
+
+    def matches(config: dict[str, Any]) -> bool:
+        if role:
+            return config["role"] == role
+        return config["scope"][1:3] == [provisioner, worker_type]
+
+    omitted: dict[str, Any] = {"intervals": [], "jobs": [], "configuration": None}
+    result: dict[str, Any] = {**host, "intervals": [], "jobs": [], "out_of_scope_history": omitted}
+    for interval in host["intervals"]:
+        target = result if matches(interval["configuration"]) else omitted
+        target["intervals"].append(interval)
+    for job in host["jobs"]:
+        config = job["configuration"]
+        target = result if config is None or matches(config) else omitted
+        target["jobs"].append(job)
+    if host["configuration"] and not matches(host["configuration"]):
+        omitted["configuration"] = host["configuration"]
+        result["configuration"] = None
+        result["configuration_reason"] = "verified current configuration outside report selection"
+    return result
+
+
+def coverage(
+    jobs: list[dict[str, Any]], *, out_of_scope_jobs: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    omitted = out_of_scope_jobs or []
     candidates = [job for job in jobs if job["in_window"]]
     classified = [job for job in candidates if job["configuration"] is not None]
     return {
-        "fetched": len(jobs),
+        "fetched": len(jobs) + len(omitted),
         "in_window": len(candidates),
-        "outside_window": len(jobs) - len(candidates),
+        "outside_window": sum(not job["in_window"] for job in [*jobs, *omitted]),
+        "out_of_scope": sum(job["in_window"] for job in omitted),
         "classified": len(classified),
         "excluded": len(candidates) - len(classified),
         "unresolved": sum(bool(job.get("query_error")) for job in candidates),
@@ -586,6 +626,9 @@ def summarize(hosts: list[dict[str, Any]], *, min_finished: int = 20) -> dict[st
             groups[key]["configuration"]["kind"] == "master" for key in pattern["cohorts"]
         )
     jobs = [job for host in hosts for job in host["jobs"]]
+    omitted_jobs = [
+        job for host in hosts for job in host.get("out_of_scope_history", {}).get("jobs", [])
+    ]
     return {
         "requested_hosts": len(hosts),
         "queried_hosts": sum(host["query_ok"] for host in hosts),
@@ -594,8 +637,11 @@ def summarize(hosts: list[dict[str, Any]], *, min_finished: int = 20) -> dict[st
             host["host"] for host in hosts if host["query_ok"] and not host["history_window"]
         ],
         "truncated_hosts": [host["host"] for host in hosts if host["history_may_be_truncated"]],
-        "coverage": coverage(jobs),
-        "all_observed_outcomes": outcome_summary([job for job in jobs if job["in_window"]]),
+        "coverage": coverage(jobs, out_of_scope_jobs=omitted_jobs),
+        "all_observed_outcomes": outcome_summary(
+            [job for job in [*jobs, *omitted_jobs] if job["in_window"]]
+        ),
+        "out_of_scope_outcomes": outcome_summary([job for job in omitted_jobs if job["in_window"]]),
         "unattributed_outcomes": outcome_summary(
             [job for job in jobs if job["in_window"] and job["configuration"] is None]
         ),
@@ -1021,6 +1067,14 @@ def print_observed_outcomes(summary):
         f"Unknown: {attributed['unknown']}"
     )
     print("  These outcomes include runs whose configuration could not be attributed.")
+    omitted = summary.get("out_of_scope_outcomes", {})
+    if omitted.get("jobs"):
+        counts = omitted["outcomes"]
+        print(
+            f"  Known out-of-scope runs: {omitted['jobs']} "
+            f"({counts['failed']} failed, {counts['exception']} exceptions, "
+            f"{counts['unknown']} unknown); omitted from assessment and coverage."
+        )
     reasons = summary["coverage"]["exclusion_reasons"]
     if reasons:
         print("  Excluded from configuration attribution:")
@@ -1240,6 +1294,30 @@ def print_unattributed_failure_details(comparison):
         )
 
 
+def print_out_of_scope_summary(report):
+    evidence = report["summary"]["coverage"]
+    omitted_intervals = sum(
+        len(host.get("out_of_scope_history", {}).get("intervals", [])) for host in report["hosts"]
+    )
+    if omitted_intervals or evidence.get("out_of_scope"):
+        print(
+            f"  Historical evidence outside selection omitted: {omitted_intervals} intervals, "
+            f"{evidence['out_of_scope']} in-window runs. Use --details or --verbose for history."
+        )
+
+
+def print_out_of_scope_history(host):
+    omitted = host.get("out_of_scope_history", {})
+    scopes = {tuple(item["configuration"]["scope"]) for item in omitted.get("intervals", [])}
+    for scope in sorted(scopes):
+        print(f"{host['host']}: omitted historical population: {' / '.join(scope)}")
+    for job in omitted.get("jobs", []):
+        print(
+            f"  Outside selection: {job['outcome']}: {job['task_id']} "
+            f"run {job['run_id']} ({'in' if job['in_window'] else 'outside'} report window)"
+        )
+
+
 def print_report(report, *, details=False, verbose=False, color=None):
     if color is None:
         color = report_color_enabled()
@@ -1278,6 +1356,7 @@ def print_report(report, *, details=False, verbose=False, color=None):
         f"in-window recent runs ({percentage(evidence['fraction'])}); "
         f"{evidence['excluded']} excluded, {evidence['unresolved']} unresolved."
     )
+    print_out_of_scope_summary(report)
     stamps = [host["observation_ts"] for host in report["hosts"] if host["observation_ts"]]
     if stamps:
         print(f"  Host observations: {min(stamps)} to {max(stamps)}")
@@ -1364,6 +1443,7 @@ def print_report(report, *, details=False, verbose=False, color=None):
         heading("Host details")
     for host in report["hosts"]:
         if details or verbose:
+            print_out_of_scope_history(host)
             if not verbose:
                 jobs = host["jobs"]
                 classified = sum(job["configuration"] is not None for job in jobs)
@@ -1399,10 +1479,14 @@ def parse_args(argv=None, *, prog=None):
     parser = argparse.ArgumentParser(description=__doc__, prog=prog)
     parser.add_argument("hosts", nargs="*", help="Hostnames or one host-list file.")
     selection = parser.add_mutually_exclusive_group()
-    selection.add_argument("--role", help="Compare master with each override in this Puppet role.")
+    selection.add_argument(
+        "--role",
+        help="Select current hosts and assess historical evidence only in this Puppet role.",
+    )
     selection.add_argument(
         "--worker-type",
-        help="Worker type or provisioner/worker-type (default provisioner: releng-hardware).",
+        help="Select current hosts and assess history only in this worker type or "
+        "provisioner/worker-type (default provisioner: releng-hardware).",
     )
     parser.add_argument(
         "--provisioner",
@@ -1566,6 +1650,12 @@ def main(argv=None, *, prog=None) -> int:
     if sys.stderr.isatty():
         print(file=sys.stderr)
     hosts.sort(key=lambda host: host["host"])
+    hosts = [
+        scope_host_history(
+            host, role=args.role, worker_type=args.worker_type, provisioner=args.provisioner
+        )
+        for host in hosts
+    ]
     for host in hosts:
         if host["error"]:
             errors.append(f"{host['host']}: {host['error']}")
@@ -1588,6 +1678,11 @@ def main(argv=None, *, prog=None) -> int:
         warnings.append("Excluded jobs are unknown configuration evidence, not successful work.")
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
+        "selection": {
+            "role": args.role,
+            "worker_type": args.worker_type,
+            "provisioner": args.provisioner if args.worker_type else None,
+        },
         "configuration_history": history_metadata,
         "fleet_override_status": fleet_override_status(
             records,

@@ -54,6 +54,21 @@ group. Observed worker identities take precedence; explicit collection failure
 blocks legacy fallback. Older records use the existing role/override mapping
 with a warning.
 
+Role and pool selectors also scope historical evidence: `--role` assesses only
+verified configurations in that role (keeping its pools separate), and
+`--worker-type` assesses only the selected provisioner/pool. A host's previous
+role or pool does not create a cohort or limit the selected population's sample.
+Explicit host selections retain history across roles and pools.
+
+Filtering happens after attribution against the full configuration timeline;
+it never bridges a transition or observation gap. Only verified configurations
+can establish that work is outside the selection. Unknown configurations remain
+unknown evidence in the coverage denominator. Known out-of-scope runs are omitted
+from cohort health, comparisons, failure patterns, and attribution coverage, with
+a compact history note in the default output and population/task details under
+`--details` or `--verbose`. All retrieved outcomes still include this work, with
+known out-of-scope outcomes shown separately from unattributed outcomes.
+
 Fleet override status shows the present, absent, and unknown override percentages
 among hosts with confirmed membership based on their latest successful observation
 at the report end. It uses the fleet-status grouping rules and includes hosts whose
@@ -155,6 +170,20 @@ coverage reports fetched, in-window, classified, excluded, and unresolved task
 counts, requested/queried hosts, and observation freshness. Query failures have
 unknown task counts; they are never zero-job successes. Missing comparison
 cohorts still produce useful standalone summaries.
+
+The additive `selection` object identifies the requested role or provisioner/pool
+(null selectors for explicit hosts). For role/pool selections, each host's
+`out_of_scope_history` retains omitted `intervals`, `jobs`, and any verified current
+`configuration` outside the selection; its normal intervals/jobs/configuration are
+used for the selected assessment. Configuration gaps still describe uncertainty in
+the full timeline, not known out-of-scope intervals. `summary.out_of_scope_outcomes`
+counts omitted in-window runs. Coverage `in_window` is the selected candidate count,
+including unknown evidence; `out_of_scope` counts known omitted in-window runs.
+`fetched` includes both, plus `outside_window` runs. `all_observed_outcomes` includes
+all retrieved in-window runs, while `unattributed_outcomes` includes only unknown
+configuration evidence. These additive fields retain schema version 1. Classified
+failures outside the selection do not affect the selected report's exit code;
+query errors remain errors.
 
 `queue_counts` contains `scope: "whole_pool"`, `approximate: true`, `pools`,
 `unresolved_hosts`, and `legacy_mapped_hosts`. Each pool has `worker_pool`,

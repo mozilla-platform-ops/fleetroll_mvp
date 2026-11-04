@@ -908,6 +908,140 @@ def test_role_selection_keeps_distinct_pools_separate(env, capsys):
     assert all(pair["status"] == "unavailable" for pair in result["comparisons"])
 
 
+@pytest.mark.parametrize("explicit", [False, True])
+def test_role_history_scope_preserves_unknown_runs_and_explicit_host_history(env, capsys, explicit):
+    old_role = "gecko_t_linux_talos"
+    seed(
+        env,
+        "migrated",
+        stamp=SINCE + dt.timedelta(hours=1),
+        role=old_role,
+        puppet_role=old_role,
+    )
+    seed(
+        env,
+        "migrated",
+        early=False,
+        puppet_state_ts=(SINCE + dt.timedelta(minutes=75)).isoformat(),
+    )
+    old_task = task(env, "migrated", minute=45, state="failed")
+    gap_task = task(env, "migrated", minute=65, state="exception")
+    task(env, "migrated", minute=90)
+    selection = ["migrated"] if explicit else ["--role", ROLE]
+    assert invoke(env, *selection, min_finished=1) == int(explicit)
+    result = read(capsys)
+    summary = result["summary"]
+    assert summary["all_observed_outcomes"]["jobs"] == 3
+    assert summary["unattributed_outcomes"]["outcomes"]["exception"] == 1
+    assert summary["unattributed_outcomes"]["outcomes"]["failed"] == 0
+    assert summary["coverage"]["fetched"] == 3
+    assert summary["coverage"]["fraction"] == pytest.approx(2 / 3 if explicit else 1 / 2)
+    assert summary["coverage"]["out_of_scope"] == (0 if explicit else 1)
+    assert summary["coverage"]["excluded"] == 1
+    assert {group["configuration"]["role"] for group in summary["cohorts"]} == (
+        {ROLE, old_role} if explicit else {ROLE}
+    )
+    if explicit:
+        assert "out_of_scope_history" not in result["hosts"][0]
+        return
+    host = result["hosts"][0]
+    assert [job["task_id"] for job in host["out_of_scope_history"]["jobs"]] == [old_task]
+    assert next(job for job in host["jobs"] if job["task_id"] == gap_task)["configuration"] is None
+    assert summary["out_of_scope_outcomes"]["outcomes"]["failed"] == 1
+    assert summary["evidence"]["sample_status"] == "sufficient"
+    assert all(pair["scope"][0] == ROLE for pair in result["comparisons"])
+    report.print_report(result, color=False)
+    output = capsys.readouterr().out
+    assert old_role not in output
+    assert "1 in-window runs" in output
+    assert "Known out-of-scope runs: 1 (1 failed" in output
+    report.print_report(result, details=True, color=False)
+    output = capsys.readouterr().out
+    assert f"omitted historical population: {old_role}" in output
+    assert f"Outside selection: failed: {old_task}" in output
+
+
+@pytest.mark.parametrize("selection", ["role", "pool", "provisioner"])
+def test_empty_old_populations_do_not_limit_selected_report(env, capsys, selection):
+    old_identity = identity("migrated")
+    old_role = ROLE
+    if selection == "role":
+        old_role = "gecko_t_linux_talos"
+        old_identity["workerType"] = "gecko-t-linux-talos-1804"
+    elif selection == "pool":
+        old_identity["workerType"] = "old-pool"
+    else:
+        old_identity["provisionerId"] = "old-provisioner"
+    seed(
+        env,
+        "migrated",
+        stamp=SINCE + dt.timedelta(hours=1),
+        role=old_role,
+        puppet_role=old_role,
+        tc_worker_identity=old_identity,
+    )
+    seed(
+        env,
+        "migrated",
+        early=False,
+        puppet_state_ts=(SINCE + dt.timedelta(minutes=75)).isoformat(),
+    )
+    task(env, "migrated", minute=90)
+    args = ["--role", ROLE] if selection == "role" else ["--worker-type", "talos-pool"]
+    assert invoke(env, *args, min_finished=1) == 0
+    result = read(capsys)
+    assert len(result["summary"]["cohorts"]) == 1
+    assert result["summary"]["coverage"]["fraction"] == 1
+    assert result["summary"]["evidence"]["sample_status"] == "sufficient"
+    assert len(result["comparisons"]) == 1
+    omitted = result["hosts"][0]["out_of_scope_history"]
+    assert len(omitted["intervals"]) == 1
+    assert omitted["jobs"] == []
+    assert omitted["intervals"][0]["configuration"]["scope"][1:3] == [
+        old_identity["provisionerId"],
+        old_identity["workerType"],
+    ]
+
+
+def test_role_scoping_applies_to_shared_window_evidence_and_failure_patterns(env, capsys):
+    sha = override(env, "branch")
+    seed(env, "master")
+    seed(env, "stable", sha=sha, git="test_override_revision")
+    seed(
+        env,
+        "migrated",
+        stamp=SINCE + dt.timedelta(hours=1),
+        role="old_role",
+        puppet_role="old_role",
+    )
+    seed(
+        env,
+        "migrated",
+        early=False,
+        sha=sha,
+        git="test_override_revision",
+        puppet_state_ts=(SINCE + dt.timedelta(minutes=75)).isoformat(),
+    )
+    task(env, "master")
+    task(env, "stable")
+    task(env, "migrated", state="failed")
+    unknown = task(env, "migrated", minute=65, state="exception")
+    task(env, "migrated", minute=90)
+    assert invoke(env, "--role", ROLE, min_finished=1) == 0
+    result = read(capsys)
+    assert result["summary"]["failure_patterns"] == []
+    assert result["summary"]["evidence"]["sample_status"] == "sufficient"
+    assert len(result["comparisons"]) == 1
+    pair = result["comparisons"][0]
+    assert pair["status"] == "comparable"
+    assert pair["coverage"]["fraction"] == pytest.approx(3 / 4)
+    assert pair["master_coverage"]["fraction"] == 1
+    assert pair["override_coverage"]["fraction"] == pytest.approx(2 / 3)
+    assert pair["master_results"]["finished"] == 1
+    assert pair["override_results"]["finished"] == 2
+    assert [job["task_id"] for job in pair["unattributed_failures"]] == [unknown]
+
+
 def test_changed_applied_revision_is_visible_and_qualifies_comparison(env, capsys):
     seed(env, "master")
     sha = override(env, "branch")
