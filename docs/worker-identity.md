@@ -41,6 +41,12 @@ preserves existing Windows collection. Explicit identity failures block that
 fallback. Duplicate worker IDs across groups cannot be resolved arbitrarily for
 legacy observations.
 
+Per-host fallback warnings, pool disagreements, and unresolved/missing worker
+diagnostics require `gather-tc -v`. Quiet mode prints status, collected/requested
+counts, and elapsed time in at most 80 visible characters, with a short verbose
+hint when needed. A failed collection still exits
+nonzero; quiet mode does not repeat the summary as a separate error line.
+
 Unresolved identities, missing workers, pool API failures, and task status failures
 produce a nonzero collection exit, including in quiet mode. Successful hosts are
 committed even during partial failure. A failed host never receives a new TC

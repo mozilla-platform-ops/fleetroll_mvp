@@ -164,6 +164,9 @@ requires a successful `gather-host` refresh; Fleetroll does not fall back to a
 possibly outdated pool. Unresolved hosts, missing workers, and API failures make
 `gather-tc` exit nonzero, including in quiet mode. Successful hosts are still
 saved, and failed hosts retain their previous TC observation timestamps.
+Quiet mode prints status, collected/requested counts, and elapsed time in at most
+80 characters. Use
+`uv run fleetroll gather-tc -v <host-list>` for per-host diagnostics.
 
 See [worker identity collection](docs/worker-identity.md) for configuration
 sources and supported launch configurations.

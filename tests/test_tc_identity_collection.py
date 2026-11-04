@@ -102,7 +102,12 @@ def test_explicit_identity_failure_blocks_legacy_fallback(tc_env, db_conn, tmp_p
     seed(db_conn, "host", identity=None, status=status, role="gecko_t_linux_talos")
     result = invoke(["host"], tmp_path=tmp_path, quiet=quiet)
     assert result.exit_code != 0
-    assert "host: worker identity unresolved" in result.output
+    if quiet:
+        assert "TC 0/1 collected" in result.output
+        assert "host:" not in result.output
+        assert len(result.output.splitlines()) == 1
+    else:
+        assert "host: worker identity unresolved" in result.output
     tc_env.assert_not_called()
     assert get_latest_tc_workers(db_conn, ["host"])["host"]["ts"] == OLD_TS
 
@@ -116,7 +121,10 @@ def test_legacy_observation_can_still_collect(tc_env, db_conn, tmp_path, quiet):
     )
     result = invoke(["host.example.com"], tmp_path=tmp_path, quiet=quiet)
     assert result.exit_code == 0, result.output
-    assert "legacy role/override" in result.output
+    assert ("WARNING" if quiet else "legacy role/override") in result.output
+    if quiet:
+        assert "host.example.com" not in result.output
+        assert len(result.output.splitlines()) == 1
     assert tc_env.call_args.kwargs["worker_type"] == "gecko-t-linux-talos-1804"
 
 
@@ -156,21 +164,33 @@ def test_partial_success_preserves_failed_host_timestamp(tc_env, db_conn, tmp_pa
     tc_env.side_effect = fetch
     result = invoke(["good", "bad"], tmp_path=tmp_path, quiet=quiet)
     assert result.exit_code != 0
-    assert "bad" in result.output
+    if quiet:
+        assert "TC 1/2 collected" in result.output
+        assert "bad" not in result.output
+        assert "FAILED" in result.output
+        assert len(result.output.splitlines()) == 1
+    else:
+        assert "bad" in result.output
     records = get_latest_tc_workers(db_conn, ["good", "bad"])
     assert records["good"]["ts"] == NEW_TS
     assert records["bad"]["ts"] == OLD_TS
 
 
-def test_override_mismatch_uses_observed_pool(tc_env, db_conn, tmp_path, monkeypatch):
+@pytest.mark.parametrize("quiet", [False, True])
+def test_override_mismatch_uses_observed_pool(tc_env, db_conn, tmp_path, monkeypatch, quiet):
     seed(db_conn, "host")
     monkeypatch.setattr(
         gather_tc, "build_host_override_pools", lambda *args: {"host": "intended-pool"}
     )
     tc_env.return_value = WorkerFetchResult(workers=[worker()], status_errors=0)
-    result = invoke(["host"], tmp_path=tmp_path, quiet=True)
+    result = invoke(["host"], tmp_path=tmp_path, quiet=quiet)
     assert result.exit_code == 0, result.output
-    assert "differs from WORKER_TYPE_OVERRIDE=intended-pool" in result.output
+    assert (
+        "WARNING" if quiet else "differs from WORKER_TYPE_OVERRIDE=intended-pool"
+    ) in result.output
+    if quiet:
+        assert "intended-pool" not in result.output
+        assert len(result.output.splitlines()) == 1
     assert tc_env.call_args.kwargs["worker_type"] == IDENTITY["workerType"]
 
 
@@ -206,7 +226,38 @@ def test_failed_windows_discovery_does_not_discard_observed_linux_success(
     tc_env.return_value = WorkerFetchResult(workers=[worker()], status_errors=0)
     result = invoke(["good", "windows"], tmp_path=tmp_path, quiet=True)
     assert result.exit_code != 0
-    assert "Windows worker pool discovery failed" in result.output
+    assert "FAILED TC 1/2 collected" in result.output
+    assert "test discovery failure" not in result.output
+    assert len(result.output.splitlines()) == 1
     records = get_latest_tc_workers(db_conn, ["good", "windows"])
     assert records["good"]["ts"] == NEW_TS
     assert records["windows"]["ts"] == OLD_TS
+
+
+@pytest.mark.parametrize("quiet", [False, True])
+def test_large_unresolved_population_has_bounded_output(tc_env, db_conn, tmp_path, quiet):
+    hosts = [f"unresolved-{number}.example.com" for number in range(30)]
+    for host in hosts:
+        seed(db_conn, host, identity=None, status="missing")
+    host_file = tmp_path / "hosts.list"
+    host_file.write_text("\n".join(hosts) + "\n")
+    result = CliRunner().invoke(cli, ["gather-tc", str(host_file), *(["-q"] if quiet else [])])
+    assert result.exit_code != 0
+    assert ("TC 0/30 collected" if quiet else "30 unresolved identities") in result.output
+    assert "-v for details" in result.output
+    assert not any(host in result.output for host in hosts)
+    if quiet:
+        assert len(result.output.splitlines()) == 1
+    tc_env.assert_not_called()
+
+
+def test_all_pool_requests_failed_still_prints_one_quiet_summary(tc_env, db_conn, tmp_path):
+    seed(db_conn, "host")
+    tc_env.side_effect = FleetRollError("long private API diagnostic")
+    result = invoke(["host"], tmp_path=tmp_path, quiet=True)
+    assert result.exit_code != 0
+    assert "FAILED" in result.output
+    assert "TC 0/1 collected" in result.output
+    assert "long private API diagnostic" not in result.output
+    assert len(result.output.splitlines()) == 1
+    assert get_latest_tc_workers(db_conn, ["host"])["host"]["ts"] == OLD_TS

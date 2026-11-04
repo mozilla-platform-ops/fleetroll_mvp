@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import textwrap
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -13,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 import click
 
 from ..constants import DEFAULT_TC_PROVISIONER, OVERRIDES_DIR_NAME, ROLE_TO_TASKCLUSTER
-from ..exceptions import FleetRollError
+from ..exceptions import CommandFailureError, FleetRollError
 from ..taskcluster import (
     create_tc_clients,
     fetch_worker_type_names,
@@ -71,33 +72,35 @@ def format_status_indicator(emoji: str, status: str, color: str) -> str:
 def format_tc_fetch_quiet(
     *,
     worker_count: int,
-    scan_count: int,
-    warnings: list[str],
+    host_count: int,
+    warnings: bool,
     elapsed_seconds: float,
+    failed: bool = False,
 ) -> str:
     """Format gather-tc output in quiet mode.
 
     Args:
         worker_count: Number of worker records written
-        scan_count: Number of scan records written
-        warnings: List of warning messages
+        host_count: Number of requested hosts
+        warnings: Whether collection has non-fatal warnings
         elapsed_seconds: Elapsed time in seconds
 
     Returns:
-        Single-line formatted output
+        Single-line output capped at 80 visible characters
     """
     elapsed = format_elapsed_time(elapsed_seconds)
 
-    if warnings:
+    if failed:
+        status = format_status_indicator("✗", "FAILED", "red")
+    elif warnings:
         status = format_status_indicator("⚠", "WARNING", "yellow")
-        warning_text = " (" + ", ".join(warnings) + ")"
     else:
         status = format_status_indicator("✓", "SUCCESS", "green")
-        warning_text = ""
-
-    return (
-        f"{status} Wrote {worker_count} worker(s), {scan_count} scan(s){warning_text} ({elapsed})"
-    )
+    body = f"TC {worker_count}/{host_count} collected ({elapsed})"
+    if failed or warnings:
+        body += "; -v for details"
+    body = textwrap.shorten(body, width=80 - len(click.unstyle(status)) - 1, placeholder="…")
+    return f"{status} {body}"
 
 
 def get_host_roles_bulk(hosts: set[str], db_conn: sqlite3.Connection) -> dict[str, str | None]:
@@ -493,8 +496,10 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     quiet = getattr(args, "quiet", False)
 
     # Track warnings for quiet mode
-    hosts_without_roles = 0
     api_errors = 0
+    legacy_hosts = 0
+    pool_mismatches = 0
+    unresolved_hosts = 0
 
     # Load credentials
     credentials = load_tc_credentials()
@@ -533,10 +538,8 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             if role:
                 if verbose >= 1 and not quiet:
                     click.echo(f"  {host} -> role: {role}")
-            else:
-                hosts_without_roles += 1
-                if verbose >= 1 and not quiet:
-                    click.echo(f"  {host} -> role: NOT FOUND")
+            elif verbose >= 1 and not quiet:
+                click.echo(f"  {host} -> role: NOT FOUND")
 
         # Build role to hosts mapping
         role_to_hosts = build_role_to_hosts_mapping(host_to_role)
@@ -559,7 +562,8 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 role_lookup = {**ROLE_TO_TASKCLUSTER, **windows_mapping}
             except FleetRollError as exc:
                 api_errors += 1
-                click.echo(f"ERROR: Windows worker pool discovery failed: {exc}", err=True)
+                if verbose and not quiet:
+                    click.echo(f"ERROR: Windows worker pool discovery failed: {exc}", err=True)
 
         # Map roles to workerTypes
         role_to_worker_type, _, _ = map_roles_to_worker_types(role_to_hosts, role_lookup)
@@ -590,28 +594,29 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             if identity:
                 intended_pool = host_to_override_pool.get(host)
                 if intended_pool and intended_pool != identity["workerType"]:
+                    pool_mismatches += 1
+                    if verbose and not quiet:
+                        click.echo(
+                            f"WARNING: {host}: observed pool {identity['workerType']} differs from "
+                            f"WORKER_TYPE_OVERRIDE={intended_pool}; querying observed identity",
+                            err=True,
+                        )
+            elif host in host_to_worker_type:
+                legacy_hosts += 1
+                if verbose and not quiet:
                     click.echo(
-                        f"WARNING: {host}: observed pool {identity['workerType']} differs from "
-                        f"WORKER_TYPE_OVERRIDE={intended_pool}; querying observed identity",
+                        f"WARNING: {host}: using legacy role/override pool resolution; "
+                        "refresh with gather-host to collect worker identity",
                         err=True,
                     )
-            elif host in host_to_worker_type:
-                click.echo(
-                    f"WARNING: {host}: using legacy role/override pool resolution; "
-                    "refresh with gather-host to collect worker identity",
-                    err=True,
-                )
             else:
-                click.echo(
-                    f"ERROR: {host}: worker identity unresolved; refresh with gather-host "
-                    "and check worker configuration",
-                    err=True,
-                )
-
-        if not worker_type_to_hosts:
-            if not quiet:
-                click.echo("No hosts with resolved worker identities. Nothing to fetch.")
-            raise FleetRollError("No requested hosts have a resolvable Taskcluster worker identity")
+                unresolved_hosts += 1
+                if verbose and not quiet:
+                    click.echo(
+                        f"ERROR: {host}: worker identity unresolved; refresh with gather-host "
+                        "and check worker configuration",
+                        err=True,
+                    )
 
         # Show summary of what we're fetching
         if not quiet:
@@ -627,7 +632,6 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         ts = utc_now_iso()
         worker_type_to_workers: dict[tuple[str, str], dict[Any, Any]] = {}
         task_status_errors = 0
-        successful_pool_requests = 0
 
         for provisioner, worker_type in worker_type_to_hosts:
             worker_type_key = (provisioner, worker_type)
@@ -653,7 +657,6 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 )
                 workers_list = fetch_result.workers
                 task_status_errors += fetch_result.status_errors
-                successful_pool_requests += 1
 
                 if verbose >= 2 and not quiet:
                     click.echo(f"\n  Raw API response: {len(workers_list)} worker(s)")
@@ -686,11 +689,6 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                     click.echo(f" FAILED: {e}", err=True)
                 # Store empty result so we still write scan record
                 worker_type_to_workers[(provisioner, worker_type)] = {}
-
-        if worker_type_to_hosts and successful_pool_requests == 0:
-            raise FleetRollError(
-                f"All {len(worker_type_to_hosts)} Taskcluster worker pool REST request(s) failed"
-            )
 
         worker_records_written = 0
         scan_records_written = 0
@@ -734,7 +732,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         db_conn.commit()
         written_hosts = {record["host"] for record in worker_records}
         failed_hosts = sorted(set(hosts) - written_hosts)
-        for host in failed_hosts:
+        for host in failed_hosts if verbose and not quiet else []:
             if host in host_to_worker_type:
                 click.echo(
                     f"ERROR: {host}: no complete worker observation collected "
@@ -758,39 +756,41 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
 
         # Build warnings list for quiet mode
         elapsed_seconds = time.time() - start_time
+        failed = bool(failed_hosts or api_errors or task_status_errors)
+        resolution_warnings = []
+        if unresolved_hosts:
+            resolution_warnings.append(f"{unresolved_hosts} unresolved identities")
+        if legacy_hosts:
+            resolution_warnings.append(f"{legacy_hosts} legacy fallback(s)")
+        if pool_mismatches:
+            resolution_warnings.append(f"{pool_mismatches} pool mismatch(es)")
         if quiet:
-            warning_list = []
-            if failed_hosts:
-                warning_list.append(f"{len(failed_hosts)} host(s) not collected")
-            if hosts_without_roles > 0:
-                warning_list.append(f"{hosts_without_roles} hosts without role data")
-            if api_errors > 0:
-                warning_list.append(f"{api_errors} API errors" if api_errors > 1 else "1 API error")
-            if task_status_errors > 0:
-                warning_list.append(
-                    f"{task_status_errors} task status errors"
-                    if task_status_errors > 1
-                    else "1 task status error"
-                )
-
             output = format_tc_fetch_quiet(
                 worker_count=worker_records_written,
-                scan_count=scan_records_written,
-                warnings=warning_list,
+                host_count=len(hosts),
+                warnings=bool(resolution_warnings),
                 elapsed_seconds=elapsed_seconds,
+                failed=failed,
             )
             click.echo(output)
         else:
+            if resolution_warnings:
+                click.echo(
+                    "WARNING: " + ", ".join(resolution_warnings) + "; gather-tc -v for details"
+                )
             msg = (
                 f"Wrote {worker_records_written} worker record(s) and "
                 f"{scan_records_written} scan record(s) to {db_path}"
             )
             click.echo(msg)
 
-        if failed_hosts or api_errors or task_status_errors:
+        if failed:
+            if quiet:
+                raise CommandFailureError(rc=2)
             raise FleetRollError(
                 f"Taskcluster collection incomplete: {len(failed_hosts)} host(s) not collected, "
-                f"{api_errors} pool API error(s), {task_status_errors} task status error(s)"
+                f"{api_errors} pool API error(s), {task_status_errors} task status error(s); "
+                "gather-tc -v for details"
             )
 
         # Also refresh GitHub branch refs (throttled)

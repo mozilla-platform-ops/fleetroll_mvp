@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import click
+import pytest
 from fleetroll.commands.gather_tc import (
     build_host_override_pools,
     build_role_to_hosts_mapping,
@@ -77,14 +79,13 @@ class TestFormatTcFetchQuiet:
         """Format output with no warnings shows success symbol."""
         result = format_tc_fetch_quiet(
             worker_count=5,
-            scan_count=2,
-            warnings=[],
+            host_count=5,
+            warnings=False,
             elapsed_seconds=30,
         )
         assert "✓" in result
         assert "SUCCESS" in result
-        assert "5 worker(s)" in result
-        assert "2 scan(s)" in result
+        assert "TC 5/5 collected" in result
         assert "30s" in result
         assert "timeout" not in result  # No warning text when warnings list is empty
 
@@ -92,54 +93,62 @@ class TestFormatTcFetchQuiet:
         """Format output with warnings shows warning symbol."""
         result = format_tc_fetch_quiet(
             worker_count=3,
-            scan_count=1,
-            warnings=["timeout", "api error"],
+            host_count=4,
+            warnings=True,
             elapsed_seconds=60,
         )
         assert "⚠" in result
         assert "WARNING" in result
-        assert "3 worker(s)" in result
-        assert "1 scan(s)" in result
-        assert "timeout, api error" in result
+        assert "TC 3/4 collected" in result
+        assert "-v for details" in result
         assert "1m00s" in result
 
-    def test_single_warning(self):
-        """Format output with single warning."""
+    def test_failure_is_compact(self):
+        """A fleet-wide partial failure keeps only the useful counts."""
         result = format_tc_fetch_quiet(
-            worker_count=10,
-            scan_count=5,
-            warnings=["rate limit"],
+            worker_count=185,
+            host_count=280,
+            warnings=True,
             elapsed_seconds=45,
+            failed=True,
         )
-        assert "⚠" in result
-        assert "WARNING" in result
-        assert "rate limit" in result
+        assert click.unstyle(result) == "✗ FAILED TC 185/280 collected (45s); -v for details"
 
     def test_zero_counts(self):
         """Handle zero workers or scans."""
         result = format_tc_fetch_quiet(
             worker_count=0,
-            scan_count=0,
-            warnings=[],
+            host_count=0,
+            warnings=False,
             elapsed_seconds=5,
         )
         assert "✓" in result
         assert "SUCCESS" in result
-        assert "0 worker(s)" in result
-        assert "0 scan(s)" in result
+        assert "TC 0/0 collected" in result
 
     def test_singular_vs_plural(self):
         """Uses (s) suffix for both singular and plural."""
         result = format_tc_fetch_quiet(
             worker_count=1,
-            scan_count=1,
-            warnings=[],
+            host_count=1,
+            warnings=False,
             elapsed_seconds=10,
         )
         assert "✓" in result
         assert "SUCCESS" in result
-        assert "1 worker(s)" in result
-        assert "1 scan(s)" in result
+        assert "TC 1/1 collected" in result
+
+    @pytest.mark.parametrize("host_count", [280, 10000, 10**60])
+    def test_summary_is_at_most_80_visible_characters(self, host_count):
+        result = format_tc_fetch_quiet(
+            worker_count=185,
+            host_count=host_count,
+            warnings=True,
+            elapsed_seconds=86400,
+            failed=True,
+        )
+        assert len(click.unstyle(result)) <= 80
+        assert "\n" not in result
 
 
 class TestGetHostRolesBulk:
