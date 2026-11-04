@@ -40,6 +40,13 @@ Output wraps to terminal width (at most 120 columns) and uses labelled cohort ro
 on narrow terminals. Long identifiers wrap without truncation. Redirected output
 uses plain LF lines; TTY output uses explicit CRLF to remain aligned even when
 newline translation is disabled, without modifying terminal settings.
+Only the report title starts at the left margin. Sections and population headings
+use two spaces, nested headings use four, and their bodies use a further two.
+The same hierarchy applies to details, issues, and wrapped continuation lines.
+Routine sample, attribution, mixed-revision, and retrieval-limit notes use neutral
+text. Yellow marks observed failures/exceptions/unknown outcomes, missing evidence
+that needs a refresh, and operational issues such as an empty/unavailable queue;
+errors use red. The evidence limits remain visible regardless of color.
 See the [display design](rollout-report-display.md) for layout and validation notes.
 
 ## Evidence and attribution
@@ -165,7 +172,8 @@ and signed differences. These are descriptive results, not causal findings or
 statistical significance claims. When
 sample or other comparison requirements fail, it reports "Comparison unavailable"
 with the blockers. A missing master or override also makes comparison unavailable.
-Low attribution remains a prominent yellow warning with the actual percentages.
+Low attribution remains explicit with the actual percentages and warning threshold,
+using neutral text so it does not compete visually with observed failures.
 
 Unattributed failures and exceptions whose start and finish both lie inside the
 shared comparison window are highlighted alongside the result. Their host/task

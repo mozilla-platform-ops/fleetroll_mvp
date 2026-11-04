@@ -36,6 +36,13 @@ approved. No failure, query error, or consequential evidence warning is hidden.
 Routine compact-history metadata is supporting detail, not a default warning;
 actual history availability/gap warnings remain visible.
 
+Follow-up mvp-ooy5: reserve yellow for observed failures/unknown outcomes, missing
+data, and operational problems. Sample size, attribution percentages, mixed
+revisions, and retrieval limits remain visible in neutral text. Compose section
+indentation relative to the parent: title at column zero, sections/populations at
+two spaces, nested headings at four, and bodies a further two. Apply that hierarchy
+to diagnostics and details as well as the overview.
+
 ## Terminal output
 
 Wrap plain physical lines to terminal width before applying color. Use CRLF for

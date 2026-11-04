@@ -1187,7 +1187,7 @@ def population_label(scope, *, show_group=False):
 
 def print_cohort_table(cohorts, *, labels, width):
     cohorts = sorted(cohorts, key=lambda group: group["configuration"]["kind"] != "master")
-    print("  COHORT HEALTH · verified tasks across the full report window")
+    print("COHORT HEALTH · verified tasks across the full report window")
     unknown = any(group["outcomes"]["unknown"] for group in cohorts)
     columns = ["Hosts", "Done", "Failed", "Exceptions"] + (["Unknown"] if unknown else [])
     sizes = [max(len(name), 5) for name in columns]
@@ -1241,7 +1241,7 @@ def print_cohort_table(cohorts, *, labels, width):
     ]
     if small:
         subjects = "All cohorts" if len(small) == len(cohorts) else ", ".join(small)
-        print(f"  ⚠ Insufficient sample: {subjects}; minimum {minimum} finished per cohort.")
+        print(f"  Insufficient sample: {subjects}; minimum {minimum} finished per cohort.")
     if all(
         not any(group["outcomes"][key] for key in ("failed", "exception", "unknown"))
         for group in cohorts
@@ -1252,7 +1252,7 @@ def print_cohort_table(cohorts, *, labels, width):
         if group["health"]["status"] not in {"insufficient sample", "healthy in verified sample"}:
             print(f"  ⚠ {label}: {group['health']['status'].capitalize()}")
         if len(group["applied_revisions"]) > 1:
-            print(f"  ⚠ {label}: sample spans {len(group['applied_revisions'])} applied revisions.")
+            print(f"  {label}: sample spans {len(group['applied_revisions'])} applied revisions.")
 
 
 def comparison_statements(comparison):
@@ -1274,10 +1274,10 @@ def comparison_statements(comparison):
 
 def print_compact_comparison(comparison, *, labels, details):
     label = labels.get(comparison.get("override"))
-    print("\n  COMPARISON" + (f" · master ↔ {label}" if label else ""))
+    print("\nCOMPARISON" + (f" · master ↔ {label}" if label else ""))
     for statement in comparison_statements(comparison):
-        symbol = "◆" if statement.startswith("Same observed") else "⚠"
-        print(f"  {symbol} {statement}")
+        prefix = "⚠ " if "rate higher" in statement else ""
+        print(f"  {prefix}{statement}")
     window = comparison["window"]
     if window:
         print(f"  Shared window: {display_time_range(window['since'], window['until'])}")
@@ -1298,14 +1298,14 @@ def print_compact_comparison(comparison, *, labels, details):
                     f"override {percentage(right['exception_rate'])}"
                 )
         attribution = comparison["attribution"]
-        warning = "⚠ " if attribution["status"] == "limited" else ""
+        limited = attribution["status"] == "limited"
         print(
-            f"  {warning}Attribution: master {percentage(comparison['master_coverage']['fraction'])} · "
+            f"  Attribution: master {percentage(comparison['master_coverage']['fraction'])} · "
             f"override {percentage(comparison['override_coverage']['fraction'])} · "
             f"overall {percentage(attribution['fraction'])}"
             + (
                 f"; below {percentage(attribution['warning_threshold'])} warning threshold"
-                if warning
+                if limited
                 else ""
             )
         )
@@ -1347,10 +1347,10 @@ def print_out_of_scope_history(host):
     omitted = host.get("out_of_scope_history", {})
     scopes = {tuple(item["configuration"]["scope"]) for item in omitted.get("intervals", [])}
     for scope in sorted(scopes):
-        print(f"{host['host']}: omitted historical population: {' / '.join(scope)}")
+        print(f"  {host['host']}: omitted historical population: {' / '.join(scope)}")
     for job in omitted.get("jobs", []):
         print(
-            f"  Outside selection: {job['outcome']}: {job['task_id']} "
+            f"    Outside selection: {job['outcome']}: {job['task_id']} "
             f"run {job['run_id']} ({'in' if job['in_window'] else 'outside'} report window)"
         )
 
@@ -1359,7 +1359,7 @@ def print_compact_queue(report):
     counts = report.get("queue_counts")
     if counts is None:
         return
-    print("\n  CURRENT QUEUE · approximate pending tasks; whole pool")
+    print("\nCURRENT QUEUE · approximate pending tasks; whole pool")
     for pool in counts["pools"]:
         pending = pool["pending_tasks"]
         value = f"{pending:,} pending" if pending is not None else "unavailable"
@@ -1382,20 +1382,21 @@ def print_evidence_limits(report):
     evidence = summary["evidence"]
     attribution = evidence["attribution"]
     print("\nEVIDENCE LIMITS")
-    marker = "⚠ " if attribution["status"] == "limited" else ""
+    limited = attribution["status"] == "limited"
     print(
-        f"  {marker}Configuration coverage: {coverage['classified']}/{coverage['in_window']} "
+        f"  Configuration coverage: {coverage['classified']}/{coverage['in_window']} "
         f"in-window recent runs ({percentage(coverage['fraction'])})"
         + (
             f"; below {percentage(attribution['warning_threshold'])} warning threshold."
-            if marker
+            if limited
             else "."
         )
     )
     excluded = summary["unattributed_outcomes"]["outcomes"]
     if coverage["excluded"]:
+        marker = "⚠ " if any(excluded[key] for key in ("failed", "exception", "unknown")) else ""
         print(
-            f"  ⚠ Full report window: {coverage['excluded']} excluded "
+            f"  {marker}Full report window: {coverage['excluded']} excluded "
             f"({excluded['failed']} failed, {excluded['exception']} exceptions, "
             f"{excluded['unknown']} unknown outcomes)."
         )
@@ -1433,7 +1434,7 @@ def print_evidence_limits(report):
             "omitted from assessment and coverage."
         )
     print_override_difference(report)
-    print_unverified_hosts(report, details=False)
+    print_indented(print_unverified_hosts, indent=2, report=report, details=False)
 
 
 def print_override_difference(report):
@@ -1500,7 +1501,7 @@ def print_report_details(report, *, labels, verbose):
         counts = {labels[key]: count for key, count in pattern["cohorts"].items()}
         print(f"    Cohort counts: {counts}; observed on master: {pattern['seen_on_master']}")
         print(f"    https://firefox-ci-tc.services.mozilla.com/tasks/{pattern['example_task']}")
-    print_unverified_hosts(report, details=True)
+    print_indented(print_unverified_hosts, indent=2, report=report, details=True)
     print("\n  Host details")
     for host in report["hosts"]:
         print_out_of_scope_history(host)
@@ -1527,12 +1528,28 @@ def display_issues(report, *, details, verbose):
     # Supporting metadata and caveats already represented by coverage are not
     # independent default warnings. Keep the full diagnostics in details/JSON.
     quiet = ("Compact configuration history:", "Excluded jobs are unknown configuration evidence,")
-    warnings = [
+    candidates = [
         warning for warning in report["warnings"] if not warning.startswith(quiet) or details
     ]
+    warnings = []
+    for warning in candidates:
+        if warning.startswith(quiet) or re.match(
+            r"\d+ host\(s\) have a full 20-task window;", warning
+        ):
+            print(f"Note: {warning}")
+        else:
+            warnings.append(warning)
     print_issues(
         {**report, "warnings": warnings}, style=lambda value, **kwargs: str(value), verbose=verbose
     )
+
+
+def print_indented(render, *, indent, **kwargs):
+    """Compose a section while keeping its indentation relative to its parent."""
+    output = StringIO()
+    with redirect_stdout(output):
+        render(**kwargs)
+    print(textwrap.indent(output.getvalue(), " " * indent), end="")
 
 
 def write_report_text(value, *, stream, width, color):
@@ -1559,10 +1576,14 @@ def write_report_text(value, *, stream, width, color):
                     physical = click.style(physical, fg="red", bold=True)
                 elif "⚠" in line:
                     physical = click.style(physical, fg="yellow")
-                elif line and (
-                    not line.startswith(" ")
-                    or line.lstrip().startswith(
-                        ("COHORT HEALTH", "COMPARISON", "CURRENT QUEUE", "◆")
+                elif line.lstrip().startswith(
+                    (
+                        "◈",
+                        "COHORT HEALTH",
+                        "COMPARISON",
+                        "CURRENT QUEUE",
+                        "EVIDENCE LIMITS",
+                        "DETAILS",
                     )
                 ):
                     physical = click.style(physical, fg="cyan", bold=True)
@@ -1586,33 +1607,45 @@ def print_report(report, *, details=False, verbose=False, color=None, width=None
             f"  Report window: {display_time_range(report['window']['since'], report['window']['until'])}"
         )
         print(f"  {report['summary']['requested_hosts']} selected hosts")
-        print_compact_queue(report)
+        print_indented(print_compact_queue, indent=2, report=report)
         scopes = {tuple(group["configuration"]["scope"]) for group in report["summary"]["cohorts"]}
         show_group = len({scope[3] for scope in scopes}) > 1
         for scope in sorted(scopes):
-            print("\n" + population_label(scope, show_group=show_group))
+            print("\n  " + population_label(scope, show_group=show_group))
             cohorts = [
                 group
                 for group in report["summary"]["cohorts"]
                 if tuple(group["configuration"]["scope"]) == scope
             ]
-            print_cohort_table(cohorts, labels=labels, width=width)
+            print_indented(
+                print_cohort_table, indent=4, cohorts=cohorts, labels=labels, width=width - 4
+            )
             for comparison in report["comparisons"]:
                 if tuple(comparison["scope"]) == scope:
-                    print_compact_comparison(comparison, labels=labels, details=details or verbose)
+                    print_indented(
+                        print_compact_comparison,
+                        indent=4,
+                        comparison=comparison,
+                        labels=labels,
+                        details=details or verbose,
+                    )
         if not scopes:
             selection = report.get("selection", {})
             if selection.get("role"):
-                print(f"\nRole: {selection['role']}")
+                print(f"\n  Role: {selection['role']}")
             elif selection.get("worker_type"):
-                print(f"\nPool: {selection['provisioner']}/{selection['worker_type']}")
-            print("\nCOHORT HEALTH")
-            print("  ⚠ No verified cohorts available to assess.")
-            print("  Comparison unavailable")
-        print_evidence_limits(report)
+                print(f"\n  Pool: {selection['provisioner']}/{selection['worker_type']}")
+            print("\n    COHORT HEALTH")
+            print("      ⚠ No verified cohorts available to assess.")
+            print("      Comparison unavailable")
+        print_indented(print_evidence_limits, indent=2, report=report)
+        print_indented(
+            display_issues, indent=4, report=report, details=details or verbose, verbose=verbose
+        )
         if details or verbose:
-            print_report_details(report, labels=labels, verbose=verbose)
-        display_issues(report, details=details or verbose, verbose=verbose)
+            print_indented(
+                print_report_details, indent=2, report=report, labels=labels, verbose=verbose
+            )
         print("\n  Observed results only; not automatic rollout approval.")
         if not details and not verbose:
             print(

@@ -520,7 +520,7 @@ def test_observed_outcomes_include_unattributed_failures(env, capsys):
     details = capsys.readouterr().out
     assert "All observed in-window runs: 2 (across configurations)" in details
     assert "Completed: 1  ·  Failed: 1  ·  Exceptions: 0" in details
-    assert "Attributed runs: 1\n    Completed: 1  ·  Failed: 0" in details
+    assert "Attributed runs: 1\n      Completed: 1  ·  Failed: 0" in details
     assert "1: unknown configuration or task spans a transition/observation gap" in details
     assert result["summary"]["cohorts"][0]["outcomes"]["failed"] == 0
 
@@ -1267,7 +1267,74 @@ def test_report_stays_aligned_with_disabled_tty_newline_translation(
         else:
             assert "BEFORE\nNEXT" in screen
         assert "\n◈ FLEETROLL / ROLLOUT REPORT\n" in screen
-        assert "\nEVIDENCE LIMITS\n" in screen
-        assert "\n  COHORT HEALTH" in screen
-        assert "\n  COMPARISON" in screen
+        assert "\n  EVIDENCE LIMITS\n" in screen
+        assert "\n    COHORT HEALTH" in screen
+        assert "\n    COMPARISON" in screen
         assert "\x1b[" in session.capture(with_escapes=True)
+
+
+@pytest.mark.parametrize("details", [False, True])
+def test_routine_evidence_limits_are_neutral_but_remain_visible(env, capsys, details):
+    seed(env, "master")
+    seed(env, "override", sha=override(env, "branch"))
+    task(env, "master", minute=10)  # Unknown configuration, completed outcome.
+    task(env, "override")
+    invoke(env, "--role", ROLE)
+    result = read(capsys)
+    result["warnings"] = [
+        "Compact configuration history: 50 spans; retention cutoff test.",
+        "3 host(s) have a full 20-task window; earlier jobs may be omitted.",
+    ]
+    group = next(
+        group
+        for group in result["summary"]["cohorts"]
+        if group["configuration"]["kind"] == "override"
+    )
+    group["applied_revisions"] = {"test_first_revision": 1, "test_second_revision": 1}
+    report.print_report(result, color=True, details=details, width=120)
+    colored = capsys.readouterr().out
+    assert "\x1b[33m" not in colored
+    assert "⚠" not in colored
+    text = report.click.unstyle(colored)
+    assert "Insufficient sample" in text
+    assert "Comparison unavailable" in text
+    assert "Attribution:" in text
+    assert "below 80.0% warning threshold" in text
+    assert "sample spans 2 applied revisions" in text
+    assert "1 excluded (0 failed, 0 exceptions, 0 unknown outcomes)" in text
+    assert "earlier jobs may be omitted" in text
+
+
+@pytest.mark.parametrize("mode", ["default", "details", "verbose"])
+def test_report_sections_and_diagnostics_have_consistent_indentation(env, capsys, mode):
+    seed(env, "host", puppet_success=False)
+    task(env, "host", minute=10, state="failed")
+    invoke(env, "--role", ROLE)
+    result = read(capsys)
+    report.print_report(
+        result, color=False, details=mode == "details", verbose=mode == "verbose", width=100
+    )
+    text = capsys.readouterr().out
+    assert [line for line in text.splitlines() if line and not line.startswith(" ")] == [
+        "◈ FLEETROLL / ROLLOUT REPORT"
+    ]
+    assert "\n  EVIDENCE LIMITS\n" in text
+    assert "\n    COHORT HEALTH\n" in text
+    assert "\n    Unverified host configurations:\n" in text
+    if mode != "default":
+        assert "\n  DETAILS\n" in text
+        assert "\n    Host details\n" in text
+    assert all(len(line) <= 100 for line in text.splitlines())
+
+
+def test_actual_failures_and_empty_queue_keep_warning_color(env, capsys):
+    seed(env, "host")
+    task(env, "host", state="failed")
+    task(env, "host", state="exception", minute=10)
+    env.clients.queue.taskQueueCounts.return_value = {"pendingTasks": 0}
+    invoke(env, "host")
+    result = read(capsys)
+    report.print_report(result, color=True)
+    output = capsys.readouterr().out
+    for phrase in ("Failures observed", "no new work queued", "Full report window"):
+        assert "\x1b[33m" in next(line for line in output.splitlines() if phrase in line)
