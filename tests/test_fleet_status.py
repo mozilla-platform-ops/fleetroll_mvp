@@ -56,10 +56,18 @@ def test_population_override_and_uncertainty(tmp_path):
     assert "    b\n" in render_report(report, verbose=True)
 
 
-def test_cli_selector_validation():
+def test_cli_selector_validation(monkeypatch):
     runner = CliRunner()
     assert runner.invoke(cli, ["fleet-status"]).exit_code == 2
-    assert runner.invoke(cli, ["fleet-status", "--worker-type", "pool"]).exit_code == 2
+    seen = []
+    monkeypatch.setattr(
+        "fleetroll.commands.fleet_status.run_fleet_status", lambda **kw: seen.append(kw)
+    )
+    for value, expected in [("pool", "releng-hardware/pool"), ("other/pool", "other/pool")]:
+        assert runner.invoke(cli, ["fleet-status", "--worker-type", value]).exit_code == 0
+        assert seen[-1]["worker_type"] == expected
+    for value in ("/pool", "other/", "a/b/c"):
+        assert runner.invoke(cli, ["fleet-status", "--worker-type", value]).exit_code == 2
 
 
 def test_worker_identity_and_absent_override(tmp_path):

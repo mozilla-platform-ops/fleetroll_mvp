@@ -45,7 +45,7 @@ from .commands import (
 )
 from .exceptions import CommandFailureError, FleetRollError, UserError
 from .ssh import audit_script_body, remote_windows_audit_script, windows_audit_script_body
-from .utils import resolve_host_args
+from .utils import parse_worker_type, resolve_host_args
 
 # Module logger
 logger = logging.getLogger("fleetroll")
@@ -284,7 +284,10 @@ def host_monitor(
 @cli.command("fleet-status")
 @click.argument("hosts_file", required=False, type=click.Path(exists=True, dir_okay=False))
 @click.option("--role", help="Puppet role to select.")
-@click.option("--worker-type", help="Taskcluster provisioner/worker-type to select.")
+@click.option(
+    "--worker-type",
+    help="Worker type or provisioner/worker-type (default provisioner: releng-hardware).",
+)
 @click.option("--json", "json_output", is_flag=True, help="Emit machine-readable JSON.")
 @click.option("--verbose", "-v", is_flag=True, help="Show host lists in the report.")
 def fleet_status(
@@ -299,8 +302,11 @@ def fleet_status(
 
     if bool(role) == bool(worker_type):
         raise click.UsageError("Specify exactly one of --role or --worker-type")
-    if worker_type and (worker_type.count("/") != 1 or not all(worker_type.split("/"))):
-        raise click.UsageError("--worker-type must be provisioner/worker-type")
+    if worker_type:
+        try:
+            worker_type = "/".join(parse_worker_type(worker_type))
+        except ValueError as exc:
+            raise click.UsageError(f"--worker-type: {exc}") from exc
     run_fleet_status(
         hosts_file=hosts_file,
         role=role,
@@ -308,6 +314,19 @@ def fleet_status(
         json_output=json_output,
         verbose=verbose,
     )
+
+
+@cli.command(
+    "rollout-report",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    add_help_option=False,
+)
+@click.pass_context
+def rollout_report(ctx: click.Context):
+    """Compare recent Taskcluster outcomes across rollout configurations."""
+    from .rollout_report import main
+
+    ctx.exit(main(ctx.args, prog=ctx.command_path))
 
 
 @cli.command("show-override")

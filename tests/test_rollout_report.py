@@ -11,7 +11,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from click.testing import CliRunner
 from fleetroll import rollout_report as report
+from fleetroll.cli import cli
 from fleetroll.db import insert_host_observation
 
 ROLE = "gecko_t_linux_2404_talos"
@@ -272,6 +274,51 @@ def test_pool_selection_does_not_mix_roles_or_pools(env, capsys):
     assert len(result["comparisons"]) == 2
 
 
+@pytest.mark.parametrize("selection", ["talos-pool", "releng-hardware/talos-pool"])
+def test_pool_selector_forms_select_same_hosts(env, capsys, selection):
+    seed(env, "host")
+    assert invoke(env, "--worker-type", selection) == 0
+    assert [host["host"] for host in read(capsys)["hosts"]] == ["host"]
+
+
+def test_fleetroll_rollout_report_delegates_and_preserves_exit_code(monkeypatch):
+    seen = []
+    monkeypatch.setattr(report, "main", lambda args, **kw: seen.append(args) or 1)
+    result = CliRunner().invoke(cli, ["rollout-report", "--role", ROLE, "--min-finished", "10"])
+    assert result.exit_code == 1
+    assert seen == [["--role", ROLE, "--min-finished", "10"]]
+
+
+def test_fleetroll_rollout_report_help():
+    result = CliRunner().invoke(cli, ["rollout-report", "--help"], prog_name="fleetroll")
+    assert result.exit_code == 0
+    assert "fleetroll rollout-report" in result.output
+    assert "--min-finished" in result.output
+
+
+def test_fleetroll_rollout_report_runs_with_json(env):
+    seed(env, "host")
+    result = CliRunner().invoke(
+        cli,
+        [
+            "rollout-report",
+            "--role",
+            ROLE,
+            "--db",
+            str(env.db),
+            "--audit-log",
+            str(env.audit),
+            "--since",
+            SINCE.isoformat(),
+            "--until",
+            UNTIL.isoformat(),
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert [host["host"] for host in json.loads(result.output)["hosts"]] == ["host"]
+
+
 def test_partial_query_failure_remains_in_report_and_invalidates_comparison(env, capsys):
     seed(env, "master")
     seed(env, "override", sha=override(env, "branch"))
@@ -325,6 +372,9 @@ def test_explicit_failed_identity_blocks_role_fallback(env, capsys):
         ["host", "--since", "bad"],
         ["host", "--workers", "0"],
         ["host", "--max-observation-gap", "nan"],
+        ["--worker-type", "/pool"],
+        ["--worker-type", "a/b/c"],
+        ["--worker-type", "other/pool", "--provisioner", "releng-hardware"],
     ],
 )
 def test_invalid_arguments_exit_two(args):

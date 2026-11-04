@@ -32,7 +32,7 @@ from .rollout_history import (
     worker_identity,
 )
 from .taskcluster import create_tc_clients, load_tc_credentials
-from .utils import default_audit_log_path, is_host_file, parse_host_list
+from .utils import default_audit_log_path, is_host_file, parse_host_list, parse_worker_type
 
 OUTCOMES = ("completed", "failed", "exception", "running", "pending", "unknown")
 RECENT_TASK_LIMIT = 20
@@ -925,15 +925,20 @@ def cli_timestamp(value: str) -> dt.datetime:
     return stamp
 
 
-def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+def parse_args(argv=None, *, prog=None):
+    parser = argparse.ArgumentParser(description=__doc__, prog=prog)
     parser.add_argument("hosts", nargs="*", help="Hostnames or one host-list file.")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--role", help="Compare master with each override in this Puppet role.")
     selection.add_argument(
-        "--worker-type", help="Select an effective worker pool; keep roles separate."
+        "--worker-type",
+        help="Worker type or provisioner/worker-type (default provisioner: releng-hardware).",
     )
-    parser.add_argument("--provisioner", default=DEFAULT_TC_PROVISIONER)
+    parser.add_argument(
+        "--provisioner",
+        default=None,
+        help="Provisioner for a bare worker type (default releng-hardware).",
+    )
     parser.add_argument(
         "--worker-group",
         default="mdc1",
@@ -986,8 +991,24 @@ def parse_args(argv=None):
     args = parser.parse_args(argv)
     if bool(args.hosts) + bool(args.role) + bool(args.worker_type) != 1:
         parser.error("pass exactly one of hostnames/file, --role, or --worker-type")
-    if args.provisioner != DEFAULT_TC_PROVISIONER and not args.worker_type:
+    if args.provisioner is not None and not args.worker_type:
         parser.error("--provisioner requires --worker-type")
+    if args.worker_type:
+        try:
+            provisioner, pool = parse_worker_type(
+                args.worker_type, default_provisioner=args.provisioner or DEFAULT_TC_PROVISIONER
+            )
+        except ValueError as exc:
+            parser.error(f"--worker-type: {exc}")
+        if (
+            "/" in args.worker_type
+            and args.provisioner is not None
+            and args.provisioner != provisioner
+        ):
+            parser.error("--provisioner conflicts with --worker-type")
+        args.provisioner, args.worker_type = provisioner, pool
+    else:
+        args.provisioner = DEFAULT_TC_PROVISIONER
     if (
         not 1 <= args.workers <= 20
         or not math.isfinite(args.max_observation_gap)
@@ -1007,8 +1028,8 @@ def parse_args(argv=None):
     return args
 
 
-def main(argv=None) -> int:
-    args = parse_args(argv)
+def main(argv=None, *, prog=None) -> int:
+    args = parse_args(argv, prog=prog)
     overrides_dir = args.audit_log.parent / OVERRIDES_DIR_NAME
     history_metadata: dict[str, Any] = {}
     try:

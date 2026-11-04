@@ -9,8 +9,20 @@ import os
 import re
 from pathlib import Path
 
-from .constants import AUDIT_DIR_NAME, AUDIT_FILE_NAME
+from .constants import AUDIT_DIR_NAME, AUDIT_FILE_NAME, DEFAULT_TC_PROVISIONER
 from .exceptions import FleetRollError, UserError
+
+
+def parse_worker_type(
+    value: str, *, default_provisioner: str = DEFAULT_TC_PROVISIONER
+) -> tuple[str, str]:
+    """Resolve a worker type to its provisioner and pool."""
+    parts = value.split("/")
+    if len(parts) == 1:
+        parts.insert(0, default_provisioner)
+    if len(parts) != 2 or any(not part or part != part.strip() for part in parts):
+        raise ValueError("expected worker-type or provisioner/worker-type")
+    return parts[0], parts[1]
 
 
 def natural_sort_key(text: str) -> list[int | str]:

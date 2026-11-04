@@ -173,20 +173,20 @@ sources and supported launch configurations.
 
 #### Reviewing rollout jobs on master and overrides
 
-`scripts/check_rollout_jobs.py` groups hosts within a role into verified master
+`fleetroll rollout-report` groups hosts within a role into verified master
 and each distinct override, then compares their recent Taskcluster outcomes.
 The same report works after overrides are removed: no special mode is needed.
 Refresh the relevant hosts and GitHub references first:
 
 ```bash
 uv run fleetroll gather configs/host-lists/linux/2404.list
-uv run python scripts/check_rollout_jobs.py --role gecko_t_linux_2404_talos
+uv run fleetroll rollout-report --role gecko_t_linux_2404_talos
 
 # Pool selection keeps different roles/pools separate
-uv run python scripts/check_rollout_jobs.py --worker-type gecko-t-linux-talos-2404
+uv run fleetroll rollout-report --worker-type gecko-t-linux-talos-2404
 
 # Explicit hosts, including hosts whose overrides were removed
-uv run python scripts/check_rollout_jobs.py t-linux64-ms-016 t-linux64-ms-017 --json
+uv run fleetroll rollout-report t-linux64-ms-016 t-linux64-ms-017 --json
 ```
 
 The report includes outcome totals, rates, applied revisions, task-name failure
@@ -211,8 +211,8 @@ The script uses local Taskcluster credentials in `~/.tc_token` and queries at mo
 20 recent task runs per host. Full windows warn that earlier jobs may be omitted.
 Exit 1 indicates classified task failures/unknown outcomes or query errors;
 exit 2 indicates invalid input or unavailable local evidence. Exit 0 is not a
-rollout go-ahead. Use `scripts/check_rollout_jobs.py` in place of the removed
-`scripts/check_override_jobs.py`. See [rollout report](docs/rollout-report.md) for the
+rollout go-ahead. The existing `scripts/check_rollout_jobs.py` entry point remains available.
+See [rollout report](docs/rollout-report.md) for the
 history model, limitations, and versioned JSON schema.
 
 #### Data freshness
@@ -404,6 +404,9 @@ uv run fleetroll fleet-status --role gecko_t_linux_2404_talos
 uv run fleetroll fleet-status --worker-type releng-hardware/gecko-t-linux-talos-2404 --json
 uv run fleetroll fleet-status --role gecko_t_linux_2404_talos configs/host-lists/linux/all.list
 ```
+
+Both commands accept a bare worker type, which defaults to the `releng-hardware`
+provisioner, or an explicit `provisioner/worker-type`.
 
 Percentages use confirmed matching hosts as the denominator. Unknown membership,
 failed refreshes, and Fleetroll writes awaiting verification are reported separately.
