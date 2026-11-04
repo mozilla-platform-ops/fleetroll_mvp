@@ -207,12 +207,11 @@ for the evidence contract and measured storage costs. Use repeatable
 host-monitor JSON when older convergence evidence or finer observation anchors are needed. The report
 reads these snapshots without modifying the database.
 
-The script uses local Taskcluster credentials in `~/.tc_token` and queries at most
+The report uses local Taskcluster credentials in `~/.tc_token` and queries at most
 20 recent task runs per host. Full windows warn that earlier jobs may be omitted.
 Exit 1 indicates classified task failures/unknown outcomes or query errors;
 exit 2 indicates invalid input or unavailable local evidence. Exit 0 is not a
-rollout go-ahead. The existing `scripts/check_rollout_jobs.py` entry point remains available.
-See [rollout report](docs/rollout-report.md) for the
+rollout go-ahead. See [rollout report](docs/rollout-report.md) for the
 history model, limitations, and versioned JSON schema.
 
 #### Data freshness

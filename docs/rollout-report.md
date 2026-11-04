@@ -110,9 +110,9 @@ uv run fleetroll rollout-report --role gecko_t_linux_2404_talos \
 ```
 
 Worker types default to the `releng-hardware` provisioner; specify
-`provisioner/worker-type` for another provisioner. The existing
-`scripts/check_rollout_jobs.py` entry point remains available. The older
-`scripts/check_override_jobs.py` entry point has been removed. No separate post-removal
+`provisioner/worker-type` for another provisioner. The former
+`scripts/check_rollout_jobs.py` and `scripts/check_override_jobs.py` entry points
+have been removed; use `fleetroll rollout-report`. No separate post-removal
 mode is needed. Per-host JSON
 now includes master and unverified hosts as well as overrides. Consumers of the
 old deployment-only JSON should migrate to the versioned summary schema.

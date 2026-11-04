@@ -5,8 +5,6 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-import runpy
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -381,11 +379,6 @@ def test_invalid_arguments_exit_two(args):
     with pytest.raises(SystemExit) as exc:
         report.parse_args(args)
     assert exc.value.code == 2
-
-
-def test_script_uses_report_implementation():
-    root = Path(__file__).resolve().parents[1]
-    assert runpy.run_path(str(root / "scripts/check_rollout_jobs.py"))["main"] is report.main
 
 
 def test_human_summary_shows_totals_exclusions_and_details(env, capsys):
