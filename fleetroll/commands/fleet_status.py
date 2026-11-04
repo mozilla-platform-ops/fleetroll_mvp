@@ -46,11 +46,13 @@ def build_report(
         if role:
             membership = observed.get("role")
             match = membership == role if membership else None
-        else:
+        elif worker_type:
             identity, _ = worker_identity(record, overrides_dir=overrides_dir)
             match = f"{identity.provisioner}/{identity.pool}" == worker_type if identity else None
             if match and identity and identity.legacy:
                 legacy.append(host)
+        else:
+            match = True
         if match is None:
             unresolved.append(host)
             continue

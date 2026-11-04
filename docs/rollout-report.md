@@ -54,6 +54,14 @@ group. Observed worker identities take precedence; explicit collection failure
 blocks legacy fallback. Older records use the existing role/override mapping
 with a warning.
 
+Fleet override status shows the present, absent, and unknown override percentages
+among hosts with confirmed membership based on their latest successful observation
+at the report end. It uses the fleet-status grouping rules and includes hosts whose
+Puppet application is unverified. Observation timestamps, failed gathers, and
+unverified writes indicate when those recorded states may be stale. This split is
+distinct from the verified historical cohorts used for task comparisons. Explicit
+host selections describe only the selected hosts, not the whole fleet.
+
 Master and each override SHA have separate summaries, with applied revision
 distributions. Pairwise comparisons use their overlapping verified time range
 inside the requested report window. Jobs are filtered to that same window on
@@ -71,7 +79,7 @@ root-cause classifications. Each host query retains up to 20 recent task runs,
 so the tool does not claim complete historical coverage. A full recent-history
 window always produces a truncation warning.
 
-JSON has `schema_version`, `configuration_history`, `window`, `hosts`, `summary`, `comparisons`, `errors`,
+JSON has `schema_version`, `configuration_history`, `fleet_override_status`, `window`, `hosts`, `summary`, `comparisons`, `errors`,
 and `warnings`. Host results retain jobs and per-job exclusion reasons. Summary
 coverage reports fetched, in-window, classified, excluded, and unresolved task
 counts, requested/queried hosts, and observation freshness. Query failures have

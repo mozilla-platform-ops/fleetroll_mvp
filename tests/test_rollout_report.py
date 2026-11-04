@@ -444,6 +444,61 @@ def test_observed_outcomes_include_unattributed_failures(env, capsys):
     assert result["summary"]["cohorts"][0]["outcomes"]["failed"] == 0
 
 
+def test_fleet_percentages_include_unapplied_override_removal(env, capsys):
+    sha = override(env, "branch")
+    seed(env, "override", sha=sha, git="test_branch")
+    seed(env, "removed", puppet_override_sha_applied=sha)
+    assert invoke(env, "--role", ROLE) == 0
+    result = read(capsys)
+    status = result["fleet_override_status"]
+    assert status["matching_hosts"] == 2
+    assert status["override_totals"]["present"] == {"count": 1, "percentage": 50.0}
+    assert status["override_totals"]["absent"] == {"count": 1, "percentage": 50.0}
+    assert "removed" in result["summary"]["unverified_hosts"]
+    report.print_report(result, color=False)
+    output = capsys.readouterr().out
+    assert "Override present: 1 (50.0%)" in output
+    assert "No override: 1 (50.0%)" in output
+    assert "override presence does not prove Puppet applied it" in output
+
+
+def test_explicit_hosts_fleet_percentage_does_not_include_other_hosts(env, capsys):
+    seed(env, "selected")
+    seed(env, "other", sha=override(env, "branch"), git="test_branch")
+    assert invoke(env, "selected") == 0
+    status = read(capsys)["fleet_override_status"]
+    assert status["matching_hosts"] == 1
+    assert status["override_totals"]["absent"]["percentage"] == 100.0
+
+
+def test_fleet_percentage_marks_failed_refresh_and_later_write(env, capsys):
+    seed(env, "host", stamp=UNTIL - dt.timedelta(minutes=10))
+    failed = {
+        "host": "host",
+        "ts": (UNTIL - dt.timedelta(minutes=2)).isoformat(),
+        "action": "host.audit",
+        "ok": False,
+        "observed": {},
+    }
+    insert_host_observation(env.conn, failed)
+    env.conn.commit()
+    env.audit.write_text(
+        json.dumps(
+            {
+                "host": "host",
+                "ts": (UNTIL - dt.timedelta(minutes=5)).isoformat(),
+                "action": "host.unset_override",
+                "ok": True,
+            }
+        )
+        + "\n"
+    )
+    assert invoke(env, "--role", ROLE) == 1
+    status = read(capsys)["fleet_override_status"]
+    assert status["newer_failed_gathers"] == ["host"]
+    assert status["unverified_writes"] == ["host"]
+
+
 def test_verbose_option_does_not_change_json(env, capsys):
     seed(env, "host")
     task(env, "host", minute=10)

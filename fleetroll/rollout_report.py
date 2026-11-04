@@ -17,6 +17,7 @@ from typing import Any
 import click
 
 from .audit import iter_audit_records
+from .commands.fleet_status import build_report as build_fleet_status
 from .configuration_history import read_evidence, state_payload
 from .constants import DEFAULT_TC_PROVISIONER, OVERRIDES_DIR_NAME
 from .db import get_db_path
@@ -827,6 +828,55 @@ def print_observed_outcomes(summary):
             print(f"    {count}: {reason or 'reason unavailable'}")
 
 
+def fleet_override_status(records, *, selected, role, worker_type, overrides_dir):
+    """Summarize last successful observed override state at the report horizon."""
+    latest, successful, writes = {}, {}, {}
+    for host, entries in records.items():
+        for entry in entries:
+            action = entry.get("action", "host.audit")
+            if action == "host.audit":
+                latest[host] = entry
+                if entry.get("ok"):
+                    successful[host] = entry
+            elif action in WRITE_ACTIONS:
+                stamp = parse_timestamp(entry.get("ts"))
+                if stamp is None:
+                    continue
+                key = host.split(".")[0].lower()
+                if key not in writes or stamp > writes[key]:
+                    writes[key] = stamp
+    return build_fleet_status(
+        hosts=list(records) if role or worker_type else selected,
+        latest=latest,
+        successful=successful,
+        writes=writes,
+        role=role,
+        worker_type=worker_type,
+        overrides_dir=overrides_dir,
+        scoped=not (role or worker_type),
+    )
+
+
+def print_fleet_override_status(status):
+    print(f"  Matching hosts with recorded membership: {status['matching_hosts']}")
+    for state, label in (
+        ("present", "Override present"),
+        ("absent", "No override"),
+        ("unknown", "Override unknown"),
+    ):
+        value = status["override_totals"][state]
+        percent = f"{value['percentage']:.1f}%" if value["percentage"] is not None else "—"
+        print(f"  {label}: {value['count']} ({percent})")
+    print("  Latest successful observations; override presence does not prove Puppet applied it.")
+    observed = status["observation_range"]
+    print(f"  Observed: {observed['earliest'] or 'unknown'} to {observed['latest'] or 'unknown'}")
+    print(f"  Membership unresolved: {len(status['unresolved_hosts'])}")
+    print(
+        f"  Newer failed gathers: {len(status['newer_failed_gathers'])}; "
+        f"writes awaiting verification: {len(status['unverified_writes'])}"
+    )
+
+
 def print_report(report, *, details=False, verbose=False, color=None):
     if color is None:
         color = report_color_enabled()
@@ -851,6 +901,8 @@ def print_report(report, *, details=False, verbose=False, color=None):
     print("   Evidence assessment only; not automatic rollout approval.")
     for reason in summary["evidence"]["reasons"]:
         print(f"   • {reason}")
+    heading("Fleet override status")
+    print_fleet_override_status(report["fleet_override_status"])
     heading("Coverage")
     print(f"  Hosts queried: {summary['queried_hosts']}/{summary['requested_hosts']}")
     evidence = summary["coverage"]
@@ -1162,6 +1214,13 @@ def main(argv=None, *, prog=None) -> int:
     report = {
         "schema_version": SCHEMA_VERSION,
         "configuration_history": history_metadata,
+        "fleet_override_status": fleet_override_status(
+            records,
+            selected=selected,
+            role=args.role,
+            worker_type=f"{args.provisioner}/{args.worker_type}" if args.worker_type else None,
+            overrides_dir=overrides_dir,
+        ),
         "window": {"since": iso(args.since), "until": iso(args.until)},
         "hosts": hosts,
         "summary": summary,
