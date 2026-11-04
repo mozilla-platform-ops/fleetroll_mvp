@@ -143,7 +143,7 @@ Reports open SQLite in read-only mode and never initialize or migrate it. JSON
 adds `configuration_history` metadata, interval source/gap/cutoff fields, and
 per-host `configuration_evidence` provenance plus `configuration_gaps` covering
 unknown portions of the requested window. Human output includes the retention
-cutoff and span count, with individual unknown ranges under `--details`. Saved
+cutoff and span count, with individual unknown ranges under `--verbose`. Saved
 files remain independent evidence and are not imported into SQLite.
 
 ## Reproducible measurements

@@ -349,6 +349,18 @@ def test_human_summary_shows_totals_exclusions_and_details(env, capsys):
     assert "1 excluded" in text
     assert "master" in text
     assert "unknown configuration" in text
+    assert "run 0:" not in text
+    report.print_report(result, verbose=True)
+    verbose = capsys.readouterr().out
+    assert "run 0:" in verbose
+    assert "Unknown configuration:" in verbose
+
+
+def test_verbose_option_does_not_change_json(env, capsys):
+    seed(env, "host")
+    task(env, "host", minute=10)
+    invoke(env, "host", "-v")
+    assert read(capsys)["hosts"][0]["jobs"]
 
 
 def test_one_low_coverage_override_cannot_hide_behind_large_master_sample(env, capsys):

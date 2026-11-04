@@ -766,7 +766,7 @@ def configuration_label(config):
     return f"{config['branch']} ({config['override_sha256'][:12]})"
 
 
-def print_report(report, *, details=False):
+def print_report(report, *, details=False, verbose=False):
     summary = report["summary"]
     labels = {
         group["configuration"]["id"]: configuration_label(group["configuration"])
@@ -849,7 +849,17 @@ def print_report(report, *, details=False):
     for host in report["hosts"]:
         if host["configuration_reason"]:
             print(f"\nUnverified {host['host']}: {host['configuration_reason']}")
-        if details:
+        if details or verbose:
+            if not verbose:
+                jobs = host["jobs"]
+                classified = sum(job["configuration"] is not None for job in jobs)
+                in_window = sum(job["in_window"] for job in jobs)
+                print(
+                    f"{host['host']}: {classified}/{in_window} in-window runs classified; "
+                    f"{len(host['configuration_gaps'])} unknown configuration range(s); "
+                    f"observed {host['observation_ts']}"
+                )
+                continue
             print(f"\n{host['host']} observed {host['observation_ts']}")
             for gap in host["configuration_gaps"]:
                 print(f"  Unknown configuration: {gap['start']} to {gap['end']}")
@@ -920,7 +930,13 @@ def parse_args(argv=None):
         "--workers", type=int, default=4, help="Concurrent host queries (1-20, default 4)."
     )
     parser.add_argument(
-        "--details", action="store_true", help="Print per-host task attribution details."
+        "--details", action="store_true", help="Print a compact per-host attribution summary."
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Print individual task results and configuration gaps.",
     )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -1045,7 +1061,7 @@ def main(argv=None) -> int:
     if args.json:
         print(json.dumps(report, indent=2))
     else:
-        print_report(report, details=args.details)
+        print_report(report, details=args.details, verbose=args.verbose)
     failed = any(
         group["outcomes"][outcome]
         for group in summary["cohorts"]
