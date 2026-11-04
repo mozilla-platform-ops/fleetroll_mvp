@@ -683,6 +683,46 @@ def remote_run_puppet_script() -> str:
     return "sh -c " + shlex.quote(body)
 
 
+def remote_idle_script() -> str:
+    """Collect Linux worker health and Puppet activity without changing the host.
+
+    Process arguments are never returned: they may contain task credentials.
+    Keep health JSON separate from the small collection-status envelope.
+    """
+    body = r"""marker() { printf 'FLEETROLL_IDLE_%s=%s\n' "$1" "$2"; }
+marker CHECKED_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+os_type=$(uname -s 2>/dev/null)
+marker OS_TYPE "$os_type"
+if [ "$os_type" != Linux ]; then
+  marker ERROR unsupported_os
+  exit 0
+fi
+
+puppet_state=$(sudo -n sh -c '
+  pgrep -f "$1" >/dev/null 2>&1
+  case "$?" in
+    0) printf true ;;
+    1) printf false ;;
+    *) printf unknown ;;
+  esac
+' sh '(^|/)(run-puppet\.sh|puppet)([[:space:]]|$)' 2>/dev/null)
+case "$puppet_state" in
+  true|false) marker PUPPET_RUNNING "$puppet_state" ;;
+  *) marker PUPPET_RUNNING unknown ;;
+esac
+
+if ! command -v gwhc >/dev/null 2>&1; then
+  marker ERROR gwhc_missing
+  exit 0
+fi
+gwhc_json=$(sudo -n gwhc --json)
+marker GWHC_EXIT "$?"
+marker JSON_BEGIN ""
+printf '%s\n' "$gwhc_json"
+"""
+    return "sh -c " + shlex.quote(body)
+
+
 def remote_reboot_if_idle_script() -> str:
     """Build a one-session Linux/gwhc check and immediate reboot request."""
     body = r"""marker() { printf 'FLEETROLL_REBOOT_IF_IDLE_%s=%s\n' "$1" "$2"; }

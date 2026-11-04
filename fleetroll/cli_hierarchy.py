@@ -14,6 +14,7 @@ COMMAND_PATHS = {
     "show-vault": ("vault", "show"),
     "host-set-vault": ("vault", "set"),
     "host-monitor": ("host", "monitor"),
+    "host-idle": ("host", "idle"),
     "host-run-puppet": ("host", "run-puppet"),
     "host-reboot-if-idle": ("host", "reboot-if-idle"),
     "note-add": ("note", "add"),
@@ -33,7 +34,7 @@ COMMAND_PATHS = {
 GROUP_HELP = {
     "override": "Create, inspect, deploy, and remove Puppet overrides.",
     "vault": "Inspect and deploy vault files.",
-    "host": "Monitor hosts, run Puppet, and request reboots.",
+    "host": "Monitor hosts, check activity, run Puppet, and request reboots.",
     "note": "Add, show, and clear host notes.",
     "gather": (
         "Collect host state, Taskcluster data, and GitHub references. "

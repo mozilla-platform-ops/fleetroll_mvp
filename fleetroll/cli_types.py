@@ -143,6 +143,17 @@ class HostRunPuppetArgs:
 
 
 @dataclass
+class HostIdleArgs:
+    """Arguments for the read-only live idle check."""
+
+    host: str
+    ssh_option: list[str] | None
+    connect_timeout: int
+    timeout: int
+    json: bool
+
+
+@dataclass
 class HostRebootIfIdleArgs:
     """Arguments for the operator-triggered reboot-if-idle command."""
 

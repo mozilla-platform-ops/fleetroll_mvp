@@ -14,6 +14,7 @@ from .cli_hierarchy import install_hierarchy
 from .cli_types import (
     DataFreshnessArgs,
     HostAuditArgs,
+    HostIdleArgs,
     HostMonitorArgs,
     HostRebootIfIdleArgs,
     HostRunPuppetArgs,
@@ -30,6 +31,7 @@ from .commands import (
     cmd_data_freshness,
     cmd_gh_fetch,
     cmd_host_audit,
+    cmd_host_idle,
     cmd_host_monitor,
     cmd_host_reboot_if_idle,
     cmd_host_run_puppet,
@@ -798,6 +800,35 @@ def host_run_puppet(
         quiet=quiet,
     )
     cmd_host_run_puppet(args)
+
+
+@cli.command("host-idle")
+@click.argument("host", metavar="HOST")
+@click.option("--json", "json_output", is_flag=True, help="Emit machine-readable JSON.")
+@click.option("--timeout", type=click.IntRange(min=1), default=30, show_default=True)
+@click.option("--connect-timeout", type=click.IntRange(min=1), default=10, show_default=True)
+@click.option("--ssh-option", multiple=True, help="Extra ssh option (repeatable).")
+def host_idle(
+    host: str,
+    json_output: bool,
+    timeout: int,
+    connect_timeout: int,
+    ssh_option: tuple[str, ...],
+) -> None:
+    """Check one Linux host's live worker state and Puppet activity.
+
+    A snapshot only: this does not reserve the worker or start Puppet.
+    Known idle and working results exit 0; unknown or failed checks exit 1.
+    """
+    cmd_host_idle(
+        HostIdleArgs(
+            host=host,
+            json=json_output,
+            timeout=timeout,
+            connect_timeout=connect_timeout,
+            ssh_option=list(ssh_option) or None,
+        )
+    )
 
 
 @cli.command("host-reboot-if-idle")

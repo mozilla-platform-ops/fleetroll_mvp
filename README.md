@@ -479,6 +479,28 @@ uv run fleetroll override set --from-file ~/.fleetroll/overrides/0328af8c9d6f co
 uv run fleetroll override unset configs/host-lists/1804.list
 ```
 
+### Checking whether a host is idle
+
+`host idle` checks one Linux host over SSH using live `sudo -n gwhc --json`
+and a separate Puppet process check. It reports the worker state (`idle`,
+`working`, or `unknown`), whether Puppet is running, check timestamps, and
+supporting health details. `WORKING` and `BUSY` health states both mean working.
+The host is reported idle only when the worker is idle and Puppet is not running.
+
+```bash
+uv run fleetroll host idle t-linux64-ms-017
+uv run fleetroll host idle t-linux64-ms-017 --json
+```
+
+Known idle and working results exit 0; unknown or failed checks exit 1, with
+the JSON result still printed. Missing gwhc, unsupported operating systems,
+SSH failures, and unavailable Puppet activity never count as idle. This command
+does not change the host or overwrite recorded host observations.
+
+This is a snapshot of gwhc's current assessment, which uses heuristics and can
+miss stale worker state. It does not reserve or quarantine the worker; a new
+task may start immediately afterward. Recheck before taking an action.
+
 ### Rebooting an idle worker
 
 `host reboot-if-idle` checks a Linux host's live `sudo gwhc --json` output and
