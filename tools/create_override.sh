@@ -140,7 +140,9 @@ PUPPET_BRANCH="$branch_name"
 PUPPET_MAIL="$user@mozilla.com"
 
 # taskcluster overrides
-# WORKER_TYPE_OVERRIDE='gecko-t-linux-talos-1804-staging'
+# To change worker pools, set WORKER_TYPE_OVERRIDE to the target role's base
+# worker type with your desired suffix appended (verify every target host).
+# WORKER_TYPE_OVERRIDE=''
 EOF
 
 echo "Created override file: $override_file"
