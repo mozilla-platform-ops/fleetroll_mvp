@@ -170,6 +170,38 @@ def process_audit_result(
     vault_present = info.get("VLT_PRESENT") == "1" if "VLT_PRESENT" in info else vault_present
     role_present = info.get("ROLE_PRESENT") == "1"
     os_type = info.get("OS_TYPE")
+    worker_identity = None
+    worker_identity_status = None
+    if "TC_WORKER_IDENTITY" in info:
+        worker_identity_status = "invalid"
+        try:
+            identity_result = json.loads(info["TC_WORKER_IDENTITY"])
+            if isinstance(identity_result, dict):
+                status = identity_result.get("status")
+                if status in {
+                    "ok",
+                    "missing",
+                    "invalid",
+                    "unreadable",
+                    "ambiguous",
+                    "invalid_launch_config",
+                    "unsupported_launch_config",
+                    "process_lookup_failed",
+                    "collector_unavailable",
+                }:
+                    worker_identity_status = status
+                identity = identity_result.get("identity")
+                keys = ("provisionerId", "workerType", "workerGroup", "workerId")
+                if (
+                    status == "ok"
+                    and isinstance(identity, dict)
+                    and all(isinstance(identity.get(key), str) and identity[key] for key in keys)
+                ):
+                    worker_identity = {key: identity[key] for key in keys}
+                elif status == "ok":
+                    worker_identity_status = "invalid"
+        except (ValueError, TypeError):
+            pass
     uptime_s = None
     uptime_raw = info.get("UPTIME_S")
     if uptime_raw:
@@ -330,6 +362,10 @@ def process_audit_result(
             "puppet_duration_s": puppet_duration_s,
         },
     }
+
+    if worker_identity_status is not None:
+        result["observed"]["tc_worker_identity_status"] = worker_identity_status
+        result["observed"]["tc_worker_identity"] = worker_identity
 
     # Store contents in result dict for display purposes (not persisted to audit log).
     if content and override_present:

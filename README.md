@@ -152,6 +152,22 @@ uv run fleetroll gather-tc configs/host-lists/1804.list
 uv run fleetroll gather-tc -v configs/host-lists/1804.list
 ```
 
+For Linux and macOS, `gather-host` records the configured Taskcluster worker
+identity (provisioner, pool, group, and worker ID). `gather-tc` uses that identity,
+so new roles and pools do not need entries in Fleetroll's role mapping. Refresh
+host observations after changing worker configuration. Configuration identifies
+which worker to query; it does not establish that the worker is running.
+
+Older observations without identity collection metadata use the legacy
+role/override mapping with a warning. An explicit identity collection failure
+requires a successful `gather-host` refresh; Fleetroll does not fall back to a
+possibly outdated pool. Unresolved hosts, missing workers, and API failures make
+`gather-tc` exit nonzero, including in quiet mode. Successful hosts are still
+saved, and failed hosts retain their previous TC observation timestamps.
+
+See [worker identity collection](docs/worker-identity.md) for configuration
+sources and supported launch configurations.
+
 #### Reviewing jobs after override deployment
 
 `scripts/check_override_jobs.py` compares each host's recent Taskcluster runs

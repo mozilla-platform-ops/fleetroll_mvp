@@ -209,10 +209,13 @@ def resolve_host_worker_types(
     role_to_worker_type: dict[str, tuple[str, str]],
     host_to_override_pool: dict[str, str | None],
     default_provisioner: str = DEFAULT_TC_PROVISIONER,
+    observed_identities: dict[str, dict[str, str] | None] | None = None,
 ) -> dict[str, tuple[str, str]]:
     """Resolve each host's (provisioner, worker_type), applying overrides.
 
-    The role-based mapping is the baseline. When a host has a
+    Observed identity takes precedence, including explicit collection failure.
+    Only hosts without identity collection metadata use the legacy baseline.
+    When a legacy host has a
     WORKER_TYPE_OVERRIDE pool, it replaces the role-derived worker type while
     keeping the provisioner from the role mapping (or ``default_provisioner``
     if the role is unmapped). Hosts with neither a mapped role nor an override
@@ -225,12 +228,18 @@ def resolve_host_worker_types(
         host_to_override_pool: Mapping of hostname to override pool (or None)
         default_provisioner: Provisioner to use when override pool exists but
             role is unmapped
+        observed_identities: Collected identities; None values block legacy fallback
 
     Returns:
         Dict mapping hostname to (provisioner, worker_type)
     """
     result: dict[str, tuple[str, str]] = {}
     for host in hosts:
+        if observed_identities is not None and host in observed_identities:
+            identity = observed_identities[host]
+            if identity:
+                result[host] = (identity["provisionerId"], identity["workerType"])
+            continue
         role = host_to_role.get(host)
         base = role_to_worker_type.get(role) if role else None
         override_pool = host_to_override_pool.get(host)
@@ -241,6 +250,44 @@ def resolve_host_worker_types(
         elif base:
             result[host] = base
 
+    return result
+
+
+def get_observed_identities(
+    hosts: list[str], *, db_conn: sqlite3.Connection
+) -> dict[str, dict[str, str] | None]:
+    """Absent keys allow legacy fallback; explicit failed collection does not."""
+    from ..db import get_latest_host_observations
+
+    latest, _ = get_latest_host_observations(db_conn, hosts)
+    result: dict[str, dict[str, str] | None] = {}
+    keys = ("provisionerId", "workerType", "workerGroup", "workerId")
+    for host, record in latest.items():
+        observed = record.get("observed", {})
+        if "tc_worker_identity_status" not in observed:
+            continue
+        result[host] = None
+        identity = observed.get("tc_worker_identity")
+        if (
+            record.get("ok")
+            and observed.get("tc_worker_identity_status") == "ok"
+            and isinstance(identity, dict)
+            and all(isinstance(identity.get(key), str) and identity[key] for key in keys)
+        ):
+            result[host] = {key: identity[key] for key in keys}
+    return result
+
+
+def index_workers(workers: list[dict[str, Any]]) -> dict[Any, Any]:
+    """Index full identities; allow legacy short IDs only when unambiguous."""
+    result: dict[Any, Any] = {}
+    by_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for worker in workers:
+        worker_id = worker.get("workerId")
+        if worker_id:
+            result[(worker.get("workerGroup"), worker_id)] = worker
+            by_id[worker_id].append(worker)
+    result.update({key: values[0] for key, values in by_id.items() if len(values) == 1})
     return result
 
 
@@ -353,15 +400,16 @@ def match_workers_to_hosts(
     hosts: list[str],
     *,
     host_to_worker_type: dict[str, tuple[str, str]],
-    worker_type_to_workers: dict[tuple[str, str], dict[str, Any]],
+    worker_type_to_workers: dict[tuple[str, str], dict[Any, Any]],
     ts: str,
+    observed_identities: dict[str, dict[str, str] | None] | None = None,
 ) -> list[dict[str, Any]]:
     """Match TaskCluster worker data to hosts and build worker records.
 
     Args:
         hosts: List of hostnames to match
         host_to_worker_type: Mapping of hostname to (provisioner, worker_type),
-            already resolved with any WORKER_TYPE_OVERRIDE applied
+            resolved from observed identity, or legacy role/override metadata
         worker_type_to_workers: Mapping of (provisioner, worker_type) to worker data
         ts: Timestamp for the records
 
@@ -378,9 +426,11 @@ def match_workers_to_hosts(
         provisioner, worker_type = worker_type_key
         workers_map = worker_type_to_workers.get(worker_type_key, {})
 
-        # Match by short hostname
-        short_host = strip_fqdn(host)
-        worker_data = workers_map.get(short_host)
+        # Match full observed identity; legacy observations use an unambiguous short ID.
+        identity = (observed_identities or {}).get(host)
+        short_host = identity["workerId"] if identity else strip_fqdn(host)
+        worker_key = (identity["workerGroup"], short_host) if identity else short_host
+        worker_data = workers_map.get(worker_key)
 
         if worker_data:
             # Extract fields from the Worker Manager REST response.
@@ -396,6 +446,9 @@ def match_workers_to_hosts(
             task_state = None
             latest_task = worker_data.get("latestTask")
             if latest_task:
+                if latest_task.get("taskId") and not latest_task.get("run"):
+                    # Task status lookup failed: preserve the last successful observation.
+                    continue
                 task_id = latest_task.get("taskId")
                 task_run_id = latest_task.get("runId")
                 run = latest_task.get("run")
@@ -409,6 +462,7 @@ def match_workers_to_hosts(
                 "ts": ts,
                 "host": host,
                 "worker_id": short_host,
+                "worker_group": worker_data.get("workerGroup"),
                 "provisioner": provisioner,
                 "worker_type": worker_type,
                 "state": state,
@@ -472,6 +526,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     try:
         # Map hosts to roles from SQLite
         host_to_role = get_host_roles_bulk(set(hosts), db_conn)
+        observed_identities = get_observed_identities(hosts, db_conn=db_conn)
 
         # Track hosts without roles for logging
         for host, role in host_to_role.items():
@@ -488,17 +543,26 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
 
         # Extend role lookup with dynamically-fetched Windows pool mapping if needed
         role_lookup = ROLE_TO_TASKCLUSTER
-        windows_roles = [r for r in role_to_hosts if r.startswith("win") and "_" not in r]
+        windows_roles = [
+            role
+            for host, role in host_to_role.items()
+            if host not in observed_identities
+            and role
+            and role.startswith("win")
+            and "_" not in role
+        ]
         if windows_roles:
             if not quiet:
                 click.echo("Fetching Windows worker pool names from TaskCluster...")
-            windows_mapping = build_windows_role_mapping("releng-hardware", credentials)
-            role_lookup = {**ROLE_TO_TASKCLUSTER, **windows_mapping}
+            try:
+                windows_mapping = build_windows_role_mapping("releng-hardware", credentials)
+                role_lookup = {**ROLE_TO_TASKCLUSTER, **windows_mapping}
+            except FleetRollError as exc:
+                api_errors += 1
+                click.echo(f"ERROR: Windows worker pool discovery failed: {exc}", err=True)
 
         # Map roles to workerTypes
-        role_to_worker_type, _, unmapped_roles = map_roles_to_worker_types(
-            role_to_hosts, role_lookup
-        )
+        role_to_worker_type, _, _ = map_roles_to_worker_types(role_to_hosts, role_lookup)
 
         # Apply per-host WORKER_TYPE_OVERRIDE on top of the role-based mapping.
         # A deployed override file can move a host to a different worker pool
@@ -511,6 +575,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             host_to_role=host_to_role,
             role_to_worker_type=role_to_worker_type,
             host_to_override_pool=host_to_override_pool,
+            observed_identities=observed_identities,
         )
         worker_type_to_hosts = invert_host_worker_types(host_to_worker_type)
         task_run_cache = build_task_run_cache(get_latest_tc_workers(db_conn, hosts))
@@ -520,24 +585,33 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 if pool:
                     click.echo(f"  {host} -> worker pool override: {pool}")
 
-        # Display warnings for unmapped roles. Hosts whose role is unmapped but
-        # that have a worker pool override are still fetched, so don't warn for
-        # those.
-        for role, host_count in unmapped_roles:
-            override_hosts = sum(
-                1 for h in role_to_hosts.get(role, []) if host_to_override_pool.get(h)
-            )
-            skipped = host_count - override_hosts
-            if skipped > 0 and not quiet:
+        for host in hosts:
+            identity = observed_identities.get(host)
+            if identity:
+                intended_pool = host_to_override_pool.get(host)
+                if intended_pool and intended_pool != identity["workerType"]:
+                    click.echo(
+                        f"WARNING: {host}: observed pool {identity['workerType']} differs from "
+                        f"WORKER_TYPE_OVERRIDE={intended_pool}; querying observed identity",
+                        err=True,
+                    )
+            elif host in host_to_worker_type:
                 click.echo(
-                    f"WARNING: Role '{role}' not found in lookup table, skipping {skipped} host(s)",
+                    f"WARNING: {host}: using legacy role/override pool resolution; "
+                    "refresh with gather-host to collect worker identity",
+                    err=True,
+                )
+            else:
+                click.echo(
+                    f"ERROR: {host}: worker identity unresolved; refresh with gather-host "
+                    "and check worker configuration",
                     err=True,
                 )
 
         if not worker_type_to_hosts:
             if not quiet:
-                click.echo("No hosts with mappable roles found. Nothing to fetch.")
-            return
+                click.echo("No hosts with resolved worker identities. Nothing to fetch.")
+            raise FleetRollError("No requested hosts have a resolvable Taskcluster worker identity")
 
         # Show summary of what we're fetching
         if not quiet:
@@ -546,11 +620,12 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 for role, hosts in role_to_hosts.items()
                 if role in role_to_worker_type
             )
-            click.echo(f"Found roles: {role_summary}")
+            if role_summary:
+                click.echo(f"Found legacy roles: {role_summary}")
 
         # Fetch data for each workerType
         ts = utc_now_iso()
-        worker_type_to_workers: dict[tuple[str, str], dict[str, Any]] = {}
+        worker_type_to_workers: dict[tuple[str, str], dict[Any, Any]] = {}
         task_status_errors = 0
         successful_pool_requests = 0
 
@@ -563,7 +638,16 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                     provisioner,
                     worker_type=worker_type,
                     clients=clients,
-                    worker_ids={strip_fqdn(host) for host in worker_type_to_hosts[worker_type_key]},
+                    worker_ids={
+                        strip_fqdn(host)
+                        for host in worker_type_to_hosts[worker_type_key]
+                        if host not in observed_identities
+                    },
+                    worker_identities={
+                        (identity["workerGroup"], identity["workerId"])
+                        for host in worker_type_to_hosts[worker_type_key]
+                        if (identity := observed_identities.get(host))
+                    },
                     cached_task_runs=task_run_cache,
                     verbose=(verbose >= 2 and not quiet),
                 )
@@ -585,11 +669,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                         )
 
                 # Build worker_id -> worker data map
-                workers_map = {}
-                for worker in workers_list:
-                    worker_id = worker.get("workerId")
-                    if worker_id:
-                        workers_map[worker_id] = worker
+                workers_map = index_workers(workers_list)
 
                 worker_type_to_workers[(provisioner, worker_type)] = workers_map
                 if not quiet:
@@ -598,7 +678,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                         if fetch_result.status_errors
                         else ""
                     )
-                    click.echo(f" {len(workers_map)} worker(s) found{status_warning}")
+                    click.echo(f" {len(workers_list)} worker(s) found{status_warning}")
 
             except FleetRollError as e:
                 api_errors += 1
@@ -621,6 +701,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             host_to_worker_type=host_to_worker_type,
             worker_type_to_workers=worker_type_to_workers,
             ts=ts,
+            observed_identities=observed_identities,
         )
 
         # Write worker records to SQLite
@@ -634,10 +715,10 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 worker_type_key = (provisioner, worker_type)
                 workers_map = worker_type_to_workers.get(worker_type_key, {})
 
-                click.echo(f"  Matching {host} (short: {short_host})...")
+                click.echo(f"  Matching {host} (worker ID: {short_host})...")
                 click.echo(f"    Found worker data for {short_host}")
                 if verbose >= 2:
-                    worker_data = workers_map.get(short_host)
+                    worker_data = workers_map.get((record["worker_group"], short_host))
                     click.echo(f"    Worker data: {json.dumps(worker_data, indent=4)}")
 
             # Insert into SQLite
@@ -651,6 +732,15 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
 
         # Commit all inserts
         db_conn.commit()
+        written_hosts = {record["host"] for record in worker_records}
+        failed_hosts = sorted(set(hosts) - written_hosts)
+        for host in failed_hosts:
+            if host in host_to_worker_type:
+                click.echo(
+                    f"ERROR: {host}: no complete worker observation collected "
+                    "(worker missing, ambiguous identity, or API failure)",
+                    err=True,
+                )
 
         # Log skipped hosts
         if verbose >= 1 and not quiet:
@@ -670,6 +760,8 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         elapsed_seconds = time.time() - start_time
         if quiet:
             warning_list = []
+            if failed_hosts:
+                warning_list.append(f"{len(failed_hosts)} host(s) not collected")
             if hosts_without_roles > 0:
                 warning_list.append(f"{hosts_without_roles} hosts without role data")
             if api_errors > 0:
@@ -694,6 +786,12 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 f"{scan_records_written} scan record(s) to {db_path}"
             )
             click.echo(msg)
+
+        if failed_hosts or api_errors or task_status_errors:
+            raise FleetRollError(
+                f"Taskcluster collection incomplete: {len(failed_hosts)} host(s) not collected, "
+                f"{api_errors} pool API error(s), {task_status_errors} task status error(s)"
+            )
 
         # Also refresh GitHub branch refs (throttled)
         from ..github import do_github_fetch

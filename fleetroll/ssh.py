@@ -13,6 +13,7 @@ import struct
 import subprocess
 import termios
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .constants import (
@@ -197,6 +198,8 @@ def audit_script_body(*, include_content: bool) -> str:
     # Content is printed after a sentinel line.
     sentinel = CONTENT_SENTINEL
     include_content_cmd = "true" if include_content else "false"
+    identity_code = (Path(__file__).with_name("worker_identity.rb")).read_text()
+    identity_command = shlex.quote(identity_code)
     # Note: use /bin/sh for portability.
     # We use sudo -n everywhere; failures will be visible.
     script = f"""
@@ -215,6 +218,13 @@ else
   vp="/root/vault.yaml"
 fi
 rp="/etc/puppet_role"
+
+# Worker identity (best effort). Parse on the host; never transmit worker credentials.
+worker_identity=$(sudo -n /opt/puppetlabs/puppet/bin/ruby -e {identity_command} "$os_type" 2>/dev/null || true)
+if [ -z "$worker_identity" ]; then
+  worker_identity='{{"status":"collector_unavailable"}}'
+fi
+printf 'TC_WORKER_IDENTITY=%s\\n' "$worker_identity"
 
 # Uptime (best effort)
 if [ "$os_type" = "Darwin" ]; then

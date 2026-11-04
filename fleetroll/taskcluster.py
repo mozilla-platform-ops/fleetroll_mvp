@@ -141,6 +141,7 @@ def fetch_workers(
     worker_type: str,
     clients: TaskClusterClients,
     worker_ids: set[str],
+    worker_identities: set[tuple[str, str]] | None = None,
     cached_task_runs: dict[tuple[str, int], dict[str, Any]] | None = None,
     verbose: bool = False,
 ) -> WorkerFetchResult:
@@ -150,7 +151,8 @@ def fetch_workers(
         provisioner: The provisioner ID (e.g., "releng-hardware")
         worker_type: The worker type (e.g., "gecko-t-linux-talos-1804")
         clients: Authenticated Taskcluster REST clients
-        worker_ids: Short worker IDs requested by the caller
+        worker_ids: Legacy worker IDs without a known group
+        worker_identities: Exact (workerGroup, workerId) pairs from host observations
         cached_task_runs: Previously resolved runs keyed by ``(taskId, runId)``
         verbose: Print REST pagination and task-status diagnostics
 
@@ -171,7 +173,11 @@ def fetch_workers(
             )
             page_workers = response.get("workers") or []
             workers.extend(
-                dict(worker) for worker in page_workers if worker.get("workerId") in worker_ids
+                dict(worker)
+                for worker in page_workers
+                if worker.get("workerId") in worker_ids
+                or (worker.get("workerGroup"), worker.get("workerId"))
+                in (worker_identities or set())
             )
             continuation_token = response.get("continuationToken")
             if verbose:

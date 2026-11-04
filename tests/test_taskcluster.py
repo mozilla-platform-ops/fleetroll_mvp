@@ -206,3 +206,30 @@ class TestFetchWorkers:
                 clients=TaskClusterClients(queue=MagicMock(), worker_manager=worker_manager),
                 worker_ids={"test-worker-01"},
             )
+
+    def test_exact_identity_ignores_other_groups_before_task_enrichment(self):
+        worker_manager = MagicMock()
+        worker_manager.listWorkers.return_value = {
+            "workers": [
+                {
+                    "workerId": "shared",
+                    "workerGroup": "other",
+                    "latestTask": {
+                        "taskId": "unrequested-task",
+                        "runId": 0,
+                    },
+                },
+                {"workerId": "shared", "workerGroup": "mdc1"},
+            ]
+        }
+        queue = MagicMock()
+        result = fetch_workers(
+            "releng-hardware",
+            worker_type="new-pool",
+            clients=TaskClusterClients(queue=queue, worker_manager=worker_manager),
+            worker_ids=set(),
+            worker_identities={("mdc1", "shared")},
+        )
+        assert result.workers == [{"workerId": "shared", "workerGroup": "mdc1"}]
+        assert result.status_errors == 0
+        queue.status.assert_not_called()
