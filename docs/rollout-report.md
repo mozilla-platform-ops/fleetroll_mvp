@@ -146,6 +146,13 @@ Attribution coverage below 80% produces a warning, without vetoing a comparison;
 `--min-coverage` configures this warning threshold. Neither threshold is a
 statistical significance test.
 
+When measured attribution falls below the threshold, the terminal report shows
+one hint to adjust `--min-coverage`. For example, `--min-coverage 50` lowers the
+threshold and `--min-coverage 0` suppresses threshold warnings for measured coverage.
+Percentages, unavailable coverage, and observed failures remain visible. The hint
+also appears when only a comparison side is below threshold, even if overall
+coverage is adequate.
+
 The rollout assessment separates the observed result, sample sufficiency, and
 attribution coverage. The cohort table and sample notes describe independent health
 for master and each override, using verified tasks over the full report window. Health is

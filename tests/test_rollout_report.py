@@ -663,6 +663,7 @@ def test_low_coverage_override_is_a_prominent_warning_with_comparable_sample(env
     assert "Same observed failure and exception rates" in assessment
     assert "1 unattributed failure inside the comparison window" in assessment
     assert "override 25.0%" in assessment
+    assert output.count("--min-coverage") == 1
     assert "\x1b[33m" in assessment
     assert "https://firefox-ci-tc.services.mozilla.com/tasks/" in output
 
@@ -1338,3 +1339,29 @@ def test_actual_failures_and_empty_queue_keep_warning_color(env, capsys):
     output = capsys.readouterr().out
     for phrase in ("Failures observed", "no new work queued", "Full report window"):
         assert "\x1b[33m" in next(line for line in output.splitlines() if phrase in line)
+
+
+@pytest.mark.parametrize("minimum", [0, 50, 80])
+@pytest.mark.parametrize("details", [False, True])
+def test_attribution_flag_hint_appears_once_only_below_threshold(env, capsys, minimum, details):
+    seed(env, "host")
+    task(env, "host")
+    task(env, "host", minute=10, state="failed")
+    invoke(env, "host", min_coverage=minimum)
+    result = read(capsys)
+    report.print_report(result, details=details, color=False, width=120)
+    text = capsys.readouterr().out
+    assert text.count("--min-coverage") == int(minimum > 50)
+    assert "Configuration coverage: 1/2" in text
+    assert "1 excluded (1 failed" in text
+
+
+def test_no_threshold_hint_for_unavailable_attribution(env, capsys):
+    seed(env, "host")
+    invoke(env, "host")
+    result = read(capsys)
+    assert result["summary"]["coverage"]["fraction"] is None
+    report.print_report(result, color=False)
+    text = capsys.readouterr().out
+    assert "--min-coverage" not in text
+    assert "Comparison unavailable" in text

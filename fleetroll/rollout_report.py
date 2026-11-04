@@ -1392,6 +1392,7 @@ def print_evidence_limits(report):
             else "."
         )
     )
+    print_attribution_hint(report)
     excluded = summary["unattributed_outcomes"]["outcomes"]
     if coverage["excluded"]:
         marker = "⚠ " if any(excluded[key] for key in ("failed", "exception", "unknown")) else ""
@@ -1435,6 +1436,24 @@ def print_evidence_limits(report):
         )
     print_override_difference(report)
     print_indented(print_unverified_hosts, indent=2, report=report, details=False)
+
+
+def print_attribution_hint(report):
+    """Suggest the threshold flag only for measured coverage it can silence."""
+    attribution = report["summary"]["evidence"]["attribution"]
+    checks = [(attribution["fraction"], attribution["warning_threshold"])]
+    for comparison in report["comparisons"]:
+        attribution = comparison.get("attribution")
+        if attribution:
+            checks.extend(
+                (comparison[key]["fraction"], attribution["warning_threshold"])
+                for key in ("coverage", "master_coverage", "override_coverage")
+            )
+    if any(fraction is not None and fraction < threshold for fraction, threshold in checks):
+        print(
+            "  Adjust attribution warnings with --min-coverage "
+            "(0 suppresses warnings for measured coverage)."
+        )
 
 
 def print_override_difference(report):
@@ -1713,7 +1732,8 @@ def parse_args(argv=None, *, prog=None):
         "--min-coverage",
         type=float,
         default=80,
-        help="Attribution coverage warning threshold percent (default 80); does not veto comparison.",
+        help="Attribution coverage warning threshold percent (default 80); "
+        "0 suppresses warnings for measured coverage. Does not veto comparison.",
     )
     parser.add_argument(
         "--min-host-coverage",
