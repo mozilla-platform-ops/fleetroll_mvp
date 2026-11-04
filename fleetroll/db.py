@@ -30,7 +30,7 @@ def get_db_path() -> Path:
     return home / AUDIT_DIR_NAME / DB_FILE_NAME
 
 
-def init_db(db_path: Path) -> None:
+def init_db(db_path: Path, *, audit_log: Path | None = None) -> None:
     """Initialize database schema and enable WAL mode.
 
     Creates all required tables if they don't exist and enables
@@ -93,6 +93,9 @@ def init_db(db_path: Path) -> None:
             )
         """)
 
+        from .configuration_history import initialize
+
+        initialize(conn, audit_log=audit_log)
         conn.commit()
     finally:
         conn.close()
@@ -118,6 +121,29 @@ def insert_host_observation(
     record: dict[str, Any],
     *,
     retention_limit: int = DB_RETENTION_LIMIT,
+    overrides_dir: Path | None = None,
+) -> None:
+    """Atomically persist compact evidence and the bounded full observation."""
+    if not conn.in_transaction:
+        conn.execute("BEGIN")
+    conn.execute("SAVEPOINT fleetroll_host_observation")
+    try:
+        _insert_host_observation(
+            conn, record, retention_limit=retention_limit, overrides_dir=overrides_dir
+        )
+    except Exception:
+        conn.execute("ROLLBACK TO fleetroll_host_observation")
+        conn.execute("RELEASE fleetroll_host_observation")
+        raise
+    conn.execute("RELEASE fleetroll_host_observation")
+
+
+def _insert_host_observation(
+    conn: sqlite3.Connection,
+    record: dict[str, Any],
+    *,
+    retention_limit: int,
+    overrides_dir: Path | None,
 ) -> None:
     """Insert host observation record with dual retention policy.
 
@@ -147,6 +173,10 @@ def insert_host_observation(
         """,
         (host, ts, ok, data_json, ok, data_json),
     )
+
+    from .configuration_history import record_observation
+
+    record_observation(conn, record, overrides_dir=overrides_dir)
 
     # Find most recent ok=1 record
     last_ok_row = conn.execute(
@@ -629,8 +659,13 @@ def compact_database(db_path: Path) -> tuple[int, int]:
     """
     size_before = db_path.stat().st_size if db_path.exists() else 0
 
+    init_db(db_path)
     conn = sqlite3.connect(db_path)
     try:
+        from .configuration_history import cleanup
+
+        cleanup(conn)
+        conn.commit()
         # Flush WAL to main db and truncate WAL file
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         # Rebuild database to reclaim free pages

@@ -2,15 +2,18 @@
 
 The report compares master with each override within a role, using retained host
 observations and audit events. It reads existing evidence; it does not gather,
-deploy, remove overrides, advance a rollout, or maintain a new history store.
+deploy, remove overrides, advance a rollout, or write history.
 
 ## Evidence and attribution
 
-SQLite normally keeps only ten observations per host. The operation audit log
-does not contain full applied-configuration snapshots, so it cannot recover
-pruned convergence evidence by itself. Save gather-host or host-monitor JSON
-when beginning a rollout and supply it with repeatable `--observations-file`
-options to supplement retained history. Single observation objects, arrays,
+SQLite keeps ten full observations per host plus the last successful observation
+when needed. Collection also preserves a compact configuration timeline for
+30 days, so ordinary snapshot pruning need not destroy rollout evidence. See
+[compact history](configuration-history.md) for retention, continuity bounds,
+provenance, and conservative handling of stricter queries and historical horizons.
+The operation audit log alone cannot recover pruned convergence evidence.
+Saved gather-host or host-monitor JSON supplied with repeatable
+`--observations-file` options supplements retained history. Single observation objects, arrays,
 gather `results` arrays, and monitor hostname-to-observation maps are accepted.
 These are operator-provided evidence, read without importing into the database.
 
@@ -62,12 +65,19 @@ root-cause classifications. Each host query retains up to 20 recent task runs,
 so the tool does not claim complete historical coverage. A full recent-history
 window always produces a truncation warning.
 
-JSON has `schema_version`, `window`, `hosts`, `summary`, `comparisons`, `errors`,
+JSON has `schema_version`, `configuration_history`, `window`, `hosts`, `summary`, `comparisons`, `errors`,
 and `warnings`. Host results retain jobs and per-job exclusion reasons. Summary
 coverage reports fetched, in-window, classified, excluded, and unresolved task
 counts, requested/queried hosts, and observation freshness. Query failures have
 unknown task counts; they are never zero-job successes. Missing comparison
 cohorts still produce useful standalone summaries.
+
+`configuration_history` exposes availability, schema version, retention cutoff,
+and compact span count. Host intervals identify raw/compact sources, retained
+maximum polling gaps, and retention cutoffs. `configuration_evidence` carries
+pinned provenance and uncertainty reasons; `configuration_gaps` lists unknown
+ranges inside the requested window. Human output gives the cutoff and span count;
+`--details` includes unknown ranges. These additive fields keep JSON schema version 1.
 
 Exit codes: 0 = a report with no classified failures or query errors; 1 = a
 classified failed/exception/unknown outcome or query error; 2 = invalid input or

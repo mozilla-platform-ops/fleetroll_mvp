@@ -198,9 +198,13 @@ Defaults are a 24-hour report window, a one-hour observation-gap bound, 20 finis
 tasks per comparison side, and 80% attribution coverage per side. Use `--help`
 for time-window, evidence-threshold, and per-host detail options.
 
-SQLite normally retains ten observations per host. Use repeatable
+SQLite retains ten full observations per host and a compact 30-day configuration
+timeline. Stable scans extend existing spans; transitions, failures, and writes
+preserve uncertainty boundaries. Reports expose the retention cutoff, provenance,
+and unknown ranges. See [compact configuration history](docs/configuration-history.md)
+for the evidence contract and measured storage costs. Use repeatable
 `--observations-file saved-gather.json` options to supply saved gather-host or
-host-monitor JSON when older convergence evidence has been pruned. The report
+host-monitor JSON when older convergence evidence or finer observation anchors are needed. The report
 reads these snapshots without modifying the database.
 
 The script uses local Taskcluster credentials in `~/.tc_token` and queries at most

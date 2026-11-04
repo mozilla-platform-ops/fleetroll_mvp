@@ -6,6 +6,7 @@ import base64
 import contextlib
 import datetime
 import json
+import logging
 import os
 import sqlite3
 import tempfile
@@ -24,6 +25,29 @@ def append_jsonl(path: Path, record: dict[str, Any]) -> None:
     ensure_parent_dir(path)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, sort_keys=True) + "\n")
+    if record.get("action") in {"host.set_override", "host.unset_override", "host.set_vault"}:
+        # Preserve existing audit success/failure behavior if secondary history
+        # persistence fails. The audit event remains available for later replay.
+        from .configuration_history import history_available, initialize, record_boundary
+        from .db import get_connection, get_db_path
+
+        db_path = get_db_path()
+        if db_path.exists():
+            try:
+                with contextlib.closing(get_connection(db_path)) as conn:
+                    if history_available(conn):
+                        columns = {
+                            row[1]
+                            for row in conn.execute("PRAGMA table_info(configuration_boundaries)")
+                        }
+                        if "source_ts" not in columns:
+                            initialize(conn, audit_log=path)
+                        record_boundary(conn, record)
+                        conn.commit()
+            except (sqlite3.Error, OSError):
+                logging.getLogger(__name__).exception(
+                    "Configuration boundary persistence failed; audit event retained for replay"
+                )
 
 
 def iter_audit_records(path: Path) -> Iterable[dict[str, Any]]:
@@ -385,9 +409,9 @@ def process_audit_result(
 
     if log_lock:
         with log_lock:
-            insert_host_observation(db_conn, log_record)
+            insert_host_observation(db_conn, log_record, overrides_dir=overrides_dir)
             db_conn.commit()
     else:
-        insert_host_observation(db_conn, log_record)
+        insert_host_observation(db_conn, log_record, overrides_dir=overrides_dir)
         db_conn.commit()
     return result

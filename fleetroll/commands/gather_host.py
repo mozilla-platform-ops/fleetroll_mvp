@@ -502,7 +502,7 @@ def cmd_host_audit_batch(hosts: list[str], args: HostAuditArgs) -> dict[str, Any
 
     # Initialize SQLite database for host observations
     db_path = get_db_path()
-    init_db(db_path)
+    init_db(db_path, audit_log=audit_log)
 
     include_content = not args.no_content
     lock = threading.Lock()

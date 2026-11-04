@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .audit import iter_audit_records
+from .configuration_history import read_evidence, state_payload
 from .constants import DEFAULT_TC_PROVISIONER, OVERRIDES_DIR_NAME
 from .db import get_db_path
 from .rollout_history import (
@@ -63,6 +64,7 @@ def load_evidence(
     audit_log: Path,
     until: dt.datetime,
     observation_files: list[Path] | None = None,
+    history_metadata: dict[str, Any] | None = None,
 ) -> tuple[dict[str, list[dict[str, Any]]], set[tuple[str, str]], list[str]]:
     """Read retained observations and audit events without initializing/writing the DB."""
     records: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -82,6 +84,16 @@ def load_evidence(
             )
             if (parsed := parse_timestamp(stamp)) and parsed <= until
         }
+        compact, metadata = read_evidence(conn, until=until)
+        if history_metadata is not None:
+            history_metadata.update(metadata)
+        for record in compact:
+            records[record["host"]].append(record)
+        if metadata["available"]:
+            warnings.append(
+                f"Compact configuration history: {metadata['spans']} spans; "
+                f"retention cutoff {metadata['cutoff']}. Unsupported continuity remains unknown."
+            )
     finally:
         conn.close()
     for path in observation_files or []:
@@ -105,7 +117,9 @@ def load_evidence(
             ):
                 raise ValueError(f"{path}: invalid host observation record")
             if stamp <= until:
-                records[entry["host"]].append(entry)
+                records[entry["host"]].append(
+                    {key: value for key, value in entry.items() if not key.startswith("_")}
+                )
         warnings.append(f"Additional historical observations loaded from {path}.")
     aliases: dict[str, list[str]] = defaultdict(list)
     for host in records:
@@ -125,9 +139,79 @@ def load_evidence(
             records[target].append({**record, "host": target})
     # Audit and DB copies of the same observation are common.
     for host, entries in records.items():
+        entries = merge_compact_observations(
+            entries, overrides_dir=audit_log.parent / OVERRIDES_DIR_NAME, master_refs=refs
+        )
         unique = {json.dumps(entry, sort_keys=True): entry for entry in entries}
         records[host] = sorted(unique.values(), key=lambda entry: parse_timestamp(entry["ts"]))
     return dict(records), refs, warnings
+
+
+def merge_compact_observations(entries, *, overrides_dir, master_refs):
+    """Deduplicate matching raw/compact endpoints without hiding contradictions."""
+    from .rollout_history import applied_time
+
+    groups = defaultdict(list)
+    events = []
+    pinned = {
+        json.dumps(state_payload(entry), sort_keys=True): entry["_configuration_proof"]
+        for entry in entries
+        if entry.get("_configuration_proof") and not entry.get("_compact_invalidated")
+    }
+    for entry in entries:
+        if entry.get("action", "host.audit") != "host.audit":
+            events.append(entry)
+            continue
+        state_key = json.dumps(state_payload(entry), sort_keys=True)
+        if "_compact_unverified" not in entry and state_key in pinned:
+            # This adds descriptor proof, never observation continuity. Recent
+            # raw anchors remain useful when override caches/master refs expire.
+            entry = {**entry, "_configuration_proof": pinned[state_key]}
+        key = (
+            parse_timestamp(entry["ts"]),
+            state_key,
+            applied_time(entry.get("observed") or {}),
+        )
+        groups[key].append(entry)
+    for copies in groups.values():
+        compact = [item for item in copies if "_compact_unverified" in item]
+        raw = [item for item in copies if "_compact_unverified" not in item]
+        if not compact:
+            events.extend(raw)
+            continue
+        retained = compact[-1]
+        if raw:
+            if retained.get("_compact_invalidated"):
+                events.extend([*raw, retained])
+                continue
+            if (
+                not retained.get("_configuration_proof")
+                and verified_configuration(
+                    raw[-1], overrides_dir=overrides_dir, master_refs=master_refs
+                )[0]
+            ):
+                events.extend(raw)
+                continue
+            retained = {
+                **raw[-1],
+                **{key: value for key, value in retained.items() if key.startswith("_")},
+            }
+        events.append(retained)
+    return events
+
+
+def history_gaps(intervals, *, since, until):
+    gaps = []
+    cursor = since
+    for interval in intervals:
+        if interval.end < since or interval.start > until:
+            continue
+        if interval.start > cursor:
+            gaps.append({"start": iso(cursor), "end": iso(min(interval.start, until))})
+        cursor = max(cursor, interval.end)
+    if cursor < until:
+        gaps.append({"start": iso(cursor), "end": iso(until)})
+    return gaps
 
 
 def latest_observation(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -309,6 +393,9 @@ def collect_host(
                 "start": iso(item.start),
                 "end": iso(item.end),
                 "configuration": configuration_json(item.configuration),
+                "source": item.source,
+                "max_observation_gap_s": item.max_gap_s,
+                "retention_cutoff": iso(item.retention_cutoff) if item.retention_cutoff else None,
             }
             for item in intervals
             if item.end >= since and item.start <= until
@@ -319,6 +406,16 @@ def collect_host(
         "jobs": [],
         "error": None,
         "warnings": [],
+        "configuration_evidence": [
+            {
+                "observation_ts": entry["ts"],
+                "provenance": (entry.get("_configuration_proof") or {}).get("provenance"),
+                "unknown_reason": entry.get("_compact_reason"),
+            }
+            for entry in records
+            if "_compact_unverified" in entry
+        ],
+        "configuration_gaps": history_gaps(intervals, since=since, until=until),
     }
     identity, identity_reason = worker_identity(
         latest, overrides_dir=overrides_dir, worker_group=worker_group
@@ -754,6 +851,8 @@ def print_report(report, *, details=False):
             print(f"\nUnverified {host['host']}: {host['configuration_reason']}")
         if details:
             print(f"\n{host['host']} observed {host['observation_ts']}")
+            for gap in host["configuration_gaps"]:
+                print(f"  Unknown configuration: {gap['start']} to {gap['end']}")
             for job in host["jobs"]:
                 print(
                     f"  {job['outcome']}: {job['task_id']} run {job['run_id']}: "
@@ -851,12 +950,14 @@ def parse_args(argv=None):
 def main(argv=None) -> int:
     args = parse_args(argv)
     overrides_dir = args.audit_log.parent / OVERRIDES_DIR_NAME
+    history_metadata: dict[str, Any] = {}
     try:
         records, refs, warnings = load_evidence(
             args.db,
             audit_log=args.audit_log,
             until=args.until,
             observation_files=args.observations_file,
+            history_metadata=history_metadata,
         )
         requested = (
             parse_host_list(Path(args.hosts[0]))
@@ -926,6 +1027,7 @@ def main(argv=None) -> int:
         warnings.append("Excluded jobs are unknown configuration evidence, not successful work.")
     report = {
         "schema_version": SCHEMA_VERSION,
+        "configuration_history": history_metadata,
         "window": {"since": iso(args.since), "until": iso(args.until)},
         "hosts": hosts,
         "summary": summary,
