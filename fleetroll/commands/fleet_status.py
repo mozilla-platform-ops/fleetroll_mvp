@@ -142,8 +142,81 @@ def build_report(
     }
 
 
+def render_report(report: dict[str, Any], *, verbose: bool = False) -> str:
+    """Render a compact summary, with host lists available on request."""
+    selector = report["selector"]
+    scope = "Role" if selector["role"] else "Worker pool"
+    lines = [f"{scope}: {selector['role'] or selector['worker_type']}"]
+    total = report["matching_hosts"]
+    source = "host list" if report["population_source"] == "host_list" else "recorded hosts"
+    lines.append(f"Matching hosts: {total}  (source: {source})")
+    lines.append("")
+    lines.append("Overrides")
+    for state, label in (("present", "Present"), ("absent", "Absent"), ("unknown", "Unknown")):
+        data = report["override_totals"][state]
+        percentage = f"{data['percentage']:.1f}%" if data["percentage"] is not None else "—"
+        lines.append(f"  {label:<8} {data['count']:>5}  {percentage:>6}")
+    for group in sorted(report["groups"], key=lambda item: (-item["count"], item["state"])):
+        lines.append("")
+        if group["state"] == "present":
+            lines.append(f"  {group['branch'] or 'Unknown branch'}")
+            lines.append(f"    Override SHA-256: {group['override_sha256']}")
+        else:
+            lines.append("  No override" if group["state"] == "absent" else "  Unknown override")
+        percent = f"{group['percentage']:.1f}%" if group["percentage"] is not None else "—"
+        lines.append(f"    Hosts: {group['count']} ({percent})")
+        statuses = group["puppet_status"]
+        parts = [
+            f"{statuses[name]} {name}"
+            for name in ("applied", "mismatch", "failed", "unknown")
+            if statuses[name]
+        ]
+        lines.append(f"    Puppet: {', '.join(parts) if parts else 'no data'}")
+        if verbose:
+            lines.extend(f"      {host}" for host in group["hosts"])
+    lines.extend(["", "Observation coverage"])
+    interval = report["observation_range"]
+    lines.append(
+        f"  Matching hosts observed: {interval['earliest'] or 'unknown'} to {interval['latest'] or 'unknown'}"
+    )
+    lines.append(f"  Outside selection: {len(report['nonmatching_hosts'])}")
+    lines.append(
+        f"  Membership unresolved: {len(report['unresolved_hosts'])} "
+        f"({len(report['missing_successful_observations'])} without a successful observation)"
+    )
+    for key, label in (
+        ("newer_failed_gathers", "Newer failed gathers"),
+        ("unverified_writes", "Writes awaiting verification"),
+        ("legacy_mapped_hosts", "Legacy-mapped hosts"),
+    ):
+        if report[key]:
+            lines.append(f"  {label}: {len(report[key])}")
+            if not verbose and len(report[key]) <= 5:
+                lines.extend(f"    {host}" for host in report[key])
+    if verbose:
+        for key, label in (
+            ("nonmatching_hosts", "Outside selection"),
+            ("unresolved_hosts", "Membership unresolved"),
+            ("newer_failed_gathers", "Newer failed gathers"),
+            ("unverified_writes", "Writes awaiting verification"),
+            ("legacy_mapped_hosts", "Legacy-mapped hosts"),
+        ):
+            if report[key]:
+                lines.append(f"  {label}:")
+                lines.extend(f"    {host}" for host in report[key])
+    else:
+        lines.append("  Use --verbose or --json for host lists.")
+    lines.extend(["", report["note"]])
+    return "\n".join(lines)
+
+
 def run_fleet_status(
-    *, hosts_file: str | None, role: str | None, worker_type: str | None, json_output: bool
+    *,
+    hosts_file: str | None,
+    role: str | None,
+    worker_type: str | None,
+    json_output: bool,
+    verbose: bool = False,
 ) -> None:
     path = get_db_path()
     if not path.exists():
@@ -183,27 +256,4 @@ def run_fleet_status(
     if json_output:
         click.echo(json.dumps(report, indent=2, sort_keys=True))
         return
-    click.echo(f"Matching hosts: {report['matching_hosts']} ({report['population_source']})")
-    for state, data in report["override_totals"].items():
-        click.echo(f"Override {state}: {data['count']} ({data['percentage']}%)")
-    click.echo(
-        f"Observations: {report['observation_range']['earliest']} to {report['observation_range']['latest']}"
-    )
-    for group in report["groups"]:
-        label = group["override_sha256"] or group["state"]
-        click.echo(
-            f"{label}  branch={group['branch'] or 'unknown'}  "
-            f"{group['count']} ({group['percentage']}%)  Puppet: {group['puppet_status']}"
-        )
-    for key in (
-        "nonmatching_hosts",
-        "unresolved_hosts",
-        "missing_successful_observations",
-        "newer_failed_gathers",
-        "unverified_writes",
-        "legacy_mapped_hosts",
-    ):
-        click.echo(
-            f"{key}: {len(report[key])}" + (f" ({', '.join(report[key])})" if report[key] else "")
-        )
-    click.echo(report["note"])
+    click.echo(render_report(report, verbose=verbose))

@@ -286,8 +286,13 @@ def host_monitor(
 @click.option("--role", help="Puppet role to select.")
 @click.option("--worker-type", help="Taskcluster provisioner/worker-type to select.")
 @click.option("--json", "json_output", is_flag=True, help="Emit machine-readable JSON.")
+@click.option("--verbose", "-v", is_flag=True, help="Show host lists in the report.")
 def fleet_status(
-    hosts_file: str | None, role: str | None, worker_type: str | None, json_output: bool
+    hosts_file: str | None,
+    role: str | None,
+    worker_type: str | None,
+    json_output: bool,
+    verbose: bool,
 ):
     """Summarize recorded override status for a role or worker pool."""
     from .commands.fleet_status import run_fleet_status
@@ -297,7 +302,11 @@ def fleet_status(
     if worker_type and (worker_type.count("/") != 1 or not all(worker_type.split("/"))):
         raise click.UsageError("--worker-type must be provisioner/worker-type")
     run_fleet_status(
-        hosts_file=hosts_file, role=role, worker_type=worker_type, json_output=json_output
+        hosts_file=hosts_file,
+        role=role,
+        worker_type=worker_type,
+        json_output=json_output,
+        verbose=verbose,
     )
 
 

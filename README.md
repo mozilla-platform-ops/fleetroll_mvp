@@ -410,6 +410,7 @@ failed refreshes, and Fleetroll writes awaiting verification are reported separa
 The latest successful observations are used regardless of age; manual changes after
 an observation may not be reflected. Without a host list, the population consists of
 hosts identifiable from Fleetroll's recorded observations.
+Use `--verbose` to show host lists, or `--json` for machine-readable details.
 
 ```bash
 # show stored override contents by sha prefix or human hash

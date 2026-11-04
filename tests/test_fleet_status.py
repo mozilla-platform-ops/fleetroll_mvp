@@ -2,7 +2,7 @@ import hashlib
 
 from click.testing import CliRunner
 from fleetroll.cli import cli
-from fleetroll.commands.fleet_status import build_report
+from fleetroll.commands.fleet_status import build_report, render_report
 from fleetroll.rollout_history import parse_timestamp
 
 
@@ -46,6 +46,14 @@ def test_population_override_and_uncertainty(tmp_path):
         ["a.example"],
     )
     assert group["puppet_status"]["unknown"] == 1
+    output = render_report(report)
+    assert "Role: talos" in output
+    assert "merged-branch" in output
+    assert "Membership unresolved: 1 (1 without a successful observation)" in output
+    assert "Outside selection: 1" in output
+    assert "    b\n" not in output
+    assert "Puppet: 1 unknown" in output
+    assert "    b\n" in render_report(report, verbose=True)
 
 
 def test_cli_selector_validation():
