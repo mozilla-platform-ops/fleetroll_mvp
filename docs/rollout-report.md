@@ -32,6 +32,12 @@ Failed observations, unverified state, and override/vault write attempts break
 continuity. A write/remove event cannot establish convergence. Conflicting
 observations at the same timestamp are unknown.
 
+A failed latest host observation may be caused by a reboot, among other causes.
+In the human report, failures within five minutes of the report end are shown as
+warnings with a refresh suggestion. The worker is still unqueried, its current
+configuration is unverified, and the report retains the error in JSON and exits
+nonzero. A later successful gather is needed to establish current state.
+
 A task must start and finish inside one verified interval (a running task is
 checked through the report's observation horizon). Tasks outside the requested
 window, across transitions, with unresolved worker identity, or without enough

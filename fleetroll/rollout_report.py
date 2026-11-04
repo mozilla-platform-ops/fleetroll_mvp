@@ -773,6 +773,26 @@ def report_color_enabled():
     return sys.stdout.isatty() and "NO_COLOR" not in os.environ and os.environ.get("TERM") != "dumb"
 
 
+def print_issues(report, *, style):
+    for warning in report["warnings"]:
+        print(f"{style('⚠ WARNING', fg='yellow', bold=True)}: {warning}")
+    recent_failed = {
+        f"{host['host']}: {host['error']}"
+        for host in report["hosts"]
+        if host["error"] == "latest host observation failed"
+        and host["observation_age_s"] is not None
+        and 0 <= host["observation_age_s"] <= 300
+    }
+    for error in report["errors"]:
+        if error in recent_failed:
+            print(
+                f"{style('⚠ WARNING', fg='yellow', bold=True)}: {error}; "
+                "recent failure may be a reboot. Worker jobs were not queried; refresh gather-host."
+            )
+        else:
+            print(f"{style('✕ ERROR', fg='red', bold=True)}: {error}")
+
+
 def print_report(report, *, details=False, verbose=False, color=None):
     if color is None:
         color = report_color_enabled()
@@ -911,10 +931,7 @@ def print_report(report, *, details=False, verbose=False, color=None):
                 )
     if report["warnings"] or report["errors"]:
         heading("Notes & issues")
-    for warning in report["warnings"]:
-        print(f"{style('⚠ WARNING', fg='yellow', bold=True)}: {warning}")
-    for error in report["errors"]:
-        print(f"{style('✕ ERROR', fg='red', bold=True)}: {error}")
+    print_issues(report, style=style)
     print("\n  Rates use completed + failed + exception; running/pending/unknown are not passes.")
 
 
