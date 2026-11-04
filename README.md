@@ -533,7 +533,10 @@ uv run fleetroll debug host-script --wrap
 the latest version bump. Choose and commit a version when preparing a release,
 then generate its draft with `uv run release-notes --version 0.3.0`. See the
 [release notes workflow](docs/release-notes/README.md) for review and publication
-steps and the transition from version eras to release boundaries.
+steps and the transition from version eras to release boundaries. Every release
+gets a `vX.Y.Z` tag and a published
+[GitHub Release](https://github.com/mozilla-platform-ops/fleetroll_mvp/releases)
+using the reviewed notes committed in this repository.
 
 ### TODOs
 

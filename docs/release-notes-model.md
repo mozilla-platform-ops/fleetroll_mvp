@@ -36,8 +36,9 @@ corrects the era model, which would attribute that work to 0.2.4.
   bumps, post-release commits, and HEAD exactly at a bump without losing the
   finalized latest version. Cover both traditional and explicit legacy modes.
 
-The existing publication-workflow bead mvp-8v8 is related. Version bumping,
-publication, tagging, and pushing are separate actions; this migration does not
-publish a release automatically.
+The existing publication-workflow bead mvp-8v8 is related. The generator does not
+publish automatically. Completing a release includes pushing its commits,
+tagging the reviewed notes commit, and publishing a GitHub Release using those
+notes, as described in the workflow below.
 
 See [the release workflow](release-notes/README.md) for operator instructions.
