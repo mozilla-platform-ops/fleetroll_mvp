@@ -140,7 +140,8 @@ def test_cli_fetches_public_queue_counts_in_text_and_json(temp_db, db_conn, monk
     assert "credentials" not in factory.call_args.args[0]
     result = runner.invoke(cli, ["fleet-status", "--role", "talos"])
     assert result.exit_code == 0
-    assert "prov/pool: 0 pending (checked " in result.output
+    assert "prov/pool: 0 pending — no new work queued" in result.output
+    assert "Checked: " in result.output
     queue.taskQueueCounts.side_effect = RuntimeError("offline")
     result = runner.invoke(cli, ["fleet-status", "--role", "talos"])
     assert result.exit_code == 0

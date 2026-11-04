@@ -969,19 +969,20 @@ def print_report(report, *, details=False, verbose=False, color=None):
     }
     print(style("◈  FLEETROLL  /  ROLLOUT REPORT", fg="cyan", bold=True))
     print(f"   {report['window']['since']}  →  {report['window']['until']}")
+    if "queue_counts" in report:
+        heading("Current queue")
+        for line in render_queue_counts(report["queue_counts"], color=color, include_heading=False):
+            print(f"  {line}")
+    heading("Rollout assessment")
     verdict = summary["evidence"]["status"]
     verdict_color = "yellow" if verdict == "insufficient evidence" else "cyan"
     symbol = "⚠" if verdict == "insufficient evidence" else "◆"
-    print("\n" + style(f"{symbol}  {verdict.upper()}", fg=verdict_color, bold=True))
+    print("  " + style(f"{symbol}  {verdict.upper()}", fg=verdict_color, bold=True))
     print("   Evidence assessment only; not automatic rollout approval.")
     for reason in summary["evidence"]["reasons"]:
         print(f"   • {reason}")
     heading("Fleet override status")
     print_fleet_override_status(report["fleet_override_status"])
-    if "queue_counts" in report:
-        print()
-        for line in render_queue_counts(report["queue_counts"]):
-            print(f"  {line}")
     heading("Coverage")
     print(f"  Hosts queried: {summary['queried_hosts']}/{summary['requested_hosts']}")
     evidence = summary["coverage"]

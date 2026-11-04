@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -145,7 +147,7 @@ def build_report(
     }
 
 
-def render_report(report: dict[str, Any], *, verbose: bool = False) -> str:
+def render_report(report: dict[str, Any], *, verbose: bool = False, color: bool = False) -> str:
     """Render a compact summary, with host lists available on request."""
     selector = report["selector"]
     scope = "Role" if selector["role"] else "Worker pool"
@@ -154,7 +156,7 @@ def render_report(report: dict[str, Any], *, verbose: bool = False) -> str:
     source = "host list" if report["population_source"] == "host_list" else "recorded hosts"
     lines.append(f"Matching hosts: {total}  (source: {source})")
     if "queue_counts" in report:
-        lines.extend(["", *render_queue_counts(report["queue_counts"])])
+        lines.extend(["", *render_queue_counts(report["queue_counts"], color=color)])
     lines.append("")
     lines.append("Overrides")
     for state, label in (("present", "Present"), ("absent", "Absent"), ("unknown", "Unknown")):
@@ -264,4 +266,12 @@ def run_fleet_status(
     if json_output:
         click.echo(json.dumps(report, indent=2, sort_keys=True))
         return
-    click.echo(render_report(report, verbose=verbose))
+    click.echo(
+        render_report(
+            report,
+            verbose=verbose,
+            color=sys.stdout.isatty()
+            and "NO_COLOR" not in os.environ
+            and os.environ.get("TERM") != "dumb",
+        )
+    )

@@ -581,18 +581,26 @@ def test_verbose_option_does_not_change_json(env, capsys):
 def test_report_uses_color_only_when_enabled_and_keeps_verdict_readable(env, capsys, monkeypatch):
     seed(env, "host")
     task(env, "host", minute=10)
+    env.clients.queue.taskQueueCounts.return_value = {"pendingTasks": 0}
     invoke(env, "host")
     result = read(capsys)
     report.print_report(result, color=True)
     colored = capsys.readouterr().out
     assert "\x1b[" in colored
     assert "INSUFFICIENT EVIDENCE" in colored
+    queue_line = next(line for line in colored.splitlines() if "talos-pool: 0 pending" in line)
+    assert "\x1b[33m" in queue_line
+    assert "⚠" in queue_line
+    assert "no new work queued" in queue_line
+    assert colored.index("CURRENT QUEUE") < colored.index("INSUFFICIENT EVIDENCE")
+    assert colored.index("CURRENT QUEUE") < colored.index("FLEET OVERRIDE STATUS")
     monkeypatch.setenv("NO_COLOR", "1")
     report.print_report(result)
     plain = capsys.readouterr().out
     assert "\x1b[" not in plain
     assert "INSUFFICIENT EVIDENCE" in plain
     assert "1 excluded" in plain
+    assert "⚠ releng-hardware/talos-pool: 0 pending — no new work queued" in plain
 
 
 def test_one_low_coverage_override_cannot_hide_behind_large_master_sample(env, capsys):

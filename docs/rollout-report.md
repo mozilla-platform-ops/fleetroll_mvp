@@ -70,6 +70,9 @@ from historical task outcomes and cohort attribution. Pool selection uses the
 recorded identities at the report horizon. Unknown identities and legacy mapping
 are identified; failed queue lookups show unavailable, never zero, and do not
 change the report exit status.
+Queue depth appears immediately below the report title. Zero pending tasks are
+highlighted in yellow with a warning that no new work is queued; existing running
+tasks may still produce results.
 
 Master and each override SHA have separate summaries, with applied revision
 distributions. Pairwise comparisons use their overlapping verified time range

@@ -6,6 +6,8 @@ import datetime as dt
 from pathlib import Path
 from typing import Any
 
+import click
+
 import taskcluster
 
 from .rollout_history import worker_identity
@@ -68,12 +70,25 @@ def collect_queue_counts(
     }
 
 
-def render_queue_counts(counts: dict[str, Any]) -> list[str]:
-    lines = ["Current queue (approximate pending tasks; whole pool)"]
+def render_queue_counts(
+    counts: dict[str, Any], *, color: bool = False, include_heading: bool = True
+) -> list[str]:
+    lines = (
+        ["Current queue (approximate pending tasks; whole pool)"]
+        if include_heading
+        else ["Approximate pending tasks; whole pool"]
+    )
     for pool in counts["pools"]:
         pending = pool["pending_tasks"]
         value = f"{pending:,} pending" if pending is not None else "unavailable"
-        lines.append(f"  {pool['worker_pool']}: {value} (checked {pool['checked_at']})")
+        warning = pending == 0 or pending is None
+        line = f"  {pool['worker_pool']}: {value}"
+        if pending == 0:
+            line = f"  ⚠ {pool['worker_pool']}: {value} — no new work queued"
+        if color:
+            line = click.style(line, fg="yellow" if warning else "cyan", bold=True)
+        lines.append(line)
+        lines.append(f"    Checked: {pool['checked_at']}")
         if pool["error"]:
             lines.append(f"    {pool['error']}")
     if not counts["pools"]:
