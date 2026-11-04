@@ -7,11 +7,14 @@ import concurrent.futures
 import datetime as dt
 import json
 import math
+import os
 import sqlite3
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
+
+import click
 
 from .audit import iter_audit_records
 from .configuration_history import read_evidence, state_payload
@@ -766,58 +769,92 @@ def configuration_label(config):
     return f"{config['branch']} ({config['override_sha256'][:12]})"
 
 
-def print_report(report, *, details=False, verbose=False):
+def report_color_enabled():
+    return sys.stdout.isatty() and "NO_COLOR" not in os.environ and os.environ.get("TERM") != "dumb"
+
+
+def print_report(report, *, details=False, verbose=False, color=None):
+    if color is None:
+        color = report_color_enabled()
+
+    def style(value, **kwargs):
+        return click.style(str(value), **kwargs) if color else str(value)
+
+    def heading(title):
+        print("\n" + style(f"━━━  {title.upper()}  ━━━", fg="cyan", bold=True))
+
     summary = report["summary"]
     labels = {
         group["configuration"]["id"]: configuration_label(group["configuration"])
         for group in summary["cohorts"]
     }
-    print(f"Rollout report: {report['window']['since']} to {report['window']['until']}")
-    print(f"Hosts queried: {summary['queried_hosts']}/{summary['requested_hosts']}")
+    print(style("◈  FLEETROLL  /  ROLLOUT REPORT", fg="cyan", bold=True))
+    print(f"   {report['window']['since']}  →  {report['window']['until']}")
+    verdict = summary["evidence"]["status"]
+    verdict_color = "yellow" if verdict == "insufficient evidence" else "cyan"
+    symbol = "⚠" if verdict == "insufficient evidence" else "◆"
+    print("\n" + style(f"{symbol}  {verdict.upper()}", fg=verdict_color, bold=True))
+    print("   Evidence assessment only; not automatic rollout approval.")
+    for reason in summary["evidence"]["reasons"]:
+        print(f"   • {reason}")
+    heading("Coverage")
+    print(f"  Hosts queried: {summary['queried_hosts']}/{summary['requested_hosts']}")
     evidence = summary["coverage"]
+    fraction = evidence["fraction"]
+    if fraction is not None:
+        filled = round(max(0, min(1, fraction)) * 20)
+        bar = "█" * filled + "░" * (20 - filled)
+        print("  " + style(bar, fg="cyan"))
     print(
-        f"Configuration coverage: {evidence['classified']}/{evidence['in_window']} "
+        f"  Configuration coverage: {evidence['classified']}/{evidence['in_window']} "
         f"in-window recent runs ({percentage(evidence['fraction'])}); "
         f"{evidence['excluded']} excluded, {evidence['unresolved']} unresolved."
     )
-    print("Rates use completed + failed + exception; running/pending/unknown are not passes.")
-    print(
-        "Host counts below are current membership; task totals use verified historical membership."
-    )
-    print(f"Evidence: {summary['evidence']['status']} (not automatic rollout approval)")
-    for reason in summary["evidence"]["reasons"]:
-        print(f"  {reason}")
     stamps = [host["observation_ts"] for host in report["hosts"] if host["observation_ts"]]
     if stamps:
-        print(f"Host observation timestamps: {min(stamps)} to {max(stamps)}")
-    print("\nROLE / PROVISIONER / POOL / WORKER GROUP")
+        print(f"  Host observations: {min(stamps)} to {max(stamps)}")
+    heading("Cohorts")
+    print("  Hosts are current; task counts use verified historical membership.")
     for scope in sorted({tuple(group["configuration"]["scope"]) for group in summary["cohorts"]}):
-        print("\n" + " / ".join(scope))
-        print(
-            f"{'CONFIGURATION':<48} {'HOSTS':>5} {'DONE':>5} {'FAIL':>5} "
-            f"{'EXC':>4} {'RUN':>4} {'PEND':>4} {'UNK':>4} {'SUCCESS':>8}"
-        )
+        print("\n" + style("  " + " / ".join(scope), bold=True))
         for group in summary["cohorts"]:
             config = group["configuration"]
             if tuple(config["scope"]) != scope:
                 continue
             label = configuration_label(config)
             outcomes = group["outcomes"]
+            print("\n  " + style(label, bold=True))
             print(
-                f"{label:<48} {len(group['current_hosts']):>5} {outcomes['completed']:>5} "
-                f"{outcomes['failed']:>5} {outcomes['exception']:>4} {outcomes['running']:>4} "
-                f"{outcomes['pending']:>4} {outcomes['unknown']:>4} "
-                f"{percentage(group['success_rate']):>8}"
+                f"    Hosts: {len(group['current_hosts'])}  ·  Finished: {group['finished']}  ·  "
+                f"Success: {percentage(group['success_rate'])}"
+            )
+            print(
+                f"    Completed: {outcomes['completed']}  ·  Failed: {outcomes['failed']}  ·  "
+                f"Exceptions: {outcomes['exception']}"
+            )
+            print(
+                f"    Running: {outcomes['running']}  ·  Pending: {outcomes['pending']}  ·  "
+                f"Unknown: {outcomes['unknown']}"
             )
             revisions = {sha[:12]: count for sha, count in group["applied_revisions"].items()}
-            print(f"  Applied revisions (classified tasks): {revisions or 'no classified tasks'}")
+            print(f"    Applied revisions (classified tasks): {revisions or 'no classified tasks'}")
             print(
-                f"  Finished: {group['finished']}; failure rate: {percentage(group['failure_rate'])}; "
+                f"    Failure rate: {percentage(group['failure_rate'])}; "
                 f"exception rate: {percentage(group['exception_rate'])}"
             )
+    if report["comparisons"]:
+        heading("Comparisons")
     for comparison in report["comparisons"]:
         label = labels.get(comparison.get("override"), "standalone population")
-        print(f"\nComparison {' / '.join(comparison['scope'])}: {label}: {comparison['status']}")
+        print(
+            "\n  "
+            + style(
+                f"{label}  ·  {comparison['status'].upper()}",
+                fg="yellow" if comparison["status"] == "insufficient evidence" else "cyan",
+                bold=True,
+            )
+        )
+        print(f"  {' / '.join(comparison['scope'])}")
         if comparison["window"]:
             print(
                 f"  Shared window: {comparison['window']['since']} to {comparison['window']['until']}"
@@ -846,8 +883,12 @@ def print_report(report, *, details=False, verbose=False):
         counts = {labels[key]: count for key, count in pattern["cohorts"].items()}
         print(f"  Cohort counts: {counts}; observed on master: {pattern['seen_on_master']}")
         print(f"  https://firefox-ci-tc.services.mozilla.com/tasks/{pattern['example_task']}")
+    if details or verbose:
+        heading("Host details")
     for host in report["hosts"]:
-        if host["configuration_reason"]:
+        if host["configuration_reason"] and not any(
+            error == f"{host['host']}: {host['configuration_reason']}" for error in report["errors"]
+        ):
             print(f"\nUnverified {host['host']}: {host['configuration_reason']}")
         if details or verbose:
             if not verbose:
@@ -868,10 +909,13 @@ def print_report(report, *, details=False, verbose=False):
                     f"  {job['outcome']}: {job['task_id']} run {job['run_id']}: "
                     f"{job['exclusion_reason'] or 'classified'}"
                 )
+    if report["warnings"] or report["errors"]:
+        heading("Notes & issues")
     for warning in report["warnings"]:
-        print(f"WARNING: {warning}")
+        print(f"{style('⚠ WARNING', fg='yellow', bold=True)}: {warning}")
     for error in report["errors"]:
-        print(f"ERROR: {error}")
+        print(f"{style('✕ ERROR', fg='red', bold=True)}: {error}")
+    print("\n  Rates use completed + failed + exception; running/pending/unknown are not passes.")
 
 
 def cli_timestamp(value: str) -> dt.datetime:

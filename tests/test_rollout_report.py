@@ -348,6 +348,9 @@ def test_human_summary_shows_totals_exclusions_and_details(env, capsys):
     assert "0/1 in-window recent runs" in text
     assert "1 excluded" in text
     assert "master" in text
+    assert "Hosts: 1" in text
+    assert "Completed: 0" in text
+    assert "Running: 0" in text
     assert "unknown configuration" in text
     assert "run 0:" not in text
     report.print_report(result, verbose=True)
@@ -361,6 +364,23 @@ def test_verbose_option_does_not_change_json(env, capsys):
     task(env, "host", minute=10)
     invoke(env, "host", "-v")
     assert read(capsys)["hosts"][0]["jobs"]
+
+
+def test_report_uses_color_only_when_enabled_and_keeps_verdict_readable(env, capsys, monkeypatch):
+    seed(env, "host")
+    task(env, "host", minute=10)
+    invoke(env, "host")
+    result = read(capsys)
+    report.print_report(result, color=True)
+    colored = capsys.readouterr().out
+    assert "\x1b[" in colored
+    assert "INSUFFICIENT EVIDENCE" in colored
+    monkeypatch.setenv("NO_COLOR", "1")
+    report.print_report(result)
+    plain = capsys.readouterr().out
+    assert "\x1b[" not in plain
+    assert "INSUFFICIENT EVIDENCE" in plain
+    assert "1 excluded" in plain
 
 
 def test_one_low_coverage_override_cannot_hide_behind_large_master_sample(env, capsys):
