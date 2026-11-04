@@ -13,6 +13,7 @@ set -e
 # In PR mode the branch, repo (handles forks), and a descriptive filename are
 # derived from the PR via the `gh` CLI, and the PR url/title are recorded as
 # comments in the override file.
+# Requires git and network access to verify the branch before writing a file.
 
 UPSTREAM_REPO="mozilla-platform-ops/ronin_puppet"
 UPSTREAM_REPO_URL="https://github.com/${UPSTREAM_REPO}.git"
@@ -84,6 +85,28 @@ override_file="$user_override_dir/${safe_name}.override"
 # check if it already exists
 if [ -f "$override_file" ]; then
   echo "override file $override_file already exists"
+  exit 1
+fi
+
+# Validate an exact branch ref before querying: ls-remote patterns otherwise
+# accept wildcards, which could make a typo match an unrelated branch.
+if ! command -v git >/dev/null 2>&1; then
+  echo "Branch validation requires git" >&2
+  exit 1
+fi
+if ! git check-ref-format "refs/heads/$branch_name"; then
+  echo "Invalid branch name: $branch_name" >&2
+  exit 1
+fi
+if git ls-remote --exit-code --heads "$puppet_repo" "refs/heads/$branch_name" >/dev/null; then
+  echo "Verified branch: $branch_name in $puppet_repo"
+else
+  lookup_status=$?
+  if [ "$lookup_status" -eq 2 ]; then
+    echo "Branch not found: $branch_name in $puppet_repo" >&2
+  else
+    echo "Failed to verify branch: $branch_name in $puppet_repo (git exit $lookup_status); check network access and repository permissions" >&2
+  fi
   exit 1
 fi
 
