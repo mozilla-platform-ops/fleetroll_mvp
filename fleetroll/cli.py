@@ -6,6 +6,7 @@ import logging
 import shlex
 import sys
 from importlib.metadata import version
+from pathlib import Path
 
 import click
 
@@ -124,6 +125,32 @@ def cli(ctx: click.Context, debug: bool):
     ctx.ensure_object(dict)
     ctx.obj["debug"] = debug
     setup_logging(debug=debug)
+
+
+@cli.command("create-override")
+@click.argument("source")
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path, dir_okay=False),
+    help="Write to this file; never overwrite.",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path, exists=True, file_okay=False),
+    default=".",
+    show_default=True,
+    help="Directory for the generated filename; ignored with --output.",
+)
+def create_override(source: str, output: Path | None, output_dir: Path) -> None:
+    """Create an override from a branch, PR number, or PR URL.
+
+    Requires git and network access to verify the branch, plus gh for PR inputs.
+    Output defaults to the current directory. Parent directories must exist.
+    """
+    from .commands.create_override import create_override as generate
+
+    generate(source, output=output, output_dir=output_dir)
 
 
 @cli.command("gather-host")

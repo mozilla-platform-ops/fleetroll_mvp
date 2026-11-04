@@ -101,6 +101,8 @@ uv sync
 # the `uv run` from fleetroll commands (below and in general).
 ```
 
+`fr` is a shortcut for `fleetroll`: use `uv run fr <command>`, or
+`fr <command>` when the virtual environment is activated.
 
 ## Usage
 
@@ -400,6 +402,22 @@ pnpm --dir web dev                  # terminal 2
 To rebuild the frontend after changes: `pnpm --dir web build`
 
 ### Override management
+
+Create an override from an upstream branch, a PR number, or a GitHub PR URL:
+
+```bash
+uv run fleetroll create-override my-branch
+uv run fleetroll create-override 123 --output-dir configs/overrides
+uv run fleetroll create-override https://github.com/mozilla-platform-ops/ronin_puppet/pull/123 --output rollout.override
+```
+
+The command verifies the exact branch exists before creating the file, resolves
+fork repositories for PRs, and refuses to overwrite existing files. It requires
+`git` and network access, plus `gh` for PR inputs. Output defaults to a generated
+filename in the current directory; parent directories must already exist.
+`tools/create_override.sh` remains a wrapper with `configs/overrides` as its
+default output directory. Generated files leave the worker type assignment empty
+and commented out for the operator to fill in when needed.
 
 When an override sets `WORKER_TYPE_OVERRIDE`, `host-set-override` checks each
 host's latest successful recorded role against its normal worker type. The base

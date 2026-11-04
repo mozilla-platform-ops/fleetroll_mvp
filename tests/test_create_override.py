@@ -1,10 +1,14 @@
 """Run the override creator with offline remote lookup stubs."""
 
+import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
+from fleetroll.cli import cli
 
 
 @pytest.fixture
@@ -24,7 +28,17 @@ def override_tool(tmp_path, monkeypatch):
     monkeypatch.setenv("LOOKUP_STATUS", "0")
     monkeypatch.setenv(
         "PR_REPLY",
-        "42\tTest PR\tfeature/fix\ttrue\tcontributor\tronin_puppet\thttps://github.com/mozilla-platform-ops/ronin_puppet/pull/42",
+        json.dumps(
+            {
+                "number": 42,
+                "title": "Test PR",
+                "headRefName": "feature/fix",
+                "isCrossRepository": True,
+                "headRepositoryOwner": {"login": "contributor"},
+                "headRepository": {"name": "ronin_puppet"},
+                "url": "https://github.com/mozilla-platform-ops/ronin_puppet/pull/42",
+            }
+        ),
     )
     stubs = {
         "git": """#!/bin/sh
@@ -45,9 +59,17 @@ exit "$LOOKUP_STATUS"
 
 
 def run_creator(script, *, branch):
-    return subprocess.run(
-        ["/bin/bash", str(script), branch], capture_output=True, text=True, check=False
+    result = CliRunner().invoke(
+        cli,
+        [
+            "create-override",
+            branch,
+            "--output-dir",
+            str(script.parent.parent / "configs/overrides"),
+        ],
     )
+    detail = result.output + (str(result.exception) if result.exception else "")
+    return subprocess.CompletedProcess([], result.exit_code, detail, detail)
 
 
 @pytest.mark.parametrize("branch", ["my-branch", "feature/fix"])
@@ -110,3 +132,63 @@ def test_existing_file_is_preserved_without_lookup(override_tool):
     assert result.returncode != 0
     assert existing.read_text() == "original content\n"
     assert not log.exists()
+
+
+def test_current_directory_default_and_empty_worker_type(override_tool, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(cli, ["create-override", "my-branch"])
+    assert result.exit_code == 0, result.output
+    content = (tmp_path / "my-branch.override").read_text()
+    assert "# WORKER_TYPE_OVERRIDE=''" in content
+    assert "target role's base" in content
+    assert "1804-staging" not in content
+
+
+def test_explicit_output_and_escaped_branch(override_tool, tmp_path):
+    output = tmp_path / "custom.override"
+    result = CliRunner().invoke(cli, ["create-override", "feature/$test", "--output", str(output)])
+    assert result.exit_code == 0, result.output
+    assert 'PUPPET_BRANCH="feature/\\$test"' in output.read_text()
+    assert subprocess.run(["/bin/bash", "-n", str(output)], check=False).returncode == 0
+
+
+def test_pr_title_newlines_stay_in_comments(override_tool, monkeypatch):
+    script, overrides, _ = override_tool
+    pr = json.loads(os.environ["PR_REPLY"])
+    pr["title"] = "Title\necho unexpected"
+    monkeypatch.setenv("PR_REPLY", json.dumps(pr))
+    result = run_creator(script, branch="42")
+    assert result.returncode == 0, result.stderr
+    content = next(overrides.iterdir()).read_text()
+    assert "\n# echo unexpected\n" in content
+    assert "\necho unexpected\n" not in content
+
+
+def test_bad_pr_response_leaves_no_file(override_tool, monkeypatch):
+    script, overrides, _ = override_tool
+    monkeypatch.setenv("PR_REPLY", "{}")
+    result = run_creator(script, branch="42")
+    assert result.returncode != 0
+    assert "Invalid GitHub PR response" in result.stderr
+    assert not list(overrides.iterdir())
+
+
+def test_wrapper_forwards_arguments_with_repository_default(override_tool, monkeypatch):
+    script, overrides, log = override_tool
+    uv = script.parent.parent / "bin" / "uv"
+    uv.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$LOOKUP_LOG"\n')
+    uv.chmod(0o755)
+    result = subprocess.run(
+        ["/bin/bash", str(script), "my-branch"], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert log.read_text().splitlines() == [
+        "run",
+        "--project",
+        str(script.parent.parent),
+        "fleetroll",
+        "create-override",
+        "--output-dir",
+        str(overrides),
+        "my-branch",
+    ]

@@ -33,6 +33,7 @@ audit = ["pip-audit"]
 
 [project.scripts]
 fleetroll = "fleetroll:main"
+fr = "fleetroll:main"
 verify-imports = "tools.dev.verify_imports:main"
 natural-sort = "tools.natural_sort:main"
 release-notes = "tools.dev.release_notes:main"
