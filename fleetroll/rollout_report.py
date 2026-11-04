@@ -1286,15 +1286,16 @@ def print_compact_comparison(comparison, *, labels, details):
         minimum = comparison["minimum_finished"]
         left, right = comparison["master_results"], comparison["override_results"]
         print(
-            f"  Finished: master {left['finished']}/{minimum} · override {right['finished']}/{minimum}"
+            f"  Finished tasks: master {left['finished']} · override {right['finished']} · "
+            f"minimum {minimum} per side"
         )
         if left["finished"] < minimum or right["finished"] < minimum:
-            print(f"  Minimum: {minimum} finished tasks per side; adjust with --min-finished.")
+            print("  Adjust the sample minimum with --min-finished.")
         if comparison["status"] == "comparable":
             print(
                 f"  Failure rates: master {percentage(left['failure_rate'])} · "
                 f"override {percentage(right['failure_rate'])} "
-                f"(override - master: {comparison['failure_rate_difference_pp']:+.2f} pp)"
+                f"(difference {comparison['failure_rate_difference_pp']:+.2f} pp)"
             )
             if left["outcomes"]["exception"] or right["outcomes"]["exception"]:
                 print(

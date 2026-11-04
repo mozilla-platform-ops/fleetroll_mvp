@@ -17,7 +17,8 @@ completed tasks; unknown outcomes get a column when present. Insufficient sample
 and mixed revisions remain explicit even when there are no verified failures.
 
 Comparisons use their own shared window, with finished tasks per side against the
-minimum and attribution percentages beside the conclusion. Human statements are
+minimum (for example, `Finished tasks: master 5 · override 13 · minimum 5 per side`)
+and attribution percentages beside the conclusion. Human statements are
 symmetric: master or the override can have a higher observed failure or exception
 rate. Equal rates are described as equal, even if both cohorts have failures.
 Signed failure-rate differences are override minus master; positive means a

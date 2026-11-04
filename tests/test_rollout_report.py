@@ -712,10 +712,10 @@ def test_observed_comparison_result_uses_verified_rates(
     text = capsys.readouterr().out
     if master_state == "failed" and override_state == "completed":
         assert "Master failure rate higher in verified tasks" in text
-        assert "override - master: -100.00 pp" in text
+        assert "difference -100.00 pp" in text
     elif master_state == "completed" and override_state == "failed":
         assert "Override failure rate higher in verified tasks" in text
-        assert "override - master: +100.00 pp" in text
+        assert "difference +100.00 pp" in text
     elif master_state == "exception":
         assert "Master exception rate higher in verified tasks" in text
     elif override_state == "exception":
@@ -1379,10 +1379,10 @@ def test_small_comparison_sample_explains_blocker_and_offers_flag(env, capsys, m
     result = read(capsys)
     report.print_report(result, color=False, details=details, width=120)
     text = capsys.readouterr().out
-    assert f"Finished: master 5/{minimum} · override 13/{minimum}" in text
+    assert f"Finished tasks: master 5 · override 13 · minimum {minimum} per side" in text
     if minimum == 20:
         assert "Comparison unavailable: insufficient shared-window sample" in text
-        assert "Minimum: 20 finished tasks per side; adjust with --min-finished." in text
+        assert "Adjust the sample minimum with --min-finished." in text
         assert text.count("--min-finished") == 1
     else:
         assert "Comparison unavailable" not in text
