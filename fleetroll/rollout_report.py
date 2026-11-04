@@ -499,7 +499,33 @@ def coverage(jobs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def summarize(hosts: list[dict[str, Any]]) -> dict[str, Any]:
+def assess_cohort_health(cohort, *, min_finished: int) -> dict[str, Any]:
+    """Describe this cohort's verified sample independently of controls or rollout direction."""
+    outcomes = cohort["outcomes"]
+    if outcomes["failed"] and outcomes["exception"]:
+        status = "failures and exceptions observed"
+    elif outcomes["failed"]:
+        status = "failures observed"
+    elif outcomes["exception"]:
+        status = "exceptions observed"
+    elif outcomes["unknown"]:
+        status = "unknown outcomes"
+    elif cohort["finished"] < min_finished:
+        status = "insufficient sample"
+    else:
+        status = "healthy in verified sample"
+    return {
+        "status": status,
+        "sample_status": "sufficient" if cohort["finished"] >= min_finished else "insufficient",
+        "minimum_finished": min_finished,
+        "basis": "verified tasks in report window",
+        "warnings": ["Sample spans multiple applied revisions."]
+        if len(cohort["applied_revisions"]) > 1
+        else [],
+    }
+
+
+def summarize(hosts: list[dict[str, Any]], *, min_finished: int = 20) -> dict[str, Any]:
     groups: dict[str, dict[str, Any]] = {}
     patterns: dict[tuple[tuple[str, ...], str], dict[str, Any]] = {}
     for host in hosts:
@@ -551,6 +577,8 @@ def summarize(hosts: list[dict[str, Any]]) -> dict[str, Any]:
         }
         for _, group in sorted(groups.items())
     ]
+    for cohort in cohorts:
+        cohort["health"] = assess_cohort_health(cohort, min_finished=min_finished)
     for pattern in patterns.values():
         pattern["cohorts"] = dict(pattern["cohorts"])
         pattern["hosts"] = sorted(pattern["hosts"])
@@ -1113,8 +1141,51 @@ def print_comparison_assessment(comparison, *, style, label=None):
             print(style(f"    ⚠ {warning}", fg="yellow"))
 
 
+def print_cohort_health(cohorts, *, style):
+    print("  Cohort health · verified tasks in the report window")
+    scopes = {tuple(cohort["configuration"]["scope"]) for cohort in cohorts}
+    for cohort in sorted(
+        cohorts,
+        key=lambda item: (
+            item["configuration"]["scope"],
+            item["configuration"]["kind"] != "master",
+            item["configuration"]["id"],
+        ),
+    ):
+        health = cohort["health"]
+        healthy = health["status"] == "healthy in verified sample"
+        symbol = "◆" if healthy else "⚠"
+        config = cohort["configuration"]
+        label = configuration_label(config)
+        if len(scopes) > 1:
+            label += f" · {' / '.join(config['scope'])}"
+        print(
+            style(
+                f"  {symbol} {label}: {health['status'].capitalize()}",
+                fg="cyan" if healthy else "yellow",
+                bold=True,
+            )
+        )
+        outcomes = cohort["outcomes"]
+        print(
+            f"    {outcomes['completed']} completed, {outcomes['failed']} failed, "
+            f"{outcomes['exception']} exceptions, {outcomes['unknown']} unknown; "
+            f"{len(cohort['current_hosts'])} verified current hosts"
+        )
+        print(
+            f"    Sample: {health['sample_status']}; {cohort['finished']} finished, "
+            f"minimum {health['minimum_finished']}"
+        )
+        for warning in health["warnings"]:
+            print(style(f"    ⚠ {warning}", fg="yellow"))
+    if not cohorts:
+        print("  No verified cohorts available to assess.")
+
+
 def print_assessment(report, *, style):
     evidence = report["summary"]["evidence"]
+    print_cohort_health(report["summary"]["cohorts"], style=style)
+    print("\n  Shared-window comparisons")
     comparisons = report["comparisons"]
     labels = {
         group["configuration"]["id"]: configuration_label(group["configuration"])
@@ -1223,6 +1294,7 @@ def print_report(report, *, details=False, verbose=False, color=None):
             label = configuration_label(config)
             outcomes = group["outcomes"]
             print("\n  " + style(label, bold=True))
+            print(f"    Health: {group['health']['status']}")
             print(
                 f"    Hosts: {len(group['current_hosts'])}  ·  Finished: {group['finished']}  ·  "
                 f"Success: {percentage(group['success_rate'])}"
@@ -1501,7 +1573,7 @@ def main(argv=None, *, prog=None) -> int:
             if job.get("query_error"):
                 errors.append(f"{host['host']}: task {job['task_id']}: {job['query_error']}")
         warnings.extend(f"{host['host']}: {warning}" for warning in host["warnings"])
-    summary = summarize(hosts)
+    summary = summarize(hosts, min_finished=args.min_finished)
     summary["evidence"] = evidence_status(
         summary,
         min_finished=args.min_finished,

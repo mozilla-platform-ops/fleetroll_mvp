@@ -687,8 +687,73 @@ def test_observed_comparison_result_uses_verified_rates(
     assert comparison["observed_result"] == expected
     assert comparison["attribution"]["status"] == "meets threshold"
     assert comparison["sample_status"] == "sufficient"
+    health_by_kind = {
+        cohort["configuration"]["kind"]: cohort["health"]["status"]
+        for cohort in result["summary"]["cohorts"]
+    }
+    expected_health = {
+        "completed": "healthy in verified sample",
+        "failed": "failures observed",
+        "exception": "exceptions observed",
+    }
+    assert health_by_kind == {
+        "master": expected_health[master_state],
+        "override": expected_health[override_state],
+    }
     report.print_report(result, color=False)
     assert expected.capitalize() in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("kind", ["master", "override"])
+def test_cohort_health_does_not_require_a_control_or_direction(env, capsys, kind):
+    seed(env, "solo", sha=override(env, "branch") if kind == "override" else None)
+    for _ in range(20):
+        task(env, "solo", minute=80)
+    assert invoke(env, "--role", ROLE) == 0
+    result = read(capsys)
+    cohort = result["summary"]["cohorts"][0]
+    assert cohort["health"]["status"] == "healthy in verified sample"
+    assert cohort["health"]["minimum_finished"] == 20
+    assert result["comparisons"][0]["observed_result"] == "comparison unavailable"
+    report.print_report(result, color=False)
+    assessment = (
+        capsys.readouterr().out.split("ROLLOUT ASSESSMENT")[1].split("FLEET OVERRIDE STATUS")[0]
+    )
+    label = "master" if kind == "master" else "branch"
+    assert label in assessment
+    assert "Healthy in verified sample" in assessment
+    assert assessment.index("Healthy in verified sample") < assessment.index(
+        "Comparison unavailable"
+    )
+
+
+@pytest.mark.parametrize(
+    ("states", "minimum", "expected_status"),
+    [
+        ([], 20, "insufficient sample"),
+        (["completed"] * 19, 20, "insufficient sample"),
+        (["completed"] * 20, 20, "healthy in verified sample"),
+        (["completed", "unknown"], 1, "unknown outcomes"),
+        (["failed"], 20, "failures observed"),
+        (["exception"], 20, "exceptions observed"),
+        (["failed", "exception"], 20, "failures and exceptions observed"),
+    ],
+)
+def test_cohort_health_uses_absolute_outcomes_and_sample_floor(
+    env, capsys, states, minimum, expected_status
+):
+    seed(env, "host")
+    for state in states:
+        task(env, "host", minute=80, state=state)
+    assert invoke(env, "host", min_finished=minimum) == int(
+        any(state in {"failed", "exception", "unknown"} for state in states)
+    )
+    result = read(capsys)
+    health = result["summary"]["cohorts"][0]["health"]
+    assert health["status"] == expected_status
+    assert health["basis"] == "verified tasks in report window"
+    report.print_report(result, color=False)
+    assert expected_status.capitalize() in capsys.readouterr().out
 
 
 def test_small_samples_do_not_emit_positive_observed_result(env, capsys):

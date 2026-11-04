@@ -86,7 +86,22 @@ Attribution coverage below 80% produces a warning, without vetoing a comparison;
 statistical significance test.
 
 The rollout assessment separates the observed result, sample sufficiency, and
-attribution coverage. With a comparable sample it reports "No regression observed
+attribution coverage. It starts with independent health statements for master and
+each override, using their verified tasks over the full report window. Health is
+"Healthy in verified sample" when at least `--min-finished` tasks finished with no
+failed, exception, or unknown outcomes. Otherwise it reports failures, exceptions,
+unknown outcomes, or an insufficient sample. Observed failures and exceptions are
+reported even when the sample is small. Mixed applied revisions carry a warning.
+Current verified host counts are displayed beside task counts; a cohort with no
+current hosts can still have a historical sample. Attribution and collection gaps
+remain explicit warnings outside these sample-specific health statements.
+
+Each cohort is assessed independently, including an all-master or all-override
+population without controls. No rollout direction is needed. Equal failure rates
+can yield no observed regression in a comparison while both cohorts correctly
+report failures in their own health statements.
+
+With a comparable sample the report also states "No regression observed
 in verified tasks", "Higher override failure rate observed", or "Higher override
 exception rate observed" by comparing the verified shared-window rates. These are
 descriptive results, not causal findings or statistical significance claims. When
@@ -124,6 +139,8 @@ attribution fields, and `summary.unattributed_outcomes` counts all retrieved
 in-window runs excluded from configuration attribution. These additive fields
 retain schema version 1. A `comparable` status may now carry low-attribution
 warnings; consumers should inspect attribution separately from sample sufficiency.
+Each `summary.cohorts` entry also includes `health` with `status`, `sample_status`,
+`minimum_finished`, `basis: "verified tasks in report window"`, and `warnings`.
 
 Rates use completed + failed + exception as their denominator. Failed and
 exception rates remain separate. Pending/running/unknown outcomes do not count

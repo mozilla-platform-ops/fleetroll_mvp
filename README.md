@@ -191,6 +191,9 @@ uv run fleetroll rollout-report t-linux64-ms-016 t-linux64-ms-017 --json
 
 The report includes outcome totals, rates, applied revisions, task-name failure
 patterns, and pairwise differences against master over shared time windows.
+It also gives master and each override an independent health statement based on
+their verified report-window tasks, including when no control cohort is available.
+This works while deploying overrides or removing them, without choosing a direction.
 Only jobs attributable to verified applied configurations enter comparisons;
 unknown jobs remain visible as exclusions with coverage counts. Missing controls,
 small samples, and incomplete evidence are explicit, not automatic approval.
