@@ -7,6 +7,7 @@ cross-references with git commits, and generates per-release draft markdown.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import re
 import subprocess
@@ -22,6 +23,14 @@ class VersionRange:
     to_sha: str
     from_date: str | None
     to_date: str
+
+
+UNRELEASED = "unreleased"
+
+
+def version_label(version: str) -> str:
+    """Human-readable release label, without a version prefix for Unreleased."""
+    return "Unreleased" if version == UNRELEASED else f"v{version}"
 
 
 SECTION_ORDER = ["epic", "feature", "bug", "task", "docs", "chore"]
@@ -47,21 +56,24 @@ def extract_version_from_toml(content: str) -> str | None:
 
 
 def filter_beads_by_date(beads: list[dict], start: str | None, end: str) -> list[dict]:
-    """Filter beads to those closed within [start, end] date range.
+    """Fallback attribution using full timestamps in the interval (start, end]."""
 
-    Dates are compared as ISO strings (date portion only).
-    end is inclusive; start is exclusive (we want beads closed AFTER the previous release).
-    If start is None, include everything up to end.
-    """
-    end_date = end[:10]
+    def timestamp(value: str) -> dt.datetime:
+        parsed = dt.datetime.fromisoformat(value)
+        return parsed.replace(tzinfo=dt.UTC) if parsed.tzinfo is None else parsed
+
+    end_date = timestamp(end)
+    start_date = timestamp(start) if start else None
     result = []
     for bead in beads:
         closed_at = bead.get("closed_at")
         if not closed_at:
             continue
-        closed_date = closed_at[:10]
-        if start is not None:
-            start_date = start[:10]
+        try:
+            closed_date = timestamp(closed_at)
+        except ValueError:
+            continue
+        if start_date is not None:
             if closed_date <= start_date:
                 continue
         if closed_date <= end_date:
@@ -179,7 +191,7 @@ def format_debug_log(
     def _fmt_start(version: str) -> str:
         count = version_counts.get(version, 0)
         range_str = range_info.get(version, "unknown")
-        return f"--- start v{version} ({range_str}) [{count} commits] ---"
+        return f"--- start {version_label(version)} ({range_str}) [{count} commits] ---"
 
     def _fmt_end(version: str) -> str:
         return f"--- end {version} ---"
@@ -214,7 +226,7 @@ def render_markdown(
     orphan_count = len(orphan_commits)
     total_commits = len(all_commits)
 
-    from_sha_display = vrange.from_sha[:7] if vrange.from_sha else "unknown"
+    from_sha_display = vrange.from_sha[:7] if vrange.from_sha else "root"
     to_sha_display = vrange.to_sha[:7]
     from_date_display = vrange.from_date[:10] if vrange.from_date else "unknown"
     to_date_display = vrange.to_date[:10]
@@ -229,7 +241,7 @@ def render_markdown(
     )
 
     lines = [
-        f"# v{version} Release Notes (DRAFT)",
+        f"# {version_label(version)} Release Notes (DRAFT)",
         "",
         "## Stats",
         "",
@@ -282,13 +294,13 @@ def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=check)
 
 
-def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
+def detect_version_ranges(*, rolling_main: bool = False) -> list[VersionRange]:
     """Walk git log for pyproject.toml, detect version bumps, return ranges.
 
-    rolling_main=True (default): era semantics — each version covers commits made
+    rolling_main=True: legacy era semantics — each version covers commits made
     while that version was active (from its bump commit to the next bump).
 
-    rolling_main=False: traditional release-notes semantics — each version covers
+    rolling_main=False (default): each version covers
     commits since the previous version bump up to the current bump.
     """
     result = _run(["git", "log", "--format=%H %aI", "--", "pyproject.toml"])
@@ -375,15 +387,9 @@ def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
                 from_sha = older["sha"]
                 from_date = older["date"]
             else:
-                # Oldest version: use the repo root commit as the lower bound.
-                root_result = _run(["git", "rev-list", "--max-parents=0", to_sha], check=False)
-                from_sha = root_result.stdout.strip() if root_result.returncode == 0 else None
-                root_date_result = _run(
-                    ["git", "log", "-1", "--format=%aI", from_sha or to_sha], check=False
-                )
-                from_date = (
-                    root_date_result.stdout.strip() if root_date_result.returncode == 0 else None
-                )
+                # No lower bound: include the root, even when it is the bump itself.
+                from_sha = None
+                from_date = None
             ranges.append(
                 VersionRange(
                     version=bump["version"],
@@ -394,8 +400,7 @@ def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
                 )
             )
 
-    # Always insert an IN_PROGRESS range for the current version, even when
-    # HEAD == latest bump (zero commits). This makes the active version visible.
+    # Always expose work after the latest release, including an empty draft at a bump.
     if bump_commits:
         latest_bump = bump_commits[0]
         head_result = _run(["git", "rev-parse", "HEAD"])
@@ -405,7 +410,7 @@ def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
         ranges.insert(
             0,
             VersionRange(
-                version=f"{latest_bump['version']}-IN_PROGRESS",
+                version=f"{latest_bump['version']}-IN_PROGRESS" if rolling_main else UNRELEASED,
                 from_sha=latest_bump["sha"],
                 to_sha=head_sha,
                 from_date=latest_bump["date"],
@@ -417,11 +422,12 @@ def detect_version_ranges(*, rolling_main: bool = True) -> list[VersionRange]:
     # The IN_PROGRESS range covers that same span (or beyond), so drop the
     # degenerate era to avoid double-counting. Keep IN_PROGRESS ranges even
     # when from_sha==to_sha (zero commits — still want them visible).
-    ranges = [r for r in ranges if r.from_sha != r.to_sha or r.version.endswith("-IN_PROGRESS")]
+    if rolling_main:
+        ranges = [r for r in ranges if r.from_sha != r.to_sha or r.version.endswith("-IN_PROGRESS")]
 
     # Sort: unreleased first, then newest version first (descending)
     def sort_key(r: VersionRange):
-        if r.version.endswith("-IN_PROGRESS"):
+        if r.version == UNRELEASED or r.version.endswith("-IN_PROGRESS"):
             return (0, [])
         return (1, [-int(x) for x in r.version.split(".")])
 
@@ -533,7 +539,7 @@ def fetch_bead_close_commits() -> dict[str, str]:
             "git",
             "log",
             "-p",
-            "--diff-filter=M",
+            "--reverse",
             "--format=COMMIT:%H",
             "--",
             ".beads/issues.jsonl",
@@ -549,27 +555,15 @@ def build_sha_to_version(ranges: list[VersionRange]) -> dict[str, str]:
     """Return {full_sha: version} for all commits in all ranges."""
     sha_to_version: dict[str, str] = {}
     for vrange in ranges:
-        if vrange.from_sha is None:
-            result = _run(["git", "log", "--format=%H", vrange.to_sha], check=False)
-        elif vrange.from_sha == vrange.to_sha:
-            result = _run(["git", "log", "--format=%H", "-1", vrange.to_sha], check=False)
-        else:
-            parent_result = _run(["git", "log", "--format=%P", "-1", vrange.from_sha], check=False)
-            is_root = parent_result.returncode == 0 and not parent_result.stdout.strip()
-            rev_range = vrange.to_sha if is_root else f"{vrange.from_sha}..{vrange.to_sha}"
-            result = _run(["git", "log", "--format=%H", rev_range], check=False)
-        if result.returncode == 0:
-            for sha in result.stdout.splitlines():
-                sha = sha.strip()
-                if sha:
-                    sha_to_version[sha] = vrange.version
+        for commit in fetch_git_commits(vrange.from_sha, vrange.to_sha):
+            sha_to_version[commit["sha"]] = vrange.version
     return sha_to_version
 
 
 def assign_beads_to_versions(all_beads: list[dict], ranges: list[VersionRange]) -> dict[str, str]:
     """Return {bead_id: version} for all closed beads using git commit attribution.
 
-    Falls back to date-based filtering for beads whose close commit isn't in any range.
+    Falls back to timestamps only when no committed closure evidence exists.
     """
     close_commits = fetch_bead_close_commits()
     sha_to_version = build_sha_to_version(ranges)
@@ -584,9 +578,15 @@ def assign_beads_to_versions(all_beads: list[dict], ranges: list[VersionRange]) 
         close_sha = close_commits.get(bead_id)
         if close_sha and close_sha in sha_to_version:
             bead_id_to_version[bead_id] = sha_to_version[close_sha]
-        else:
+        elif not close_sha:
             fallback_beads.append(bead)
 
+    if fallback_beads:
+        print(
+            f"Warning: {len(fallback_beads)} closed bead(s) lack committed closure evidence; "
+            "using timestamp fallback where possible. Review their attribution.",
+            file=sys.stderr,
+        )
     for vrange in ranges:
         fallback_in_range = filter_beads_by_date(fallback_beads, vrange.from_date, vrange.to_date)
         for bead in fallback_in_range:
@@ -599,28 +599,8 @@ def assign_beads_to_versions(all_beads: list[dict], ranges: list[VersionRange]) 
 
 def build_debug_annotated_commits(ranges: list[VersionRange]) -> list[dict]:
     """Build annotated commit list for debug output by mapping each commit to its version."""
-    sha_to_version_short: dict[str, str] = {}
-    for vrange in ranges:
-        if vrange.from_sha is None:
-            # No lower bound: include all ancestors of to_sha
-            result = _run(["git", "log", "--format=%h", vrange.to_sha], check=False)
-        elif vrange.from_sha == vrange.to_sha:
-            # Single-commit era (newest bump with no further commits yet).
-            # Use -1 to avoid bare SHA returning all ancestors.
-            result = _run(["git", "log", "--format=%h", "-1", vrange.to_sha], check=False)
-        else:
-            # Check whether from_sha is the repo root (no parents), so we include it.
-            parent_result = _run(["git", "log", "--format=%P", "-1", vrange.from_sha], check=False)
-            is_root = parent_result.returncode == 0 and not parent_result.stdout.strip()
-            rev_range = vrange.to_sha if is_root else f"{vrange.from_sha}..{vrange.to_sha}"
-            result = _run(["git", "log", "--format=%h", rev_range], check=False)
-        if result.returncode == 0:
-            for sha in result.stdout.splitlines():
-                sha = sha.strip()
-                if sha:
-                    sha_to_version_short[sha] = vrange.version
-
-    result = _run(["git", "log", "--format=%h %s"], check=False)
+    sha_to_version = build_sha_to_version(ranges)
+    result = _run(["git", "log", "--format=%H %s"], check=False)
     if result.returncode != 0:
         return []
 
@@ -632,8 +612,8 @@ def build_debug_annotated_commits(ranges: list[VersionRange]) -> list[dict]:
         parts = line.split(" ", 1)
         sha = parts[0]
         subject = parts[1] if len(parts) > 1 else ""
-        version = sha_to_version_short.get(sha, "unknown")
-        annotated.append({"sha": sha, "subject": subject, "version": version})
+        version = sha_to_version.get(sha, "unknown")
+        annotated.append({"sha": sha[:7], "subject": subject, "version": version})
     return annotated
 
 
@@ -652,7 +632,7 @@ def generate_notes_for_range(
 ) -> str:
     """Generate notes for one version range. Returns the output file path."""
     version = vrange.version
-    filename = f"v{version.removesuffix('-IN_PROGRESS')}.md"
+    filename = "unreleased.md" if version == UNRELEASED else f"v{version}.md"
     output_path = output_dir / filename
 
     if output_path.exists() and not force:
@@ -699,7 +679,7 @@ def main() -> int:
     parser.add_argument(
         "--version",
         metavar="VERSION",
-        help="Generate notes for a specific version (e.g. 0.2.3).",
+        help="Generate notes for a committed release version (e.g. 0.3.0) or unreleased.",
     )
     parser.add_argument(
         "--output-dir",
@@ -720,10 +700,9 @@ def main() -> int:
     parser.add_argument(
         "--rolling-main",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Use era-based version ranges (default). "
-        "Each version includes commits made while that version was active. "
-        "Use --no-rolling-main for traditional release-notes semantics.",
+        default=False,
+        help="Use legacy era-based ranges instead of the default release boundaries. "
+        "The default includes commits since the previous version bump through this bump.",
     )
     args = parser.parse_args()
 
@@ -744,7 +723,11 @@ def main() -> int:
     bead_id_to_version = assign_beads_to_versions(all_beads, ranges)
 
     if args.version:
-        target = args.version.lstrip("v")
+        target = (
+            args.version.lower()
+            if args.version.lower() == UNRELEASED
+            else args.version.removeprefix("v")
+        )
         matching = [r for r in ranges if r.version == target]
         if not matching:
             available = ", ".join(r.version for r in ranges)
@@ -756,12 +739,9 @@ def main() -> int:
         ranges_to_process = matching
     elif args.all:
         ranges_to_process = ranges
-    # Default: generate for the latest unreleased (or newest version if all released)
-    elif (ranges and ranges[0].version.endswith("-IN_PROGRESS")) or ranges:
-        ranges_to_process = [ranges[0]]
     else:
-        print("No ranges to process.", file=sys.stderr)
-        return 1
+        # The first range is Unreleased (or IN_PROGRESS in explicit legacy mode).
+        ranges_to_process = [ranges[0]]
 
     for vrange in ranges_to_process:
         generate_notes_for_range(

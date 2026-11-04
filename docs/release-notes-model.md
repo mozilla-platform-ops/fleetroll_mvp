@@ -1,6 +1,6 @@
 # Release notes by release boundary
 
-Transition the generator from version eras to traditional release boundaries.
+The generator now uses traditional release boundaries by default (mvp-d5wo).
 Choose a version when preparing a release, after the implementation is finished.
 Each version's notes cover commits after the previous version bump through its
 own version bump, inclusive. Continue using committed changes to the version in
@@ -18,8 +18,8 @@ corrects the era model, which would attribute that work to 0.2.4.
 - Label commits after the latest boundary as `Unreleased`, without attaching
   them to the last released version or guessing the next version. Keep default
   draft generation focused on this range; document how to select finalized
-  version notes explicitly. Decide and test the exact selector/filename spelling
-  during implementation, consistently across help, rendering, and sorting.
+  version notes explicitly. The selector is `--version unreleased` and the
+  filename is `unreleased.md`; its heading is `Unreleased` without a `v` prefix.
 - Use the same commit boundaries for notes, debug output, commit coverage, and
   bead attribution. Prefer committed bead closure evidence to timestamps. Keep
   any fallback explicit and test same-day release boundaries so dates do not
@@ -39,3 +39,5 @@ corrects the era model, which would attribute that work to 0.2.4.
 The existing publication-workflow bead mvp-8v8 is related. Version bumping,
 publication, tagging, and pushing are separate actions; this migration does not
 publish a release automatically.
+
+See [the release workflow](release-notes/README.md) for operator instructions.

@@ -367,7 +367,7 @@ class TestFormatDebugLog:
             {"sha": "ccc3333", "subject": "older commit", "version": "0.2.3"},
         ]
         output = format_debug_log(ranges, commits)
-        assert "--- start vunreleased (aaa1111..bbb2222) [1 commits] ---" in output
+        assert "--- start Unreleased (aaa1111..bbb2222) [1 commits] ---" in output
         assert "--- end unreleased ---" in output
         assert "--- start v0.2.3 (ccc3333..aaa1111) [2 commits] ---" in output
         assert "--- end 0.2.3 ---" in output
@@ -507,9 +507,9 @@ class TestDetectVersionRangesRollingMain:
         r010 = version_map["0.1.0"]
         r020 = version_map["0.2.0"]
 
-        # Traditional 0.1.0: to=0.1.0 bump, from=root
+        # Traditional 0.1.0 includes the root: no exclusive lower bound.
         assert r010.to_sha == sha_010
-        assert r010.from_sha == sha_root
+        assert r010.from_sha is None
         # Traditional 0.2.0: to=0.2.0 bump, from=0.1.0 bump
         assert r020.to_sha == sha_020
         assert r020.from_sha == sha_010
@@ -619,7 +619,7 @@ class TestAssignBeadsToVersions:
 
         assert result == {"mvp-abc": "0.1.0"}
 
-    def test_fallback_to_date_when_commit_not_in_range(self):
+    def test_known_close_commit_outside_ranges_is_not_reassigned_by_date(self):
         beads = [{"id": "mvp-abc", "closed_at": "2026-01-15T00:00:00Z"}]
         ranges = [self._vrange("0.1.0", from_date=None, to_date="2026-02-01T00:00:00Z")]
 
@@ -631,7 +631,7 @@ class TestAssignBeadsToVersions:
             mock_sha_ver.return_value = {}
             result = assign_beads_to_versions(beads, ranges)
 
-        assert result == {"mvp-abc": "0.1.0"}
+        assert result == {}
 
     def test_bead_without_close_commit_uses_date_fallback(self):
         beads = [{"id": "mvp-xyz", "closed_at": "2026-01-20T00:00:00Z"}]

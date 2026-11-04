@@ -527,6 +527,14 @@ uv run fleetroll debug host-script --wrap
 
 ## Development
 
+### Release notes
+
+`uv run release-notes` generates an Unreleased draft from committed changes after
+the latest version bump. Choose and commit a version when preparing a release,
+then generate its draft with `uv run release-notes --version 0.3.0`. See the
+[release notes workflow](docs/release-notes/README.md) for review and publication
+steps and the transition from version eras to release boundaries.
+
 ### TODOs
 
 Stored in beads. See `AGENTS.md` for more info.
