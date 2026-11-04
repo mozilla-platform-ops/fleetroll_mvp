@@ -97,7 +97,8 @@ and compact span count. Host intervals identify raw/compact sources, retained
 maximum polling gaps, and retention cutoffs. `configuration_evidence` carries
 pinned provenance and uncertainty reasons; `configuration_gaps` lists unknown
 ranges inside the requested window. Human output gives the cutoff and span count;
-`--details` prints one attribution summary per host. `-v` or `--verbose` prints
+Unverified configurations are grouped by reason with host counts. `--details`
+lists affected hosts and prints one attribution summary per host. `-v` or `--verbose` prints
 individual tasks and unknown ranges. These additive fields keep JSON schema version 1.
 
 Exit codes: 0 = a report with no classified failures or query errors; 1 = a

@@ -427,6 +427,31 @@ def test_human_summary_shows_totals_exclusions_and_details(env, capsys):
     assert "Unknown configuration:" in verbose
 
 
+def test_unverified_host_messages_grouped_by_reason(capsys):
+    result = {
+        "hosts": [
+            {"host": "host-b", "configuration_reason": "waiting for Puppet"},
+            {"host": "host-a", "configuration_reason": "waiting for Puppet"},
+            {"host": "host-c", "configuration_reason": "unknown role"},
+            {"host": "host-d", "configuration_reason": "query failed"},
+        ],
+        "errors": ["host-d: query failed"],
+    }
+    report.print_unverified_hosts(result, details=False)
+    text = capsys.readouterr().out
+    assert "2 host(s): waiting for Puppet" in text
+    assert "1 host(s): unknown role" in text
+    assert "host-a" not in text
+    assert "query failed" not in text
+    assert "--details or --verbose" in text
+    report.print_unverified_hosts(result, details=True)
+    text = capsys.readouterr().out
+    assert "host-a" in text
+    assert "host-b" in text
+    assert "host-c" in text
+    assert "host-d" not in text
+
+
 def test_observed_outcomes_include_unattributed_failures(env, capsys):
     seed(env, "host")
     task(env, "host", state="completed", minute=45)

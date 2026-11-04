@@ -877,6 +877,26 @@ def print_fleet_override_status(status):
     )
 
 
+def print_unverified_hosts(report, *, details):
+    """Summarize configuration uncertainty and optionally list affected hosts."""
+    errors = set(report["errors"])
+    grouped = defaultdict(list)
+    for host in report["hosts"]:
+        reason = host["configuration_reason"]
+        if reason and f"{host['host']}: {reason}" not in errors:
+            grouped[reason].append(host["host"])
+    if not grouped:
+        return
+    print("\nUnverified host configurations:")
+    for reason, names in sorted(grouped.items(), key=lambda item: (-len(item[1]), item[0])):
+        print(f"  {len(names)} host(s): {reason}")
+        if details:
+            for name in sorted(names):
+                print(f"    {name}")
+    if not details:
+        print("  Use --details or --verbose for host names.")
+
+
 def print_report(report, *, details=False, verbose=False, color=None):
     if color is None:
         color = report_color_enabled()
@@ -985,19 +1005,19 @@ def print_report(report, *, details=False, verbose=False, color=None):
                 else "  Failure-rate difference unavailable"
             )
         for reason in comparison["reasons"]:
-            print(f"  {reason}")
+            label = (
+                "overall: " if reason == "insufficient configuration attribution coverage" else ""
+            )
+            print(f"  {label}{reason}")
     for pattern in summary["failure_patterns"]:
         print(f"\nFailure pattern: {pattern['name']}; {len(pattern['hosts'])} host(s)")
         counts = {labels[key]: count for key, count in pattern["cohorts"].items()}
         print(f"  Cohort counts: {counts}; observed on master: {pattern['seen_on_master']}")
         print(f"  https://firefox-ci-tc.services.mozilla.com/tasks/{pattern['example_task']}")
+    print_unverified_hosts(report, details=details or verbose)
     if details or verbose:
         heading("Host details")
     for host in report["hosts"]:
-        if host["configuration_reason"] and not any(
-            error == f"{host['host']}: {host['configuration_reason']}" for error in report["errors"]
-        ):
-            print(f"\nUnverified {host['host']}: {host['configuration_reason']}")
         if details or verbose:
             if not verbose:
                 jobs = host["jobs"]
