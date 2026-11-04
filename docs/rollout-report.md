@@ -78,6 +78,12 @@ counts, requested/queried hosts, and observation freshness. Query failures have
 unknown task counts; they are never zero-job successes. Missing comparison
 cohorts still produce useful standalone summaries.
 
+The human report also shows all retrieved in-window outcomes across configurations,
+including unattributed runs, and counts the reasons those runs were excluded from
+configuration attribution. These totals are not cohort results and do not establish
+which configuration produced a run. They cover only retrieved runs: missing host
+queries and the 20-run worker history limit can leave additional jobs out.
+
 `configuration_history` exposes availability, schema version, retention cutoff,
 and compact span count. Host intervals identify raw/compact sources, retained
 maximum polling gaps, and retention cutoffs. `configuration_evidence` carries

@@ -793,6 +793,40 @@ def print_issues(report, *, style):
             print(f"{style('✕ ERROR', fg='red', bold=True)}: {error}")
 
 
+def print_observed_outcomes(summary):
+    """Show all retrieved outcomes separately from configuration attribution."""
+    observed = summary["all_observed_outcomes"]
+    counts = observed["outcomes"]
+    print(f"  All observed in-window runs: {observed['jobs']} (across configurations)")
+    print(
+        f"    Completed: {counts['completed']}  ·  Failed: {counts['failed']}  ·  "
+        f"Exceptions: {counts['exception']}"
+    )
+    print(
+        f"    Running: {counts['running']}  ·  Pending: {counts['pending']}  ·  "
+        f"Unknown: {counts['unknown']}"
+    )
+    attributed = {
+        outcome: sum(group["outcomes"][outcome] for group in summary["cohorts"])
+        for outcome in OUTCOMES
+    }
+    print(f"  Attributed runs: {summary['coverage']['classified']}")
+    print(
+        f"    Completed: {attributed['completed']}  ·  Failed: {attributed['failed']}  ·  "
+        f"Exceptions: {attributed['exception']}"
+    )
+    print(
+        f"    Running: {attributed['running']}  ·  Pending: {attributed['pending']}  ·  "
+        f"Unknown: {attributed['unknown']}"
+    )
+    print("  These outcomes include runs whose configuration could not be attributed.")
+    reasons = summary["coverage"]["exclusion_reasons"]
+    if reasons:
+        print("  Excluded from configuration attribution:")
+        for reason, count in sorted(reasons.items(), key=lambda item: (-item[1], str(item[0]))):
+            print(f"    {count}: {reason or 'reason unavailable'}")
+
+
 def print_report(report, *, details=False, verbose=False, color=None):
     if color is None:
         color = report_color_enabled()
@@ -833,6 +867,8 @@ def print_report(report, *, details=False, verbose=False, color=None):
     stamps = [host["observation_ts"] for host in report["hosts"] if host["observation_ts"]]
     if stamps:
         print(f"  Host observations: {min(stamps)} to {max(stamps)}")
+    heading("Observed outcomes")
+    print_observed_outcomes(summary)
     heading("Cohorts")
     print("  Hosts are current; task counts use verified historical membership.")
     for scope in sorted({tuple(group["configuration"]["scope"]) for group in summary["cohorts"]}):

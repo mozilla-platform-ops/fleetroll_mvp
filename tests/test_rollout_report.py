@@ -427,6 +427,23 @@ def test_human_summary_shows_totals_exclusions_and_details(env, capsys):
     assert "Unknown configuration:" in verbose
 
 
+def test_observed_outcomes_include_unattributed_failures(env, capsys):
+    seed(env, "host")
+    task(env, "host", state="completed", minute=45)
+    task(env, "host", state="failed", minute=10)
+    assert invoke(env, "host") == 0  # Unattributed outcomes do not change cohort exit status.
+    result = read(capsys)
+    report.print_report(result, color=False)
+    text = capsys.readouterr().out
+    assert "Configuration coverage: 1/2" in text
+    assert "All observed in-window runs: 2 (across configurations)" in text
+    assert "Completed: 1  ·  Failed: 1  ·  Exceptions: 0" in text
+    assert "Attributed runs: 1\n    Completed: 1  ·  Failed: 0" in text
+    assert "1: unknown configuration or task spans a transition/observation gap" in text
+    assert "These outcomes include runs whose configuration could not be attributed" in text
+    assert result["summary"]["cohorts"][0]["outcomes"]["failed"] == 0
+
+
 def test_verbose_option_does_not_change_json(env, capsys):
     seed(env, "host")
     task(env, "host", minute=10)
