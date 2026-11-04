@@ -138,7 +138,7 @@ def cmd_host_reboot_if_idle(args: HostRebootIfIdleArgs) -> None:
     """Request a reboot for one Linux host only when live gwhc says IDLE."""
     if not looks_like_host(args.host):
         raise UserError(
-            "host-reboot-if-idle requires exactly one hostname; host files are unsupported."
+            "host reboot-if-idle requires exactly one hostname; host files are unsupported."
         )
     if "@" in args.host:
         user, hostname = args.host.rsplit("@", 1)
@@ -146,7 +146,7 @@ def cmd_host_reboot_if_idle(args: HostRebootIfIdleArgs) -> None:
     else:
         host = expand_hostname(args.host)
     if not looks_like_host(host):
-        raise UserError(f"Invalid hostname for host-reboot-if-idle: {args.host}")
+        raise UserError(f"Invalid hostname for host reboot-if-idle: {args.host}")
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
 
     if not args.confirm:

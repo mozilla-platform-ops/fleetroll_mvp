@@ -1,6 +1,6 @@
 # CLI command hierarchy
 
-Proposed resource groups replace the flat command list. This is a CLI naming and
+Resource groups replace the flat command list (implementation: mvp-bqod). This is a CLI naming and
 discovery change; command behavior, argument meanings, defaults, output formats,
 exit codes, confirmation requirements, and audit action names remain stable.
 Both `fleetroll` and `fr` expose the same hierarchy.

@@ -58,7 +58,7 @@ Fleetroll uses a puppet state metadata file for ground-truth tracking of what pu
 **What it does**:
 - Written automatically by the puppet wrapper script after each run
 - Contains git SHA, override SHA, vault SHA, success status, and timestamps
-- Read by `fleetroll gather-host` via SSH to populate monitor data
+- Read by `fleetroll gather host` via SSH to populate monitor data
 - Enables reliable APPLIED status checking through SHA comparison
 
 **Integration**:
@@ -108,6 +108,16 @@ uv sync
 
 Refer to `--help` for complete usage.
 
+Commands are grouped by resource: `host`, `override`, `vault`, `note`, `gather`,
+`fleet`, `rollout`, `data`, and `debug`; `web` stands alone. For example,
+`fr override --help` lists override actions. `fr` is a shortcut for `fleetroll`.
+The former flat command names remain supported as hidden compatibility aliases.
+Use `fr gather all HOST_OR_FILE` for combined host, Taskcluster, and GitHub
+collection; the legacy `fr gather HOST_OR_FILE` spelling also works. The gather
+action names `all`, `host`, `tc`, and `gh` are reserved: use `./host` for a file
+named `host`, or a FQDN for a hostname matching an action name. Action options
+follow the action, for example `fr gather all --quiet hosts.list`.
+
 ### Quickstart
 
 ```bash
@@ -116,7 +126,7 @@ Refer to `--help` for complete usage.
 # you can use `watch` to run this every X minutes
 
 # display data in an interactive TUI
-uv run fleetroll host-monitor  configs/host-lists/mac/all.list
+uv run fleetroll host monitor  configs/host-lists/mac/all.list
 ```
 
 ### Gathering Data
@@ -127,20 +137,20 @@ Running these with `watch -n 300 <command>` is how I'm currently using them. In 
 
 #### Host data
 
-The `gather-host` command stores host observations in SQLite (`~/.fleetroll/fleetroll.db`) and places all observed overrides and vault.yamls in `~/.fleetroll/overrides` and `~/.fleetroll/vault_yamls`.
+The `gather host` command stores host observations in SQLite (`~/.fleetroll/fleetroll.db`) and places all observed overrides and vault.yamls in `~/.fleetroll/overrides` and `~/.fleetroll/vault_yamls`.
 
 ```bash
 # audit a single host
-uv run fleetroll gather-host t-linux64-ms-238.test.releng.mdc1.mozilla.com
+uv run fleetroll gather host t-linux64-ms-238.test.releng.mdc1.mozilla.com
 
 # audit several hosts in one invocation
-uv run fleetroll gather-host t-linux64-ms-001 t-linux64-ms-173
+uv run fleetroll gather host t-linux64-ms-001 t-linux64-ms-173
 
 # audit a list of hosts
-uv run fleetroll gather-host configs/host-lists/1804.list
+uv run fleetroll gather host configs/host-lists/1804.list
 ```
 
-`gather-host` accepts one or more hostnames, or a host-list file. When gathering
+`gather host` accepts one or more hostnames, or a host-list file. When gathering
 multiple hosts, pass all hostnames in the same command; use a host-list file for
 larger sets.
 
@@ -148,47 +158,47 @@ larger sets.
 
 ```bash
 # fetch TaskCluster worker data for hosts (stores in ~/.fleetroll/fleetroll.db)
-uv run fleetroll gather-tc configs/host-lists/1804.list
+uv run fleetroll gather tc configs/host-lists/1804.list
 
 # verbose output (shows API calls)
-uv run fleetroll gather-tc -v configs/host-lists/1804.list
+uv run fleetroll gather tc -v configs/host-lists/1804.list
 ```
 
-For Linux and macOS, `gather-host` records the configured Taskcluster worker
-identity (provisioner, pool, group, and worker ID). `gather-tc` uses that identity,
+For Linux and macOS, `gather host` records the configured Taskcluster worker
+identity (provisioner, pool, group, and worker ID). `gather tc` uses that identity,
 so new roles and pools do not need entries in Fleetroll's role mapping. Refresh
 host observations after changing worker configuration. Configuration identifies
 which worker to query; it does not establish that the worker is running.
 
 Older observations without identity collection metadata use the legacy
 role/override mapping with a warning. An explicit identity collection failure
-requires a successful `gather-host` refresh; Fleetroll does not fall back to a
+requires a successful `gather host` refresh; Fleetroll does not fall back to a
 possibly outdated pool. Unresolved hosts, missing workers, and API failures make
-`gather-tc` exit nonzero, including in quiet mode. Successful hosts are still
+`gather tc` exit nonzero, including in quiet mode. Successful hosts are still
 saved, and failed hosts retain their previous TC observation timestamps.
 Quiet mode prints status, collected/requested counts, and elapsed time in at most
 80 characters. Use
-`uv run fleetroll gather-tc -v <host-list>` for per-host diagnostics.
+`uv run fleetroll gather tc -v <host-list>` for per-host diagnostics.
 
 See [worker identity collection](docs/worker-identity.md) for configuration
 sources and supported launch configurations.
 
 #### Reviewing rollout jobs on master and overrides
 
-`fleetroll rollout-report` groups hosts within a role into verified master
+`fleetroll rollout report` groups hosts within a role into verified master
 and each distinct override, then compares their recent Taskcluster outcomes.
 The same report works after overrides are removed: no special mode is needed.
 Refresh the relevant hosts and GitHub references first:
 
 ```bash
-uv run fleetroll gather configs/host-lists/linux/2404.list
-uv run fleetroll rollout-report --role gecko_t_linux_2404_talos
+uv run fleetroll gather all configs/host-lists/linux/2404.list
+uv run fleetroll rollout report --role gecko_t_linux_2404_talos
 
 # Pool selection keeps different roles/pools separate
-uv run fleetroll rollout-report --worker-type gecko-t-linux-talos-2404
+uv run fleetroll rollout report --worker-type gecko-t-linux-talos-2404
 
 # Explicit hosts, including hosts whose overrides were removed
-uv run fleetroll rollout-report t-linux64-ms-016 t-linux64-ms-017 --json
+uv run fleetroll rollout report t-linux64-ms-016 t-linux64-ms-017 --json
 ```
 
 The report includes outcome totals, rates, applied revisions, task-name failure
@@ -223,16 +233,16 @@ history model, limitations, and versioned JSON schema.
 
 #### Data freshness
 
-`data-freshness` reports host-audit and Taskcluster observation freshness
+`data freshness` reports host-audit and Taskcluster observation freshness
 separately. Producing a report exits successfully even when data is stale or
 missing; use `--require-fresh` when freshness is a prerequisite for automation.
 
 ```bash
 # Human-readable report for a host population
-uv run fleetroll data-freshness configs/host-lists/1804.list
+uv run fleetroll data freshness configs/host-lists/1804.list
 
 # Fail closed unless every host has fresh host and TC data
-uv run fleetroll data-freshness \
+uv run fleetroll data freshness \
   --min-fresh-pct 100 \
   --require-fresh \
   --json \
@@ -259,21 +269,21 @@ Fleetroll uses a hybrid storage architecture optimized for different data access
 - **WAL mode** for concurrent reader/writer access
 - **Hybrid schema**: indexed lookup columns + JSON blob for full record
 - **Retention**: keeps latest N records per key (default 10)
-- **Maintenance**: `fleetroll maintain` performs WAL checkpoint + VACUUM
+- **Maintenance**: `fleetroll data maintain` performs WAL checkpoint + VACUUM
 
 ### Viewing Data
 
 #### Once
 
 ```bash
-uv run fleetroll host-monitor configs/host-lists/1804.list --once
+uv run fleetroll host monitor configs/host-lists/1804.list --once
 ```
 
 ##### Filtering and hostname-only output
 
 ```bash
 # list hostnames matching an override filter (e.g. audit a specific override rollout)
-uv run fleetroll host-monitor --filter 'ovr_bch~05032026-1804-resolverd-wedging' --once configs/host-lists/linux/all.list --hostname-only
+uv run fleetroll host monitor --filter 'ovr_bch~05032026-1804-resolverd-wedging' --once configs/host-lists/linux/all.list --hostname-only
 ```
 
 ##### Filter Query Syntax
@@ -319,18 +329,18 @@ Time columns (`pp_last`, `tc_act`, `uptime`, `tc_j_sf`, `data`) accept duration 
 ##### Private Puppet repositories and HEALTHY
 
 Fleetroll compares the Puppet revision reported by a host (`PP_SHA`) with the
-expected branch revision fetched by `gather-gh` (`PP_EXP`). For an override that
+expected branch revision fetched by `gather gh` (`PP_EXP`). For an override that
 points to a private GitHub repository, Fleetroll's local GitHub API token must
 have read access to that repository. The host's own Git credentials do not
-provide access to the local `gather-gh` process.
+provide access to the local `gather gh` process.
 
-If `gather-gh` cannot fetch the private branch, the override branch and applied
+If `gather gh` cannot fetch the private branch, the override branch and applied
 Puppet revision can still appear, but `PP_EXP`, `PP_MATCH`, and `HEALTHY` show
 `-` when no expected revision is stored. This means Fleetroll cannot determine
 health from its current data; it does not mean Puppet failed. To enable the
 comparison, configure a token with repository read access under `[github]`
 `api_token` in `~/.fleetroll/config.toml`, then run
-`uv run fleetroll gather-gh --override-delay`. `HEALTHY` becomes `Y` only when
+`uv run fleetroll gather gh --override-delay`. `HEALTHY` becomes `Y` only when
 Puppet successfully applied the expected revision and Taskcluster activity is
 less than one hour old.
 
@@ -369,20 +379,20 @@ os=M|L
 
 ```bash
 # emit one JSON object per host instead of a table
-uv run fleetroll host-monitor configs/host-lists/1804.list --once --json
+uv run fleetroll host monitor configs/host-lists/1804.list --once --json
 
 # extract unique roles across all hosts
-uv run fleetroll host-monitor configs/host-lists/all.list --once --json \
+uv run fleetroll host monitor configs/host-lists/all.list --once --json \
   | jq -r '[.[].observed.role] | map(select(.)) | unique[]'
 
 # extract unique operating systems across all hosts
-uv run fleetroll host-monitor configs/host-lists/all.list --once --json \
+uv run fleetroll host monitor configs/host-lists/all.list --once --json \
   | jq -r '.[].observed.os_type' | sort | uniq
 ```
 
 #### Live-Updating Curses Interface
 ```bash
-uv run fleetroll host-monitor configs/host-lists/1804.list
+uv run fleetroll host monitor configs/host-lists/1804.list
 # keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
 ```
 
@@ -406,9 +416,9 @@ To rebuild the frontend after changes: `pnpm --dir web build`
 Create an override from an upstream branch, a PR number, or a GitHub PR URL:
 
 ```bash
-uv run fleetroll create-override my-branch
-uv run fleetroll create-override 123 --output-dir configs/overrides
-uv run fleetroll create-override https://github.com/mozilla-platform-ops/ronin_puppet/pull/123 --output rollout.override
+uv run fleetroll override create my-branch
+uv run fleetroll override create 123 --output-dir configs/overrides
+uv run fleetroll override create https://github.com/mozilla-platform-ops/ronin_puppet/pull/123 --output rollout.override
 ```
 
 The command verifies the exact branch exists before creating the file, resolves
@@ -419,20 +429,20 @@ filename in the current directory; parent directories must already exist.
 default output directory. Generated files leave the worker type assignment empty
 and commented out for the operator to fill in when needed.
 
-When an override sets `WORKER_TYPE_OVERRIDE`, `host-set-override` checks each
+When an override sets `WORKER_TYPE_OVERRIDE`, `override set` checks each
 host's latest successful recorded role against its normal worker type. The base
 type or a nonempty hyphenated suffix is accepted. Unknown roles and mismatches
 block the entire deployment; use `--allow-worker-type-mismatch` for intentional
 exceptions. Previews show the role observation timestamp so operators can decide
-whether to refresh with `gather-host`. There is no freshness cutoff or automatic
+whether to refresh with `gather host`. There is no freshness cutoff or automatic
 refresh. See [worker type safety](docs/override-worker-type-safety.md) for details.
 
 Summarize override coverage for a recorded Puppet role or Taskcluster pool:
 
 ```bash
-uv run fleetroll fleet-status --role gecko_t_linux_2404_talos
-uv run fleetroll fleet-status --worker-type releng-hardware/gecko-t-linux-talos-2404 --json
-uv run fleetroll fleet-status --role gecko_t_linux_2404_talos configs/host-lists/linux/all.list
+uv run fleetroll fleet status --role gecko_t_linux_2404_talos
+uv run fleetroll fleet status --worker-type releng-hardware/gecko-t-linux-talos-2404 --json
+uv run fleetroll fleet status --role gecko_t_linux_2404_talos configs/host-lists/linux/all.list
 ```
 
 Both commands accept a bare worker type, which defaults to the `releng-hardware`
@@ -445,43 +455,43 @@ an observation may not be reflected. Without a host list, the population consist
 hosts identifiable from Fleetroll's recorded observations.
 Use `--verbose` to show host lists, or `--json` for machine-readable details.
 
-Both `fleet-status` and `rollout-report` fetch the current approximate number of
+Both `fleet status` and `rollout report` fetch the current approximate number of
 pending Taskcluster tasks for each effective worker pool. Counts cover the whole
 pool, including workers outside the selected hosts or role, and include a fetch
 timestamp. Pools are resolved from recorded worker identities, with legacy
 role/override mapping for older observations. Queue lookup failures appear as
 unavailable and do not prevent the recorded report from rendering or change its
 exit status. Public queue counts need network access but no Taskcluster credentials
-(`rollout-report` still needs credentials for its worker/task queries).
+(`rollout report` still needs credentials for its worker/task queries).
 
 ```bash
 # show stored override contents by sha prefix or human hash
-uv run fleetroll show-override 0328af8c9d6f
-uv run fleetroll show-override freddie-arkansas
+uv run fleetroll override show 0328af8c9d6f
+uv run fleetroll override show freddie-arkansas
 
 # set override (single host)
-uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d6f t-linux64-ms-229.test.releng.mdc1.mozilla.com
+uv run fleetroll override set --from-file ~/.fleetroll/overrides/0328af8c9d6f t-linux64-ms-229.test.releng.mdc1.mozilla.com
 
 # set override (host list)
-uv run fleetroll host-set-override --from-file ~/.fleetroll/overrides/0328af8c9d6f configs/host-lists/1804.list
+uv run fleetroll override set --from-file ~/.fleetroll/overrides/0328af8c9d6f configs/host-lists/1804.list
 
 # unset override (host list)
-uv run fleetroll host-unset-override configs/host-lists/1804.list
+uv run fleetroll override unset configs/host-lists/1804.list
 ```
 
 ### Rebooting an idle worker
 
-`host-reboot-if-idle` checks a Linux host's live `sudo gwhc --json` output and
+`host reboot-if-idle` checks a Linux host's live `sudo gwhc --json` output and
 requests a reboot only when its top-level `state` is exactly `IDLE`. It targets
 one host per invocation and requires `--confirm` to run the check and request
 reboot:
 
 ```bash
 # preview the target and action
-uv run fleetroll host-reboot-if-idle t-linux64-ms-001
+uv run fleetroll host reboot-if-idle t-linux64-ms-001
 
 # check gwhc and request reboot when state is IDLE
-uv run fleetroll host-reboot-if-idle t-linux64-ms-001 --confirm
+uv run fleetroll host reboot-if-idle t-linux64-ms-001 --confirm
 ```
 
 This operator-triggered best-effort command does not quarantine the worker or
@@ -494,24 +504,24 @@ requested; it does not claim the host recovered.
 
 ```bash
 # show stored vault contents by sha prefix or human hash
-uv run fleetroll show-vault 0328af8c9d6f
-uv run fleetroll show-vault jupiter-lactose
+uv run fleetroll vault show 0328af8c9d6f
+uv run fleetroll vault show jupiter-lactose
 
 # set vault (single host) - defaults to /root/vault.yaml
-uv run fleetroll host-set-vault --from-file vault.yaml t-linux64-ms-229.test.releng.mdc1.mozilla.com
+uv run fleetroll vault set --from-file vault.yaml t-linux64-ms-229.test.releng.mdc1.mozilla.com
 
 # set vault (host list)
-uv run fleetroll host-set-vault --from-file vault.yaml configs/host-lists/1804.list
+uv run fleetroll vault set --from-file vault.yaml configs/host-lists/1804.list
 ```
 
 ### Debugging
 
 ```bash
 # print the remote audit script (useful for debugging)
-uv run fleetroll debug-host-script
+uv run fleetroll debug host-script
 
 # wrap as ssh-ready command
-uv run fleetroll debug-host-script --wrap
+uv run fleetroll debug host-script --wrap
 ```
 
 

@@ -606,14 +606,14 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 if verbose and not quiet:
                     click.echo(
                         f"WARNING: {host}: using legacy role/override pool resolution; "
-                        "refresh with gather-host to collect worker identity",
+                        "refresh with gather host to collect worker identity",
                         err=True,
                     )
             else:
                 unresolved_hosts += 1
                 if verbose and not quiet:
                     click.echo(
-                        f"ERROR: {host}: worker identity unresolved; refresh with gather-host "
+                        f"ERROR: {host}: worker identity unresolved; refresh with gather host "
                         "and check worker configuration",
                         err=True,
                     )

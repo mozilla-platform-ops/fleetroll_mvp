@@ -75,7 +75,7 @@ def worker_identity(  # noqa: PLR0911 - distinguish each identity failure explic
             or not isinstance(identity, dict)
             or not all(isinstance(identity.get(key), str) and identity[key] for key in keys)
         ):
-            return None, "worker identity collection failed; refresh gather-host"
+            return None, "worker identity collection failed; refresh gather host"
         return WorkerIdentity(*(identity[key] for key in keys)), None
     retained = retained_configuration(record)
     if retained:

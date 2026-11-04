@@ -380,7 +380,7 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
                 host_list = "\n  ".join(existing)
                 raise UserError(
                     f"Override already exists on {len(existing)} host(s):\n  {host_list}\n"
-                    "Use --force to overwrite, or host-unset-override to remove it first."
+                    "Use --force to overwrite, or override unset to remove it first."
                 )
         except UserError:
             raise

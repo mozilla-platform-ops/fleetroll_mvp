@@ -221,12 +221,12 @@ fi
    - Test on both Linux and macOS
 
 2. **Collector integration**:
-   - Run `fleetroll gather-host` on test host
+   - Run `fleetroll gather host` on test host
    - Verify audit log contains new PP_* fields
    - Verify values match state file
 
 3. **Monitor display**:
-   - Run `fleetroll host-monitor`
+   - Run `fleetroll host monitor`
    - Verify APPLIED shows correct status
    - Verify PP_SHA column appears with git SHA
    - Verify PP_LAST shows correct time

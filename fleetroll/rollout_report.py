@@ -116,7 +116,7 @@ def load_evidence(
             else:
                 snapshot = list(snapshot.values())
         if not isinstance(snapshot, list):
-            raise TypeError(f"{path}: expected gather-host or host-monitor observation JSON")
+            raise TypeError(f"{path}: expected gather host or host monitor observation JSON")
         for entry in snapshot:
             stamp = parse_timestamp(entry.get("ts")) if isinstance(entry, dict) else None
             if (
@@ -382,7 +382,7 @@ def collect_host(
         and (stamp is None or event_time > stamp)
         for entry in records
     ):
-        current, reason = None, "configuration write after latest observation; gather-host required"
+        current, reason = None, "configuration write after latest observation; gather host required"
     if current and not any(
         item.end == stamp and item.configuration == current for item in intervals
     ):
@@ -436,7 +436,7 @@ def collect_host(
     result["scope"] = [result["role"], identity.provisioner, identity.pool, identity.worker_group]
     if identity.legacy:
         result["warnings"].append(
-            "Legacy role/override worker identity fallback; refresh gather-host."
+            "Legacy role/override worker identity fallback; refresh gather host."
         )
     try:
         worker = clients.worker_manager.getWorker(
@@ -1007,7 +1007,7 @@ def print_issues(report, *, style, verbose=False):
             host, separator, reason = message.partition(": ")
             if message in recent_failed:
                 level_for_message = "warning"
-                reason += "; recent failure may be a reboot. Worker jobs were not queried; refresh gather-host."
+                reason += "; recent failure may be a reboot. Worker jobs were not queried; refresh gather host."
             else:
                 level_for_message = level
             if separator and host in known_hosts:
@@ -1723,7 +1723,7 @@ def parse_args(argv=None, *, prog=None):
         type=Path,
         action="append",
         default=[],
-        help="Additional saved gather-host/host-monitor JSON evidence (repeatable, read-only).",
+        help="Additional saved gather host/host monitor JSON evidence (repeatable, read-only).",
     )
     parser.add_argument(
         "--since", type=cli_timestamp, help="ISO 8601 start, default: 24 hours before --until."
@@ -1837,7 +1837,7 @@ def main(argv=None, *, prog=None) -> int:
             worker_group=args.worker_group,
         )
         if not selected:
-            raise ValueError("no matching recorded hosts; refresh gather-host or check selection")
+            raise ValueError("no matching recorded hosts; refresh gather host or check selection")
         clients = create_tc_clients(load_tc_credentials())
     except (OSError, ValueError, TypeError, sqlite3.Error, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

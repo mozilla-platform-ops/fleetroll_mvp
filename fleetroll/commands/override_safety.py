@@ -88,6 +88,6 @@ def enforce_worker_type(checks: list[dict[str, Any]], *, bypass: bool) -> None:
         )
         raise UserError(
             f"Worker type compatibility check failed:\n{details}\n"
-            "Refresh observations with gather-host if needed, or use "
+            "Refresh observations with gather host if needed, or use "
             "--allow-worker-type-mismatch for an intentional exception."
         )

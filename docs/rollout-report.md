@@ -284,10 +284,10 @@ when exit 0; exit 0 is not rollout approval.
 Run from the repository root after refreshing the relevant hosts:
 
 ```bash
-uv run fleetroll rollout-report --role gecko_t_linux_2404_talos
-uv run fleetroll rollout-report --worker-type gecko-t-linux-talos-2404 --json
-uv run fleetroll rollout-report t-linux64-ms-016 t-linux64-ms-017
-uv run fleetroll rollout-report --role gecko_t_linux_2404_talos \
+uv run fleetroll rollout report --role gecko_t_linux_2404_talos
+uv run fleetroll rollout report --worker-type gecko-t-linux-talos-2404 --json
+uv run fleetroll rollout report t-linux64-ms-016 t-linux64-ms-017
+uv run fleetroll rollout report --role gecko_t_linux_2404_talos \
   --since 2026-11-03T23:33:16Z --min-finished 10
 ```
 
@@ -299,14 +299,14 @@ and never fills transitions or contradicting evidence. It does not recover
 missing snapshots. For saved evidence, for example:
 
 ```bash
-uv run fleetroll rollout-report --role gecko_t_linux_2404_talos \
+uv run fleetroll rollout report --role gecko_t_linux_2404_talos \
   --observations-file rollout-start.json --observations-file rollout-followup.json
 ```
 
 Worker types default to the `releng-hardware` provisioner; specify
 `provisioner/worker-type` for another provisioner. The former
 `scripts/check_rollout_jobs.py` and `scripts/check_override_jobs.py` entry points
-have been removed; use `fleetroll rollout-report`. No separate post-removal
+have been removed; use `fleetroll rollout report`. No separate post-removal
 mode is needed. Per-host JSON
 now includes master and unverified hosts as well as overrides. Consumers of the
 old deployment-only JSON should migrate to the versioned summary schema.

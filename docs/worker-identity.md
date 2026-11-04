@@ -1,6 +1,6 @@
 # Worker identity collection (mvp-k6eo)
 
-`gather-host` records `tc_worker_identity_status` and `tc_worker_identity` in
+`gather host` records `tc_worker_identity_status` and `tc_worker_identity` in
 Linux/macOS observations. The identity contains only `provisionerId`,
 `workerType`, `workerGroup`, and `workerId`. This is configured identity, not
 evidence that a worker process is healthy or that a deployed override was applied.
@@ -30,7 +30,7 @@ Configuration selection follows the managed launch paths in ronin_puppet:
   When runner and worker processes refer to different files, all identities must
   agree. Unsupported custom launch arrangements require collector support.
 
-`gather-tc` prefers the observed identity and matches `(workerGroup, workerId)`
+`gather tc` prefers the observed identity and matches `(workerGroup, workerId)`
 within the observed provisioner/pool. `WORKER_TYPE_OVERRIDE` is deployment intent:
 a disagreement produces a warning and the query uses the observed configuration.
 No role naming convention or pool whitelist is needed for new observations.

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import click
 
+from .cli_hierarchy import install_hierarchy
 from .cli_types import (
     DataFreshnessArgs,
     HostAuditArgs,
@@ -409,7 +410,7 @@ def debug_host_script(
     wrap: bool,
     windows: bool,
 ):
-    """Print the remote host audit script used by gather-host."""
+    """Print the remote host audit script used by gather host."""
     if windows:
         if wrap:
             print(remote_windows_audit_script())
@@ -490,7 +491,7 @@ def debug_host_script(
 @click.option(
     "--no-audit",
     is_flag=True,
-    help="Skip the automatic gather-host run after the override is written.",
+    help="Skip the automatic gather host run after the override is written.",
 )
 @click.option(
     "--allow-worker-type-mismatch",
@@ -616,7 +617,7 @@ def host_set_override(
 @click.option(
     "--no-audit",
     is_flag=True,
-    help="Skip the automatic gather-host run after the vault is written.",
+    help="Skip the automatic gather host run after the vault is written.",
 )
 def host_set_vault(
     host: tuple[str, ...],
@@ -695,7 +696,7 @@ def host_set_vault(
 @click.option(
     "--no-audit",
     is_flag=True,
-    help="Skip the automatic gather-host run after the override is removed.",
+    help="Skip the automatic gather host run after the override is removed.",
 )
 def host_unset_override(
     host: tuple[str, ...],
@@ -755,7 +756,7 @@ def host_unset_override(
 @click.option(
     "--no-audit",
     is_flag=True,
-    help="Skip the automatic gather-host run after puppet completes.",
+    help="Skip the automatic gather host run after puppet completes.",
 )
 @click.option(
     "--quiet",
@@ -880,20 +881,20 @@ def gather_gh(override_delay: bool, quiet: bool):
     type=int,
     default=10,
     show_default=True,
-    help="Number of parallel workers for gather-host batch mode.",
+    help="Number of parallel workers for gather host batch mode.",
 )
 @click.option(
     "--batch-timeout",
     type=int,
     default=600,
     show_default=True,
-    help="Overall timeout for gather-host batch operations in seconds.",
+    help="Overall timeout for gather host batch operations in seconds.",
 )
 @click.option(
     "--verbose",
     "-v",
     count=True,
-    help="Verbose output (use -vv for very verbose in gather-tc).",
+    help="Verbose output (use -vv for very verbose in gather tc).",
 )
 @click.option(
     "--quiet",
@@ -904,17 +905,17 @@ def gather_gh(override_delay: bool, quiet: bool):
 @click.option(
     "--skip-host",
     is_flag=True,
-    help="Skip gather-host (SSH host introspection).",
+    help="Skip gather host (SSH host introspection).",
 )
 @click.option(
     "--skip-tc",
     is_flag=True,
-    help="Skip gather-tc (TaskCluster worker data).",
+    help="Skip gather tc (TaskCluster worker data).",
 )
 @click.option(
     "--skip-gh",
     is_flag=True,
-    help="Skip gather-gh (GitHub branch refs).",
+    help="Skip gather gh (GitHub branch refs).",
 )
 def gather(
     host: str,
@@ -931,10 +932,10 @@ def gather(
     skip_tc: bool,
     skip_gh: bool,
 ):
-    """Run gather-host, gather-tc, and gather-gh in sequence.
+    """Run gather host, gather tc, and gather gh in sequence.
 
     HOST_OR_FILE can be a hostname, user@hostname, or a file containing hosts
-    (one per line). Passed to gather-host and gather-tc; gather-gh does not
+    (one per line). Passed to gather host and gather tc; gather gh does not
     use it.
 
     Use --skip-host / --skip-tc / --skip-gh to omit individual steps.
@@ -1151,6 +1152,9 @@ def web(host: str, port: int, dev: bool) -> None:
     """Start the fleetroll web interface."""
     args = WebArgs(host=host, port=port, dev=dev)
     cmd_web(host=args.host, port=args.port, dev=args.dev)
+
+
+install_hierarchy(cli)
 
 
 def main():

@@ -49,13 +49,13 @@ Add a note to a single host (local operation, no SSH).
 
 ```bash
 # Basic usage
-fleetroll note-add HOSTNAME "Note text here"
+fleetroll note add HOSTNAME "Note text here"
 
 # With JSON output
-fleetroll note-add HOSTNAME "Note text" --json
+fleetroll note add HOSTNAME "Note text" --json
 
 # Override notes log location
-fleetroll note-add HOSTNAME "Note text" --audit-log /path/to/notes.jsonl
+fleetroll note add HOSTNAME "Note text" --audit-log /path/to/notes.jsonl
 ```
 
 **Arguments**:
@@ -88,13 +88,13 @@ Show all notes for a host in chronological order (oldest first).
 
 ```bash
 # Show all notes for a host
-fleetroll show-notes HOSTNAME
+fleetroll note show HOSTNAME
 
 # Show only 5 most recent notes
-fleetroll show-notes HOSTNAME --limit 5
+fleetroll note show HOSTNAME --limit 5
 
 # JSON output
-fleetroll show-notes HOSTNAME --json
+fleetroll note show HOSTNAME --json
 ```
 
 **Arguments**:
@@ -183,30 +183,30 @@ t-linux64-ms-239        gecko-t-talos     -
 
 ```bash
 # Add a note about an investigation
-fleetroll note-add host1.example.com "Investigating high CPU usage"
+fleetroll note add host1.example.com "Investigating high CPU usage"
 
 # Add follow-up notes
-fleetroll note-add host1.example.com "Found rogue process, killed it"
-fleetroll note-add host1.example.com "Monitoring for 24h to ensure stability"
+fleetroll note add host1.example.com "Found rogue process, killed it"
+fleetroll note add host1.example.com "Monitoring for 24h to ensure stability"
 
 # View all notes
-fleetroll show-notes host1.example.com
+fleetroll note show host1.example.com
 
 # View only last 2 notes
-fleetroll show-notes host1.example.com --limit 2
+fleetroll note show host1.example.com --limit 2
 ```
 
 ### Integration with Workflows
 
 ```bash
 # Before maintenance
-fleetroll note-add host1.example.com "Starting maintenance window"
+fleetroll note add host1.example.com "Starting maintenance window"
 
 # Perform operations
-fleetroll host-set-override host1.example.com new-config.yaml
+fleetroll override set host1.example.com new-config.yaml
 
 # After maintenance
-fleetroll note-add host1.example.com "Maintenance complete, monitoring"
+fleetroll note add host1.example.com "Maintenance complete, monitoring"
 
 # Check status in monitor
 fleetroll monitor hosts.list
@@ -217,12 +217,12 @@ fleetroll monitor hosts.list
 
 ```bash
 # Document investigation steps
-fleetroll note-add problematic-host "Worker quarantined, investigating"
-fleetroll note-add problematic-host "Disk at 98%, cleaning up logs"
-fleetroll note-add problematic-host "Disk cleaned, worker back online"
+fleetroll note add problematic-host "Worker quarantined, investigating"
+fleetroll note add problematic-host "Disk at 98%, cleaning up logs"
+fleetroll note add problematic-host "Disk cleaned, worker back online"
 
 # Review full investigation history
-fleetroll show-notes problematic-host
+fleetroll note show problematic-host
 ```
 
 ## Future Enhancements (Out of Scope)
@@ -257,11 +257,11 @@ fleetroll show-notes problematic-host
 
 After implementation:
 
-- [ ] `fleetroll note-add testhost "test"` creates `~/.fleetroll/notes.jsonl`
+- [ ] `fleetroll note add testhost "test"` creates `~/.fleetroll/notes.jsonl`
 - [ ] Multiple notes append correctly (no overwrites)
-- [ ] `fleetroll show-notes testhost` displays all notes chronologically
-- [ ] `fleetroll show-notes testhost --limit 2` shows only 2 most recent
-- [ ] `fleetroll show-notes --json` produces valid JSON
+- [ ] `fleetroll note show testhost` displays all notes chronologically
+- [ ] `fleetroll note show testhost --limit 2` shows only 2 most recent
+- [ ] `fleetroll note show --json` produces valid JSON
 - [ ] Monitor command shows latest note in new column
 - [ ] Monitor updates when new notes are added (polling)
 - [ ] Different hosts have isolated notes (filtering works)

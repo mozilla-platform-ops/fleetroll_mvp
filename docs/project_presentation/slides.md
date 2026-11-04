@@ -21,20 +21,20 @@ https://github.com/mozilla-platform-ops/fleetroll_mvp
 
 # host actions
 
-- set vault.yml file (`fleetroll host-set-vault`): Mac/Linux source for puppet/hiera secrets
-- set/unset override file (`fleetroll host-set-override`): allows setting a host to use a branch persistently
+- set vault.yml file (`fleetroll vault set`): Mac/Linux source for puppet/hiera secrets
+- set/unset override file (`fleetroll override set`): allows setting a host to use a branch persistently
 
 ---
 
 # data collection
 
-  - host data (`fleetroll gather-host`)
+  - host data (`fleetroll gather host`)
     - uses SSH. bash for mac and linux and powershell for windows.
-      - `fleetroll debug-host-script (--windows)`
+      - `fleetroll debug host-script (--windows)`
   	- gathers info like role, puppet run metadata, uptime, vault, and override info
   - additional data
-    - github (`fleetroll gather-gh`): expected puppet git SHA for mac and linux (master or override) and win (worker_images file)
-    - taskcluster (`fleetroll gather-tc`): last time in touch with TC, job status (including pass/fail, duration)
+    - github (`fleetroll gather gh`): expected puppet git SHA for mac and linux (master or override) and win (worker_images file)
+    - taskcluster (`fleetroll gather tc`): last time in touch with TC, job status (including pass/fail, duration)
       - worker_type is determined via lookup tables/patterns based on role
   - `watch -n 600 tools/gather-generic.sh config/host-lists/BLAH`
     - handles collection of all three (`gather-tc` calls `gather-gh`)
@@ -43,7 +43,7 @@ https://github.com/mozilla-platform-ops/fleetroll_mvp
 ---
 
 # data display
-  - `fleetroll host-monitor`
+  - `fleetroll host monitor`
     - `--once` mode
         - `--json` mode for scripts/LLMs
     - interactive TUI
@@ -54,7 +54,7 @@ https://github.com/mozilla-platform-ops/fleetroll_mvp
 # new features
   - sqlite db (was append-only jsonl, got large)
   - notes (persisted in git, jsonl)
-    - `fleetroll note-add` for now, ability to do in TUI soon?
+    - `fleetroll note add` for now, ability to do in TUI soon?
   - windows support
 
 ---

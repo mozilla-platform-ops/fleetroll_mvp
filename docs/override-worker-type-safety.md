@@ -1,6 +1,6 @@
 # Worker type safety for override deployment
 
-`host-set-override` checks worker type compatibility before deployment
+`override set` checks worker type compatibility before deployment
 (implementation tracked by mvp-wdlt).
 
 When an override sets `WORKER_TYPE_OVERRIDE`, compare it for each target host
@@ -29,7 +29,7 @@ security boundary for arbitrary shell programs.
 ## Freshness and limits
 
 The check uses recorded observations. Show their age so the operator can decide
-whether to refresh them with `gather-host`; do not impose a freshness cutoff or
+whether to refresh them with `gather host`; do not impose a freshness cutoff or
 automatically refresh before deployment. A stale role can lead to approval for
 the wrong pool, and a role can change between observation and writing the file.
 The check does not prove that a suffixed pool exists or restrict the Puppet branch

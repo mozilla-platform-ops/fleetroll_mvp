@@ -136,7 +136,7 @@ Future observations are excluded from compact storage. A future operation event
 is bounded to first receipt time, with its source timestamp retained as its
 idempotency key. Expiry removes old spans/boundaries; crossing spans retain one
 first endpoint anchor and expose coverage clipped to the current cutoff. Normal
-initialization and `fleetroll maintain` remove unreferenced descriptors. Space
+initialization and `fleetroll data maintain` remove unreferenced descriptors. Space
 remains reusable until SQLite vacuum reclaims it.
 
 Reports open SQLite in read-only mode and never initialize or migrate it. JSON

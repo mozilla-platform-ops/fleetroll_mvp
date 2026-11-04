@@ -167,7 +167,7 @@ The three filter systems are independent:
 ## CLI (`--once` mode)
 
 ```bash
-fleetroll host-monitor hosts.txt --once --filter "pp_last>20h sort:tc_act:desc"
+fleetroll host monitor hosts.txt --once --filter "pp_last>20h sort:tc_act:desc"
 ```
 
 The `--filter` arg accepts the same query syntax. Results are filtered/sorted

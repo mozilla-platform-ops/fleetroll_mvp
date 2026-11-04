@@ -25,13 +25,26 @@ class TestCliHelp:
         """Main --help shows all commands."""
         result = runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
-        assert "gather-host" in result.output
-        assert "host-reboot-if-idle" in result.output
-        assert "debug-host-script" in result.output
-        assert "show-vault" in result.output
-        assert "host-set-override" in result.output
-        assert "host-set-vault" in result.output
-        assert "host-unset-override" in result.output
+        for group in (
+            "gather",
+            "host",
+            "debug",
+            "vault",
+            "override",
+            "note",
+            "data",
+            "fleet",
+            "rollout",
+        ):
+            assert group in result.output
+        for legacy in (
+            "gather-host",
+            "host-reboot-if-idle",
+            "debug-host-script",
+            "show-vault",
+            "host-set-override",
+        ):
+            assert legacy not in result.output
 
     def test_main_help_shows_description(self, runner: CliRunner):
         """Main --help shows tool description."""

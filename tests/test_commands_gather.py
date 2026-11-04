@@ -17,7 +17,7 @@ def runner() -> CliRunner:
 
 class TestGatherHelp:
     def test_help(self, runner: CliRunner):
-        result = runner.invoke(cli, ["gather", "--help"])
+        result = runner.invoke(cli, ["gather", "all", "--help"])
         assert result.exit_code == 0
         assert "--skip-host" in result.output
         assert "--skip-tc" in result.output

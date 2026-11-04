@@ -467,7 +467,7 @@ def remote_set_script(
 # Fail if override already exists (unless --force)
 if sudo -n test -e "$op" 2>/dev/null; then
   echo "OVERRIDE_EXISTS=1"
-  echo "ERROR: Override file already exists at $op. Use --force to overwrite or host-unset-override to remove it first."
+  echo "ERROR: Override file already exists at $op. Use --force to overwrite or override unset to remove it first."
   exit 2
 fi
 """
