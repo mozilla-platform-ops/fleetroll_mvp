@@ -240,7 +240,7 @@ def test_failed_latest_observation_is_selected_but_not_queried(env, capsys):
     env.clients.worker_manager.getWorker.assert_not_called()
     report.print_report(result, color=False)
     output = capsys.readouterr().out
-    assert "⚠ WARNING: host: latest host observation failed" in output
+    assert "⚠ WARNING: 1 host(s): latest host observation failed" in output
     assert "may be a reboot" in output
     assert "Worker jobs were not queried" in output
     assert "✕ ERROR: host: latest host observation failed" not in output
@@ -262,7 +262,32 @@ def test_old_failed_observation_remains_an_error(env, capsys):
     assert invoke(env, "--role", ROLE) == 1
     result = read(capsys)
     report.print_report(result, color=False)
-    assert "✕ ERROR: host: latest host observation failed" in capsys.readouterr().out
+    assert "✕ ERROR: 1 host(s): latest host observation failed" in capsys.readouterr().out
+
+
+def test_issues_group_hosts_and_verbose_retains_details(capsys):
+    names = [f"worker-{n:03d}.example.com" for n in (1, 2, 3, 5)]
+    result = {
+        "hosts": [
+            {"host": name, "error": "latest host observation failed", "observation_age_s": 10}
+            for name in names
+        ],
+        "warnings": [],
+        "errors": [f"{name}: latest host observation failed" for name in names],
+    }
+
+    def style(value, **kwargs):
+        return value
+
+    report.print_issues(result, style=style)
+    output = capsys.readouterr().out
+    assert "4 host(s): latest host observation failed" in output
+    assert "worker-[001-003, 005].example.com" in output
+    assert "Worker jobs were not queried" in output
+    report.print_issues(result, style=style, verbose=True)
+    output = capsys.readouterr().out
+    for name in names:
+        assert name in output
 
 
 def test_queue_failure_is_visible_and_reduces_coverage(env, capsys):

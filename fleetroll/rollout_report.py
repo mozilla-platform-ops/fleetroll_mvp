@@ -8,8 +8,10 @@ import datetime as dt
 import json
 import math
 import os
+import re
 import sqlite3
 import sys
+import textwrap
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -774,9 +776,35 @@ def report_color_enabled():
     return sys.stdout.isatty() and "NO_COLOR" not in os.environ and os.environ.get("TERM") != "dumb"
 
 
-def print_issues(report, *, style):
-    for warning in report["warnings"]:
-        print(f"{style('⚠ WARNING', fg='yellow', bold=True)}: {warning}")
+def compact_host_names(hosts):
+    """Compress consecutive numeric hostnames without combining distinct domains."""
+    groups = defaultdict(set)
+    plain = set()
+    for host in hosts:
+        match = re.fullmatch(r"(.*?)(\d+)(\..*)?", host)
+        if match:
+            prefix, digits, suffix = match.groups()
+            groups[(prefix, suffix or "", len(digits))].add(int(digits))
+        else:
+            plain.add(host)
+    formatted = sorted(plain)
+    for (prefix, suffix, width), numbers in sorted(groups.items()):
+        runs = []
+        for number in sorted(numbers):
+            if runs and number == runs[-1][1] + 1:
+                runs[-1][1] = number
+            else:
+                runs.append([number, number])
+        parts = [
+            f"{start:0{width}d}-{end:0{width}d}" if start != end else f"{start:0{width}d}"
+            for start, end in runs
+        ]
+        formatted.append(f"{prefix}[{', '.join(parts)}]{suffix}")
+    return ", ".join(formatted)
+
+
+def print_issues(report, *, style, verbose=False):
+    known_hosts = {host["host"] for host in report["hosts"]}
     recent_failed = {
         f"{host['host']}: {host['error']}"
         for host in report["hosts"]
@@ -784,14 +812,40 @@ def print_issues(report, *, style):
         and host["observation_age_s"] is not None
         and 0 <= host["observation_age_s"] <= 300
     }
-    for error in report["errors"]:
-        if error in recent_failed:
-            print(
-                f"{style('⚠ WARNING', fg='yellow', bold=True)}: {error}; "
-                "recent failure may be a reboot. Worker jobs were not queried; refresh gather-host."
-            )
+    groups = defaultdict(list)
+    for level, messages in (("warning", report["warnings"]), ("error", report["errors"])):
+        for message in messages:
+            host, separator, reason = message.partition(": ")
+            if message in recent_failed:
+                level_for_message = "warning"
+                reason += "; recent failure may be a reboot. Worker jobs were not queried; refresh gather-host."
+            else:
+                level_for_message = level
+            if separator and host in known_hosts:
+                groups[(level_for_message, reason)].append(host)
+            else:
+                label = "⚠ WARNING" if level_for_message == "warning" else "✕ ERROR"
+                print(
+                    f"{style(label, fg='yellow' if level_for_message == 'warning' else 'red', bold=True)}: {message}"
+                )
+    for (level, reason), hosts in groups.items():
+        label = "⚠ WARNING" if level == "warning" else "✕ ERROR"
+        prefix = style(label, fg="yellow" if level == "warning" else "red", bold=True)
+        if verbose:
+            for host in hosts:
+                print(f"{prefix}: {host}: {reason}")
         else:
-            print(f"{style('✕ ERROR', fg='red', bold=True)}: {error}")
+            print(f"{prefix}: {len(hosts)} host(s): {reason}")
+            print(
+                textwrap.fill(
+                    compact_host_names(hosts),
+                    width=100,
+                    initial_indent="  ",
+                    subsequent_indent="  ",
+                    break_long_words=False,
+                    break_on_hyphens=False,
+                )
+            )
 
 
 def print_observed_outcomes(summary):
@@ -1039,7 +1093,7 @@ def print_report(report, *, details=False, verbose=False, color=None):
                 )
     if report["warnings"] or report["errors"]:
         heading("Notes & issues")
-    print_issues(report, style=style)
+    print_issues(report, style=style, verbose=verbose)
     print("\n  Rates use completed + failed + exception; running/pending/unknown are not passes.")
 
 

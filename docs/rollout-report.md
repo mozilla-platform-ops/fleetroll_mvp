@@ -99,7 +99,9 @@ pinned provenance and uncertainty reasons; `configuration_gaps` lists unknown
 ranges inside the requested window. Human output gives the cutoff and span count;
 Unverified configurations are grouped by reason with host counts. `--details`
 lists affected hosts and prints one attribution summary per host. `-v` or `--verbose` prints
-individual tasks and unknown ranges. These additive fields keep JSON schema version 1.
+individual tasks and unknown ranges. Repeated host warnings and errors are grouped
+by reason with compact hostname ranges; `--verbose` prints the individual messages.
+These additive fields keep JSON schema version 1.
 
 Exit codes: 0 = a report with no classified failures or query errors; 1 = a
 classified failed/exception/unknown outcome or query error; 2 = invalid input or
