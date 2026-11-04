@@ -168,37 +168,45 @@ saved, and failed hosts retain their previous TC observation timestamps.
 See [worker identity collection](docs/worker-identity.md) for configuration
 sources and supported launch configurations.
 
-#### Reviewing jobs after override deployment
+#### Reviewing rollout jobs on master and overrides
 
-`scripts/check_override_jobs.py` compares each host's recent Taskcluster runs
-with the deployment time of its currently observed override. Refresh host state
-first so the active override and worker type are current:
+`scripts/check_rollout_jobs.py` groups hosts within a role into verified master
+and each distinct override, then compares their recent Taskcluster outcomes.
+The same report works after overrides are removed: no special mode is needed.
+Refresh the relevant hosts and GitHub references first:
 
 ```bash
-uv run fleetroll gather-host configs/host-lists/linux/canary-all.list
-uv run python scripts/check_override_jobs.py configs/host-lists/linux/canary-all.list
+uv run fleetroll gather configs/host-lists/linux/2404.list
+uv run python scripts/check_rollout_jobs.py --role gecko_t_linux_2404_talos
 
-# Compare overridden hosts in a worker type with no-override controls in that pool
-uv run python scripts/check_override_jobs.py --worker-type gecko-t-linux-talos-2404
+# Pool selection keeps different roles/pools separate
+uv run python scripts/check_rollout_jobs.py --worker-type gecko-t-linux-talos-2404
 
-# Machine-readable output
-uv run python scripts/check_override_jobs.py --json configs/host-lists/linux/canary-all.list
+# Explicit hosts, including hosts whose overrides were removed
+uv run python scripts/check_rollout_jobs.py t-linux64-ms-016 t-linux64-ms-017 --json
 ```
 
-The script needs the local Taskcluster credentials in `~/.tc_token`. It queries
-the Worker Manager's recent task list and Queue task status; the worker history
-contains at most 20 tasks per host, so a full 20-task window may not cover every
-job since deployment. The exit status is nonzero when a host cannot be checked
-or a post-deployment task failed, raised an exception, or has an unknown state.
+The report includes outcome totals, rates, applied revisions, task-name failure
+patterns, and pairwise differences against master over shared time windows.
+Only jobs attributable to verified applied configurations enter comparisons;
+unknown jobs remain visible as exclusions with coverage counts. Missing controls,
+small samples, and incomplete evidence are explicit, not automatic approval.
+Defaults are a 24-hour report window, a one-hour observation-gap bound, 20 finished
+tasks per comparison side, and 80% attribution coverage per side. Use `--help`
+for time-window, evidence-threshold, and per-host detail options.
 
-`--worker-type` selects hosts from the latest successful Fleetroll observations,
-then reports hosts with overrides separately from hosts without overrides. It
-matches both worker type and provisioner; `--provisioner` defaults to
-`releng-hardware`. Both groups use one shared comparison cutoff: the latest
-deployment time among the selected overridden hosts. Refresh host observations
-with `gather-host` first.
-When stderr is an interactive terminal, the checker displays a progress bar
-while it fetches each host's recent worker history.
+SQLite normally retains ten observations per host. Use repeatable
+`--observations-file saved-gather.json` options to supply saved gather-host or
+host-monitor JSON when older convergence evidence has been pruned. The report
+reads these snapshots without modifying the database.
+
+The script uses local Taskcluster credentials in `~/.tc_token` and queries at most
+20 recent task runs per host. Full windows warn that earlier jobs may be omitted.
+Exit 1 indicates classified task failures/unknown outcomes or query errors;
+exit 2 indicates invalid input or unavailable local evidence. Exit 0 is not a
+rollout go-ahead. Use `scripts/check_rollout_jobs.py` in place of the removed
+`scripts/check_override_jobs.py`. See [rollout report](docs/rollout-report.md) for the
+history model, limitations, and versioned JSON schema.
 
 #### Data freshness
 
