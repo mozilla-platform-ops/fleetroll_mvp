@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import shlex
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -13,6 +14,8 @@ from click.testing import CliRunner
 from fleetroll import rollout_report as report
 from fleetroll.cli import cli
 from fleetroll.db import insert_host_observation
+
+from tests.tmux_helpers import TmuxSession, skip_no_tmux
 
 ROLE = "gecko_t_linux_2404_talos"
 REPO = "mozilla-platform-ops/ronin_puppet"
@@ -264,7 +267,7 @@ def test_failed_latest_observation_is_selected_but_not_queried(env, capsys):
     output = capsys.readouterr().out
     assert "⚠ WARNING: 1 host(s): latest host observation failed" in output
     assert "may be a reboot" in output
-    assert "Worker jobs were not queried" in output
+    assert "Worker jobs were not queried" in " ".join(output.split())
     assert "✕ ERROR: host: latest host observation failed" not in output
 
 
@@ -466,7 +469,7 @@ def test_human_summary_shows_totals_exclusions_and_details(env, capsys):
     assert "0/1 in-window recent runs" in text
     assert "1 excluded" in text
     assert "master" in text
-    assert "Hosts: 1" in text
+    assert "1 selected hosts" in text
     assert "Completed: 0" in text
     assert "Running: 0" in text
     assert "unknown configuration" in text
@@ -511,11 +514,14 @@ def test_observed_outcomes_include_unattributed_failures(env, capsys):
     report.print_report(result, color=False)
     text = capsys.readouterr().out
     assert "Configuration coverage: 1/2" in text
-    assert "All observed in-window runs: 2 (across configurations)" in text
-    assert "Completed: 1  ·  Failed: 1  ·  Exceptions: 0" in text
-    assert "Attributed runs: 1\n    Completed: 1  ·  Failed: 0" in text
-    assert "1: unknown configuration or task spans a transition/observation gap" in text
-    assert "These outcomes include runs whose configuration could not be attributed" in text
+    assert "Full report window: 1 excluded (1 failed, 0 exceptions, 0 unknown outcomes)" in text
+    assert "All observed in-window runs" not in text
+    report.print_report(result, details=True, color=False)
+    details = capsys.readouterr().out
+    assert "All observed in-window runs: 2 (across configurations)" in details
+    assert "Completed: 1  ·  Failed: 1  ·  Exceptions: 0" in details
+    assert "Attributed runs: 1\n    Completed: 1  ·  Failed: 0" in details
+    assert "1: unknown configuration or task spans a transition/observation gap" in details
     assert result["summary"]["cohorts"][0]["outcomes"]["failed"] == 0
 
 
@@ -532,9 +538,8 @@ def test_fleet_percentages_include_unapplied_override_removal(env, capsys):
     assert "removed" in result["summary"]["unverified_hosts"]
     report.print_report(result, color=False)
     output = capsys.readouterr().out
-    assert "Override present: 1 (50.0%)" in output
-    assert "No override: 1 (50.0%)" in output
-    assert "override presence does not prove Puppet applied it" in output
+    assert "Override files: 1 present · 1 absent · 0 unknown" in output
+    assert "override presence does not prove Puppet applied it" in " ".join(output.split())
 
 
 def test_explicit_hosts_fleet_percentage_does_not_include_other_hosts(env, capsys):
@@ -596,7 +601,7 @@ def test_report_uses_color_only_when_enabled_and_keeps_verdict_readable(env, cap
     assert "⚠" in queue_line
     assert "no new work queued" in queue_line
     assert colored.index("CURRENT QUEUE") < colored.index("Comparison unavailable")
-    assert colored.index("CURRENT QUEUE") < colored.index("FLEET OVERRIDE STATUS")
+    assert colored.index("CURRENT QUEUE") < colored.index("COHORT HEALTH")
     monkeypatch.setenv("NO_COLOR", "1")
     report.print_report(result)
     plain = capsys.readouterr().out
@@ -654,8 +659,8 @@ def test_low_coverage_override_is_a_prominent_warning_with_comparable_sample(env
     assert comparison["unattributed_failures"][0]["outcome"] == "failed"
     report.print_report(result, color=True, details=True)
     output = capsys.readouterr().out
-    assessment = output.split("ROLLOUT ASSESSMENT")[1].split("FLEET OVERRIDE STATUS")[0]
-    assert "No regression observed in verified tasks" in assessment
+    assessment = output.split("COHORT HEALTH")[1].split("EVIDENCE LIMITS")[0]
+    assert "Same observed failure and exception rates" in assessment
     assert "1 unattributed failure inside the comparison window" in assessment
     assert "override 25.0%" in assessment
     assert "\x1b[33m" in assessment
@@ -670,6 +675,8 @@ def test_low_coverage_override_is_a_prominent_warning_with_comparable_sample(env
         ("failed", "completed", "no regression observed in verified tasks"),
         ("completed", "failed", "higher override failure rate observed"),
         ("completed", "exception", "higher override exception rate observed"),
+        ("exception", "completed", "no regression observed in verified tasks"),
+        ("failed", "exception", "higher override exception rate observed"),
     ],
 )
 def test_observed_comparison_result_uses_verified_rates(
@@ -701,7 +708,19 @@ def test_observed_comparison_result_uses_verified_rates(
         "override": expected_health[override_state],
     }
     report.print_report(result, color=False)
-    assert expected.capitalize() in capsys.readouterr().out
+    text = capsys.readouterr().out
+    if master_state == "failed" and override_state == "completed":
+        assert "Master failure rate higher in verified tasks" in text
+        assert "override - master: -100.00 pp" in text
+    elif master_state == "completed" and override_state == "failed":
+        assert "Override failure rate higher in verified tasks" in text
+        assert "override - master: +100.00 pp" in text
+    elif master_state == "exception":
+        assert "Master exception rate higher in verified tasks" in text
+    elif override_state == "exception":
+        assert "Override exception rate higher in verified tasks" in text
+    else:
+        assert "Same observed failure and exception rates" in text
 
 
 @pytest.mark.parametrize("kind", ["master", "override"])
@@ -716,9 +735,7 @@ def test_cohort_health_does_not_require_a_control_or_direction(env, capsys, kind
     assert cohort["health"]["minimum_finished"] == 20
     assert result["comparisons"][0]["observed_result"] == "comparison unavailable"
     report.print_report(result, color=False)
-    assessment = (
-        capsys.readouterr().out.split("ROLLOUT ASSESSMENT")[1].split("FLEET OVERRIDE STATUS")[0]
-    )
+    assessment = capsys.readouterr().out.split("COHORT HEALTH")[1].split("EVIDENCE LIMITS")[0]
     label = "master" if kind == "master" else "branch"
     assert label in assessment
     assert "Healthy in verified sample" in assessment
@@ -784,7 +801,7 @@ def test_unattributed_failure_outside_shared_window_is_reported_separately(env, 
     assert result["summary"]["evidence"]["status"] == "sample available"
     report.print_report(result, color=False)
     output = capsys.readouterr().out
-    assert "Full report window: unattributed failed runs: 1" in output
+    assert "Full report window: 1 excluded (1 failed" in output
     assert "unattributed failure inside the comparison window" not in output
 
 
@@ -821,8 +838,7 @@ def test_partial_host_evidence_warns_without_vetoing_valid_comparison(env, capsy
     output = capsys.readouterr().out
     assert "current host configuration(s) unverified" in output
     if missing_kind == "unavailable":
-        assert "Host query coverage: 80.0%; minimum 80.0%" in output
-        assert "2/10 hosts not queried" in output
+        assert "Hosts queried: 8/10; 2 hosts not queried" in output
 
 
 def test_host_query_threshold_still_blocks_severely_incomplete_population(env, capsys):
@@ -1099,3 +1115,159 @@ def test_invalid_saved_observation_file_is_rejected(env, capsys):
     path.write_text('{"summary": {}}')
     assert invoke(env, "host", observations_file=path) == 2
     assert "invalid host observation" in capsys.readouterr().err
+
+
+def test_default_report_has_one_assessment_and_preserves_detail_access(env, capsys):
+    seed(env, "master")
+    sha = override(env, "branch")
+    seed(env, "override", sha=sha)
+    task(env, "master")
+    task(env, "override")
+    task(env, "override", minute=10, state="failed")
+    invoke(env, "--role", ROLE)
+    result = read(capsys)
+    result["warnings"].append("Compact configuration history: 100 spans; retention cutoff test.")
+    before = json.dumps(result, sort_keys=True)
+    report.print_report(result, color=False, width=100)
+    text = capsys.readouterr().out
+    assert len(text.splitlines()) < 40
+    assert text.count("COHORT HEALTH") == 1
+    assert text.count("COMPARISON") == 1
+    assert text.count("Comparison unavailable") == 1
+    assert text.count(f"{ROLE}: releng-hardware/talos-pool") == 1
+    assert "mdc1" not in text
+    assert "No failures in verified tasks" in text
+    assert "Full report window: 1 excluded (1 failed" in text
+    assert "Applied revisions" not in text
+    assert "All observed in-window runs" not in text
+    assert "Compact configuration history" not in text
+    assert sha[:12] not in text
+    assert "█" not in text
+    report.print_report(result, details=True, color=False, width=100)
+    details = capsys.readouterr().out
+    assert "Applied revisions" in details
+    assert "All observed in-window runs" in details
+    assert "Compact configuration history" in details
+    assert "Checked:" in details
+    assert sha[:12] in details
+    assert "[mdc1]" in details
+    assert json.dumps(result, sort_keys=True) == before
+
+
+@pytest.mark.parametrize("width", [40, 60, 80, 120])
+def test_report_wraps_long_names_without_losing_outcomes(env, capsys, width):
+    branch = "long_branch_" * 12
+    seed(env, "override", sha=override(env, branch))
+    task(env, "override", state="failed")
+    task(env, "override", state="unknown")
+    invoke(env, "override")
+    result = read(capsys)
+    report.print_report(result, color=False, width=width)
+    text = capsys.readouterr().out
+    assert all(len(line) <= width for line in text.splitlines())
+    assert branch in "".join(text.split())
+    assert "Failed" in text
+    assert "Unknown" in text
+    assert "Failures observed" in " ".join(text.split())
+    assert "No failures in verified tasks" not in text
+    assert "\r" not in text
+    assert "\x1b[" not in text
+
+
+@pytest.mark.parametrize("other_group", ["mdc1", "mdc2"])
+def test_population_labels_show_groups_only_for_multiple_regions(env, capsys, other_group):
+    seed(env, "one")
+    seed(env, "two", tc_worker_identity=identity("two", group=other_group))
+    invoke(env, "--role", ROLE)
+    result = read(capsys)
+    report.print_report(result, color=False, width=120)
+    text = capsys.readouterr().out
+    population = f"{ROLE}: releng-hardware/talos-pool"
+    if other_group == "mdc1":
+        assert text.count(population) == 1
+        assert "mdc1" not in text
+    else:
+        assert population + " [mdc1]" in text
+        assert population + " [mdc2]" in text
+        assert text.count("COHORT HEALTH") == 2
+        assert text.count("COMPARISON") == 2
+
+
+def test_same_branch_different_overrides_are_disambiguated(env, capsys):
+    first = override(env, "same-branch")
+    content = (env.directory / first[:12]).read_text() + "# second version\n"
+    second = hashlib.sha256(content.encode()).hexdigest()
+    (env.directory / second[:12]).write_text(content)
+    seed(env, "first", sha=first)
+    seed(env, "second", sha=second)
+    invoke(env, "--role", ROLE)
+    result = read(capsys)
+    report.print_report(result, color=False)
+    text = capsys.readouterr().out
+    assert "same-branch [1]" in text
+    assert "same-branch [2]" in text
+    assert first[:12] not in text
+    assert second[:12] not in text
+    report.print_report(result, details=True, color=False)
+    details = capsys.readouterr().out
+    assert first[:12] in details
+    assert second[:12] in details
+
+
+def test_tty_progress_finishes_with_carriage_return(env, capsys, monkeypatch):
+    seed(env, "host")
+    monkeypatch.setattr(report.sys.stderr, "isatty", lambda: True)
+    invoke(env, "host")
+    captured = capsys.readouterr()
+    assert captured.err == "\rChecking workers 1/1\r\n"
+    assert json.loads(captured.out)["summary"]["requested_hosts"] == 1
+
+
+@pytest.mark.tui
+@skip_no_tmux
+@pytest.mark.parametrize(("width", "disabled_flag"), [(60, "ONLCR"), (120, "OPOST"), (100, None)])
+def test_report_stays_aligned_with_disabled_tty_newline_translation(
+    env, capsys, tmp_path, width, disabled_flag
+):
+    seed(env, "master")
+    seed(env, "override", sha=override(env, "branch"))
+    task(env, "master")
+    task(env, "override")
+    invoke(env, "--role", ROLE)
+    result = read(capsys)
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(result))
+    driver = tmp_path / "render.py"
+    disable_newline = f"flags[1] &= ~termios.{disabled_flag}\n" if disabled_flag else ""
+    driver.write_text(
+        "import json, os, sys, termios\n"
+        "from fleetroll.rollout_report import print_report\n"
+        "fd = sys.stdout.fileno()\n"
+        "flags = termios.tcgetattr(fd)\n"
+        f"{disable_newline}"
+        "termios.tcsetattr(fd, termios.TCSANOW, flags)\n"
+        "before = termios.tcgetattr(fd)\n"
+        # Demonstrate the drift caused by ordinary LF with translation disabled.
+        "os.write(fd, b'BEFORE\\nNEXT\\n')\n"
+        f"with open({str(report_path)!r}) as stream:\n"
+        "    document = json.load(stream)\n"
+        "sys.stderr.write('\\rChecking workers 2/2\\r\\n')\n"
+        f"print_report(document, color=True, width={width})\n"
+        "assert termios.tcgetattr(fd) == before\n"
+        "os.write(fd, b'\\r\\nSAME_TERMIOS\\r\\n')\n"
+        "input()\n"
+    )
+    with TmuxSession(
+        cmd=f"uv run python {shlex.quote(str(driver))}", cols=width, rows=100
+    ) as session:
+        assert session.wait_for("SAME_TERMIOS", timeout=15), session.capture()
+        screen = session.capture()
+        if disabled_flag:
+            assert "BEFORE\n      NEXT" in screen  # Reproduces the old LF-only drift.
+        else:
+            assert "BEFORE\nNEXT" in screen
+        assert "\n◈ FLEETROLL / ROLLOUT REPORT\n" in screen
+        assert "\nEVIDENCE LIMITS\n" in screen
+        assert "\n  COHORT HEALTH" in screen
+        assert "\n  COMPARISON" in screen
+        assert "\x1b[" in session.capture(with_escapes=True)

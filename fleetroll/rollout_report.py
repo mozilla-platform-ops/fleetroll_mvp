@@ -9,10 +9,13 @@ import json
 import math
 import os
 import re
+import shutil
 import sqlite3
 import sys
 import textwrap
 from collections import Counter, defaultdict
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -958,12 +961,6 @@ def percentage(value):
     return f"{value * 100:.1f}%" if value is not None else "—"
 
 
-def configuration_label(config):
-    if config["kind"] == "master":
-        return "master"
-    return f"{config['branch']} ({config['override_sha256'][:12]})"
-
-
 def report_color_enabled():
     return sys.stdout.isatty() and "NO_COLOR" not in os.environ and os.environ.get("TERM") != "dumb"
 
@@ -1151,139 +1148,179 @@ def print_unverified_hosts(report, *, details):
         print("  Use --details or --verbose for host names.")
 
 
-def print_comparison_assessment(comparison, *, style, label=None):
-    result = comparison["observed_result"]
-    qualified = comparison["status"] != "comparable" or result.startswith("higher")
-    symbol = "⚠" if qualified else "◆"
-    if label:
-        print(f"  {label}")
-    print(
-        "  "
-        + style(
-            f"{symbol}  {result.capitalize()}",
-            fg="yellow" if qualified else "cyan",
-            bold=True,
-        )
+def cohort_labels(cohorts):
+    """Keep branch names readable and disambiguate repeated names within a population."""
+    counts = Counter(
+        (tuple(group["configuration"]["scope"]), group["configuration"]["branch"])
+        for group in cohorts
+        if group["configuration"]["kind"] != "master"
     )
-    for key, name in (("master_results", "Master"), ("override_results", "Override")):
-        if key in comparison:
-            outcomes = comparison[key]["outcomes"]
-            print(
-                f"    {name}: {outcomes['completed']} completed, {outcomes['failed']} failed, "
-                f"{outcomes['exception']} exceptions"
-            )
-    if "minimum_finished" in comparison:
+    seen = Counter()
+    labels = {}
+    for group in cohorts:
+        config = group["configuration"]
+        key = (tuple(config["scope"]), config["branch"])
+        label = "master" if config["kind"] == "master" else config["branch"]
+        if config["kind"] != "master" and counts[key] > 1:
+            seen[key] += 1
+            label += f" [{seen[key]}]"
+        labels[config["id"]] = label
+    return labels
+
+
+def display_time_range(start, end):
+    """Use UTC seconds in the overview; details retain the original timestamps."""
+    left, right = parse_timestamp(start), parse_timestamp(end)
+    if left is None or right is None:
+        return f"{start} to {end}"
+    if left == right:
+        return f"{left:%Y-%m-%d %H:%M:%S} UTC"
+    if left.date() == right.date():
+        return f"{left:%Y-%m-%d %H:%M:%S} to {right:%H:%M:%S} UTC"
+    return f"{left:%Y-%m-%d %H:%M:%S} → {right:%Y-%m-%d %H:%M:%S} UTC"
+
+
+def population_label(scope, *, show_group=False):
+    role, provisioner, pool, group = scope
+    return f"{role}: {provisioner}/{pool}" + (f" [{group}]" if show_group else "")
+
+
+def print_cohort_table(cohorts, *, labels, width):
+    cohorts = sorted(cohorts, key=lambda group: group["configuration"]["kind"] != "master")
+    print("  COHORT HEALTH · verified tasks across the full report window")
+    unknown = any(group["outcomes"]["unknown"] for group in cohorts)
+    columns = ["Hosts", "Done", "Failed", "Exceptions"] + (["Unknown"] if unknown else [])
+    sizes = [max(len(name), 5) for name in columns]
+    label_width = min(
+        max(20, *(len(labels[group["configuration"]["id"]]) for group in cohorts)),
+        46,
+        width - sum(sizes) - 2 * len(sizes) - 4,
+    )
+    table = width >= 72 and label_width >= 20
+    if table:
         print(
-            f"    Shared-window sample: {comparison['sample_status']}; "
-            f"minimum {comparison['minimum_finished']} finished tasks per side"
+            "  "
+            + "Cohort".ljust(label_width)
+            + "  "
+            + "  ".join(name.rjust(size) for name, size in zip(columns, sizes, strict=True))
         )
-    attribution = comparison.get("attribution") or {}
-    if attribution.get("status") == "limited":
+    for group in cohorts:
+        outcomes = group["outcomes"]
+        values = [
+            len(group["current_hosts"]),
+            outcomes["completed"],
+            outcomes["failed"],
+            outcomes["exception"],
+        ] + ([outcomes["unknown"]] if unknown else [])
+        label = labels[group["configuration"]["id"]]
+        if table:
+            lines = textwrap.wrap(label, width=label_width, break_on_hyphens=False) or [""]
+            for line in lines[:-1]:
+                print("  " + line)
+            print(
+                "  "
+                + lines[-1].ljust(label_width)
+                + "  "
+                + "  ".join(
+                    str(value).rjust(size) for value, size in zip(values, sizes, strict=True)
+                )
+            )
+        else:
+            print("  " + label)
+            print(
+                "    "
+                + " · ".join(
+                    f"{name}: {value}" for name, value in zip(columns, values, strict=True)
+                )
+            )
+    minimum = cohorts[0]["health"]["minimum_finished"]
+    small = [
+        labels[group["configuration"]["id"]]
+        for group in cohorts
+        if group["health"]["sample_status"] == "insufficient"
+    ]
+    if small:
+        subjects = "All cohorts" if len(small) == len(cohorts) else ", ".join(small)
+        print(f"  ⚠ Insufficient sample: {subjects}; minimum {minimum} finished per cohort.")
+    if all(
+        not any(group["outcomes"][key] for key in ("failed", "exception", "unknown"))
+        for group in cohorts
+    ):
+        print("  No failures in verified tasks." if small else "  Healthy in verified sample.")
+    for group in cohorts:
+        label = labels[group["configuration"]["id"]]
+        if group["health"]["status"] not in {"insufficient sample", "healthy in verified sample"}:
+            print(f"  ⚠ {label}: {group['health']['status'].capitalize()}")
+        if len(group["applied_revisions"]) > 1:
+            print(f"  ⚠ {label}: sample spans {len(group['applied_revisions'])} applied revisions.")
+
+
+def comparison_statements(comparison):
+    """Describe differences in either direction without assuming rollout direction."""
+    if comparison["status"] != "comparable":
+        return ["Comparison unavailable"]
+    master, override = comparison["master_results"], comparison["override_results"]
+    statements = []
+    for key, label in (("failure_rate", "failure"), ("exception_rate", "exception")):
+        if master[key] != override[key]:
+            higher = "Master" if master[key] > override[key] else "Override"
+            statements.append(f"{higher} {label} rate higher in verified tasks")
+        elif key == "failure_rate":
+            statements.append("Same observed failure rate")
+    if statements == ["Same observed failure rate"]:
+        statements[0] = "Same observed failure and exception rates"
+    return statements
+
+
+def print_compact_comparison(comparison, *, labels, details):
+    label = labels.get(comparison.get("override"))
+    print("\n  COMPARISON" + (f" · master ↔ {label}" if label else ""))
+    for statement in comparison_statements(comparison):
+        symbol = "◆" if statement.startswith("Same observed") else "⚠"
+        print(f"  {symbol} {statement}")
+    window = comparison["window"]
+    if window:
+        print(f"  Shared window: {display_time_range(window['since'], window['until'])}")
+        minimum = comparison["minimum_finished"]
+        left, right = comparison["master_results"], comparison["override_results"]
         print(
-            style(
-                f"    ⚠ Attribution coverage below {percentage(attribution['warning_threshold'])}: "
-                f"master {percentage(comparison['master_coverage']['fraction'])}; "
-                f"override {percentage(comparison['override_coverage']['fraction'])}; "
-                f"overall {percentage(attribution['fraction'])}",
-                fg="yellow",
+            f"  Finished: master {left['finished']}/{minimum} · override {right['finished']}/{minimum}"
+        )
+        if comparison["status"] == "comparable":
+            print(
+                f"  Failure rates: master {percentage(left['failure_rate'])} · "
+                f"override {percentage(right['failure_rate'])} "
+                f"(override - master: {comparison['failure_rate_difference_pp']:+.2f} pp)"
+            )
+            if left["outcomes"]["exception"] or right["outcomes"]["exception"]:
+                print(
+                    f"  Exception rates: master {percentage(left['exception_rate'])} · "
+                    f"override {percentage(right['exception_rate'])}"
+                )
+        attribution = comparison["attribution"]
+        warning = "⚠ " if attribution["status"] == "limited" else ""
+        print(
+            f"  {warning}Attribution: master {percentage(comparison['master_coverage']['fraction'])} · "
+            f"override {percentage(comparison['override_coverage']['fraction'])} · "
+            f"overall {percentage(attribution['fraction'])}"
+            + (
+                f"; below {percentage(attribution['warning_threshold'])} warning threshold"
+                if warning
+                else ""
             )
         )
     for reason in comparison["reasons"]:
-        print(f"    • {reason}")
+        if window and "finished tasks" in reason:
+            continue  # The per-side sample counts already state the shortfall.
+        print(f"  • {reason}")
     for warning in comparison.get("warnings", []):
-        if warning not in attribution.get("warnings", []):
-            print(style(f"    ⚠ {warning}", fg="yellow"))
-
-
-def print_cohort_health(cohorts, *, style):
-    print("  Cohort health · verified tasks in the report window")
-    scopes = {tuple(cohort["configuration"]["scope"]) for cohort in cohorts}
-    for cohort in sorted(
-        cohorts,
-        key=lambda item: (
-            item["configuration"]["scope"],
-            item["configuration"]["kind"] != "master",
-            item["configuration"]["id"],
-        ),
-    ):
-        health = cohort["health"]
-        healthy = health["status"] == "healthy in verified sample"
-        symbol = "◆" if healthy else "⚠"
-        config = cohort["configuration"]
-        label = configuration_label(config)
-        if len(scopes) > 1:
-            label += f" · {' / '.join(config['scope'])}"
-        print(
-            style(
-                f"  {symbol} {label}: {health['status'].capitalize()}",
-                fg="cyan" if healthy else "yellow",
-                bold=True,
-            )
-        )
-        outcomes = cohort["outcomes"]
-        print(
-            f"    {outcomes['completed']} completed, {outcomes['failed']} failed, "
-            f"{outcomes['exception']} exceptions, {outcomes['unknown']} unknown; "
-            f"{len(cohort['current_hosts'])} verified current hosts"
-        )
-        print(
-            f"    Sample: {health['sample_status']}; {cohort['finished']} finished, "
-            f"minimum {health['minimum_finished']}"
-        )
-        for warning in health["warnings"]:
-            print(style(f"    ⚠ {warning}", fg="yellow"))
-    if not cohorts:
-        print("  No verified cohorts available to assess.")
-
-
-def print_assessment(report, *, style):
-    evidence = report["summary"]["evidence"]
-    print_cohort_health(report["summary"]["cohorts"], style=style)
-    print("\n  Shared-window comparisons")
-    comparisons = report["comparisons"]
-    labels = {
-        group["configuration"]["id"]: configuration_label(group["configuration"])
-        for group in report["summary"]["cohorts"]
-    }
-    for comparison in comparisons:
-        print_comparison_assessment(
-            comparison,
-            style=style,
-            label=(
-                f"{labels.get(comparison.get('override'), 'Standalone population')} · "
-                f"{' / '.join(comparison['scope'])}"
-            )
-            if len(comparisons) > 1
-            else None,
-        )
-    if not comparisons:
-        print("  Comparison unavailable")
-    shown_warnings = {warning for comp in comparisons for warning in comp.get("warnings", [])}
-    if any(comp.get("attribution") for comp in comparisons):
-        shown_warnings.update(evidence["attribution"]["warnings"])
-    for warning in evidence.get("warnings", []):
-        if warning not in shown_warnings:
-            print(style(f"   ⚠ {warning}", fg="yellow"))
-    shown_reasons = {reason for comp in comparisons for reason in comp["reasons"]}
-    for reason in evidence["reasons"]:
-        if reason not in shown_reasons:
-            print(f"   Report-wide evidence limit: {reason}")
-    excluded = report["summary"]["unattributed_outcomes"]["outcomes"]
-    if excluded["failed"] or excluded["exception"]:
-        print(
-            style(
-                f"   ⚠ Full report window: unattributed failed runs: {excluded['failed']}; "
-                f"exceptions: {excluded['exception']}. Shared-window counts shown above",
-                fg="yellow",
-            )
-        )
-    host_coverage = evidence.get("host_query_coverage")
-    if host_coverage:
-        print(
-            f"   Host query coverage: {percentage(host_coverage['fraction'])}; "
-            f"minimum {percentage(host_coverage['minimum_fraction'])}"
-        )
-    print("   Observed results only; not automatic rollout approval.")
+        if warning in comparison.get("attribution", {}).get("warnings", []):
+            continue
+        if "current host configuration(s) unverified" in warning:
+            continue  # Report-wide evidence lists these configurations once.
+        print(f"  ⚠ {warning}")
+    if details:
+        print_unattributed_failure_details(comparison)
 
 
 def print_unattributed_failure_details(comparison):
@@ -1318,154 +1355,270 @@ def print_out_of_scope_history(host):
         )
 
 
-def print_report(report, *, details=False, verbose=False, color=None):
-    if color is None:
-        color = report_color_enabled()
+def print_compact_queue(report):
+    counts = report.get("queue_counts")
+    if counts is None:
+        return
+    print("\n  CURRENT QUEUE · approximate pending tasks; whole pool")
+    for pool in counts["pools"]:
+        pending = pool["pending_tasks"]
+        value = f"{pending:,} pending" if pending is not None else "unavailable"
+        symbol = "⚠ " if pending == 0 or pending is None else ""
+        suffix = " — no new work queued" if pending == 0 else ""
+        print(f"  {symbol}{pool['worker_pool']}: {value}{suffix}")
+    if not counts["pools"]:
+        print("  ⚠ Unavailable: no resolved worker pools.")
+    for key, label in (
+        ("unresolved_hosts", "Worker pool unresolved"),
+        ("legacy_mapped_hosts", "Legacy pool mapping used"),
+    ):
+        if counts[key]:
+            print(f"  ⚠ {label}: {len(counts[key])} host(s)")
 
-    def style(value, **kwargs):
-        return click.style(str(value), **kwargs) if color else str(value)
 
-    def heading(title):
-        print("\n" + style(f"━━━  {title.upper()}  ━━━", fg="cyan", bold=True))
-
+def print_evidence_limits(report):
     summary = report["summary"]
-    labels = {
-        group["configuration"]["id"]: configuration_label(group["configuration"])
-        for group in summary["cohorts"]
-    }
-    print(style("◈  FLEETROLL  /  ROLLOUT REPORT", fg="cyan", bold=True))
-    print(f"   {report['window']['since']}  →  {report['window']['until']}")
-    if "queue_counts" in report:
-        heading("Current queue")
-        for line in render_queue_counts(report["queue_counts"], color=color, include_heading=False):
-            print(f"  {line}")
-    heading("Rollout assessment")
-    print_assessment(report, style=style)
-    heading("Fleet override status")
-    print_fleet_override_status(report["fleet_override_status"])
-    heading("Coverage")
-    print(f"  Hosts queried: {summary['queried_hosts']}/{summary['requested_hosts']}")
-    evidence = summary["coverage"]
-    fraction = evidence["fraction"]
-    if fraction is not None:
-        filled = round(max(0, min(1, fraction)) * 20)
-        bar = "█" * filled + "░" * (20 - filled)
-        print("  " + style(bar, fg="cyan"))
+    coverage = summary["coverage"]
+    evidence = summary["evidence"]
+    attribution = evidence["attribution"]
+    print("\nEVIDENCE LIMITS")
+    marker = "⚠ " if attribution["status"] == "limited" else ""
     print(
-        f"  Configuration coverage: {evidence['classified']}/{evidence['in_window']} "
-        f"in-window recent runs ({percentage(evidence['fraction'])}); "
-        f"{evidence['excluded']} excluded, {evidence['unresolved']} unresolved."
+        f"  {marker}Configuration coverage: {coverage['classified']}/{coverage['in_window']} "
+        f"in-window recent runs ({percentage(coverage['fraction'])})"
+        + (
+            f"; below {percentage(attribution['warning_threshold'])} warning threshold."
+            if marker
+            else "."
+        )
     )
-    print_out_of_scope_summary(report)
+    excluded = summary["unattributed_outcomes"]["outcomes"]
+    if coverage["excluded"]:
+        print(
+            f"  ⚠ Full report window: {coverage['excluded']} excluded "
+            f"({excluded['failed']} failed, {excluded['exception']} exceptions, "
+            f"{excluded['unknown']} unknown outcomes)."
+        )
+    if coverage["unresolved"]:
+        print(f"  ⚠ {coverage['unresolved']} task queries unresolved; their outcomes are unknown.")
+    host_coverage = evidence["host_query_coverage"]
+    print(
+        f"  Hosts queried: {summary['queried_hosts']}/{summary['requested_hosts']}"
+        + (
+            f"; {summary['requested_hosts'] - summary['queried_hosts']} hosts not queried."
+            if summary["queried_hosts"] < summary["requested_hosts"]
+            else "."
+        )
+    )
+    if (
+        host_coverage["fraction"] is None
+        or host_coverage["fraction"] < host_coverage["minimum_fraction"]
+    ):
+        print(
+            f"  ⚠ Host query coverage: {percentage(host_coverage['fraction'])}; "
+            f"minimum {percentage(host_coverage['minimum_fraction'])}"
+        )
     stamps = [host["observation_ts"] for host in report["hosts"] if host["observation_ts"]]
     if stamps:
-        print(f"  Host observations: {min(stamps)} to {max(stamps)}")
-    heading("Observed outcomes")
-    print_observed_outcomes(summary)
-    heading("Cohorts")
-    print("  Hosts are current; task counts use verified historical membership.")
-    for scope in sorted({tuple(group["configuration"]["scope"]) for group in summary["cohorts"]}):
-        print("\n" + style("  " + " / ".join(scope), bold=True))
-        for group in summary["cohorts"]:
-            config = group["configuration"]
-            if tuple(config["scope"]) != scope:
-                continue
-            label = configuration_label(config)
-            outcomes = group["outcomes"]
-            print("\n  " + style(label, bold=True))
-            print(f"    Health: {group['health']['status']}")
-            print(
-                f"    Hosts: {len(group['current_hosts'])}  ·  Finished: {group['finished']}  ·  "
-                f"Success: {percentage(group['success_rate'])}"
-            )
-            print(
-                f"    Completed: {outcomes['completed']}  ·  Failed: {outcomes['failed']}  ·  "
-                f"Exceptions: {outcomes['exception']}"
-            )
-            print(
-                f"    Running: {outcomes['running']}  ·  Pending: {outcomes['pending']}  ·  "
-                f"Unknown: {outcomes['unknown']}"
-            )
-            revisions = {sha[:12]: count for sha, count in group["applied_revisions"].items()}
-            print(f"    Applied revisions (classified tasks): {revisions or 'no classified tasks'}")
-            print(
-                f"    Failure rate: {percentage(group['failure_rate'])}; "
-                f"exception rate: {percentage(group['exception_rate'])}"
-            )
-    if report["comparisons"]:
-        heading("Comparisons")
-    for comparison in report["comparisons"]:
-        label = labels.get(comparison.get("override"), "standalone population")
+        print(f"  Host observations: {display_time_range(min(stamps), max(stamps))}")
+    if summary["unverified_hosts"]:
+        print(f"  ⚠ {len(summary['unverified_hosts'])} current host configuration(s) unverified")
+    print_out_of_scope_summary(report)
+    omitted = summary.get("out_of_scope_outcomes", {})
+    if omitted.get("jobs"):
+        counts = omitted["outcomes"]
         print(
-            "\n  "
-            + style(
-                f"{label}  ·  {comparison['status'].upper()}",
-                fg="yellow" if comparison["status"] == "insufficient evidence" else "cyan",
-                bold=True,
-            )
+            f"  Known out-of-scope runs: {omitted['jobs']} ({counts['failed']} failed, "
+            f"{counts['exception']} exceptions, {counts['unknown']} unknown); "
+            "omitted from assessment and coverage."
         )
-        print(f"  {' / '.join(comparison['scope'])}")
-        print(f"  Observed result: {comparison['observed_result']}")
-        if comparison["window"]:
-            print(
-                f"  Shared window: {comparison['window']['since']} to {comparison['window']['until']}"
-            )
-            left, right = comparison["master_results"], comparison["override_results"]
-            print(
-                f"  Shared-window finished tasks: master {left['finished']}, "
-                f"override {right['finished']}; failure rates: "
-                f"{percentage(left['failure_rate'])} / {percentage(right['failure_rate'])}"
-            )
-            print(
-                "  Attribution coverage: master "
-                f"{percentage(comparison['master_coverage']['fraction'])}, override "
-                f"{percentage(comparison['override_coverage']['fraction'])}"
-            )
-            delta = comparison["failure_rate_difference_pp"]
-            print(
-                f"  Override minus master failure rate: {delta:+.2f} percentage points"
-                if delta is not None
-                else "  Failure-rate difference unavailable"
-            )
-        for reason in comparison["reasons"]:
-            print(f"  {reason}")
-        for warning in comparison.get("warnings", []):
-            print(f"  ⚠ {warning}")
-        if details or verbose:
-            print_unattributed_failure_details(comparison)
-    for pattern in summary["failure_patterns"]:
-        print(f"\nFailure pattern: {pattern['name']}; {len(pattern['hosts'])} host(s)")
+    print_override_difference(report)
+    print_unverified_hosts(report, details=False)
+
+
+def print_override_difference(report):
+    status = report["fleet_override_status"]
+    cohorts = report["summary"]["cohorts"]
+    verified_override = sum(
+        len(group["current_hosts"])
+        for group in cohorts
+        if group["configuration"]["kind"] == "override"
+    )
+    verified_master = sum(
+        len(group["current_hosts"])
+        for group in cohorts
+        if group["configuration"]["kind"] == "master"
+    )
+    totals = status["override_totals"]
+    if (
+        (totals["present"]["count"], totals["absent"]["count"], totals["unknown"]["count"])
+        != (verified_override, verified_master, 0)
+        or status["unverified_writes"]
+        or status["newer_failed_gathers"]
+    ):
+        print(
+            f"  Override files: {totals['present']['count']} present · "
+            f"{totals['absent']['count']} absent · {totals['unknown']['count']} unknown; "
+            "override presence does not prove Puppet applied it."
+        )
+    if status["unverified_writes"] or status["newer_failed_gathers"]:
+        print(
+            f"  ⚠ Writes awaiting verification: {len(status['unverified_writes'])}; "
+            f"newer failed gathers: {len(status['newer_failed_gathers'])}"
+        )
+
+
+def print_report_details(report, *, labels, verbose):
+    print("\nDETAILS")
+    print(f"  Exact report window: {report['window']['since']} to {report['window']['until']}")
+    print_observed_outcomes(report["summary"])
+    for group in report["summary"]["cohorts"]:
+        config = group["configuration"]
+        suffix = f" ({config['override_sha256'][:12]})" if config["kind"] == "override" else ""
+        print(f"\n  {labels[config['id']]}{suffix}")
+        print(f"    {population_label(config['scope'], show_group=True)}")
+        revisions = {sha[:12]: count for sha, count in group["applied_revisions"].items()}
+        print(f"    Applied revisions (classified tasks): {revisions or 'no classified tasks'}")
+        print(
+            f"    Success: {percentage(group['success_rate'])}; "
+            f"failure rate: {percentage(group['failure_rate'])}; "
+            f"exception rate: {percentage(group['exception_rate'])}"
+        )
+        outcomes = group["outcomes"]
+        print(
+            f"    Running: {outcomes['running']} · Pending: {outcomes['pending']} · "
+            f"Unknown: {outcomes['unknown']}"
+        )
+    print("\n  Fleet override status")
+    print_fleet_override_status(report["fleet_override_status"])
+    if "queue_counts" in report:
+        print("\n  Queue lookup details")
+        for line in render_queue_counts(report["queue_counts"], color=False):
+            print("  " + line)
+    for pattern in report["summary"]["failure_patterns"]:
+        print(f"\n  Failure pattern: {pattern['name']}; {len(pattern['hosts'])} host(s)")
         counts = {labels[key]: count for key, count in pattern["cohorts"].items()}
-        print(f"  Cohort counts: {counts}; observed on master: {pattern['seen_on_master']}")
-        print(f"  https://firefox-ci-tc.services.mozilla.com/tasks/{pattern['example_task']}")
-    print_unverified_hosts(report, details=details or verbose)
-    if details or verbose:
-        heading("Host details")
+        print(f"    Cohort counts: {counts}; observed on master: {pattern['seen_on_master']}")
+        print(f"    https://firefox-ci-tc.services.mozilla.com/tasks/{pattern['example_task']}")
+    print_unverified_hosts(report, details=True)
+    print("\n  Host details")
     for host in report["hosts"]:
-        if details or verbose:
-            print_out_of_scope_history(host)
-            if not verbose:
-                jobs = host["jobs"]
-                classified = sum(job["configuration"] is not None for job in jobs)
-                in_window = sum(job["in_window"] for job in jobs)
-                print(
-                    f"{host['host']}: {classified}/{in_window} in-window runs classified; "
-                    f"{len(host['configuration_gaps'])} unknown configuration range(s); "
-                    f"observed {host['observation_ts']}"
-                )
-                continue
-            print(f"\n{host['host']} observed {host['observation_ts']}")
+        print_out_of_scope_history(host)
+        jobs = host["jobs"]
+        classified = sum(job["configuration"] is not None and job["in_window"] for job in jobs)
+        in_window = sum(job["in_window"] for job in jobs)
+        print(
+            f"  {host['host']}: {classified}/{in_window} in-window runs classified; "
+            f"{len(host['configuration_gaps'])} unknown configuration range(s); "
+            f"observed {host['observation_ts']}"
+        )
+        if verbose:
             for gap in host["configuration_gaps"]:
-                print(f"  Unknown configuration: {gap['start']} to {gap['end']}")
-            for job in host["jobs"]:
+                print(f"    Unknown configuration: {gap['start']} to {gap['end']}")
+            for job in jobs:
                 print(
-                    f"  {job['outcome']}: {job['task_id']} run {job['run_id']}: "
+                    f"    {job['outcome']}: {job['task_id']} run {job['run_id']}: "
                     f"{job['exclusion_reason'] or 'classified'}"
                 )
-    if report["warnings"] or report["errors"]:
-        heading("Notes & issues")
-    print_issues(report, style=style, verbose=verbose)
-    print("\n  Rates use completed + failed + exception; running/pending/unknown are not passes.")
+    print("  Rates use completed + failed + exception; running/pending/unknown are not passes.")
+
+
+def display_issues(report, *, details, verbose):
+    # Supporting metadata and caveats already represented by coverage are not
+    # independent default warnings. Keep the full diagnostics in details/JSON.
+    quiet = ("Compact configuration history:", "Excluded jobs are unknown configuration evidence,")
+    warnings = [
+        warning for warning in report["warnings"] if not warning.startswith(quiet) or details
+    ]
+    print_issues(
+        {**report, "warnings": warnings}, style=lambda value, **kwargs: str(value), verbose=verbose
+    )
+
+
+def write_report_text(value, *, stream, width, color):
+    """Wrap before styling; explicit CRLF works even when a TTY has OPOST/ONLCR off."""
+    lines = []
+    for line in value.splitlines():
+        indent = len(line) - len(line.lstrip())
+        wrapped = (
+            textwrap.wrap(
+                line,
+                width=width,
+                subsequent_indent=" " * min(indent + 2, width // 2),
+                break_long_words=True,
+                break_on_hyphens=False,
+                replace_whitespace=False,
+                drop_whitespace=True,
+            )
+            if len(line) > width
+            else [line]
+        )
+        for physical in wrapped:
+            if color:
+                if "✕ ERROR" in line:
+                    physical = click.style(physical, fg="red", bold=True)
+                elif "⚠" in line:
+                    physical = click.style(physical, fg="yellow")
+                elif line and (
+                    not line.startswith(" ")
+                    or line.lstrip().startswith(
+                        ("COHORT HEALTH", "COMPARISON", "CURRENT QUEUE", "◆")
+                    )
+                ):
+                    physical = click.style(physical, fg="cyan", bold=True)
+            lines.append(physical)
+    tty = stream.isatty()
+    newline = "\r\n" if tty else "\n"
+    stream.write(("\r" if tty else "") + newline.join(lines) + newline)
+    stream.flush()
+
+
+def print_report(report, *, details=False, verbose=False, color=None, width=None):
+    """Render one concise assessment, with supporting evidence available on request."""
+    if color is None:
+        color = report_color_enabled()
+    width = max(20, width or min(shutil.get_terminal_size(fallback=(100, 24)).columns, 120))
+    labels = cohort_labels(report["summary"]["cohorts"])
+    output = StringIO()
+    with redirect_stdout(output):
+        print("◈ FLEETROLL / ROLLOUT REPORT")
+        print(
+            f"  Report window: {display_time_range(report['window']['since'], report['window']['until'])}"
+        )
+        print(f"  {report['summary']['requested_hosts']} selected hosts")
+        print_compact_queue(report)
+        scopes = {tuple(group["configuration"]["scope"]) for group in report["summary"]["cohorts"]}
+        show_group = len({scope[3] for scope in scopes}) > 1
+        for scope in sorted(scopes):
+            print("\n" + population_label(scope, show_group=show_group))
+            cohorts = [
+                group
+                for group in report["summary"]["cohorts"]
+                if tuple(group["configuration"]["scope"]) == scope
+            ]
+            print_cohort_table(cohorts, labels=labels, width=width)
+            for comparison in report["comparisons"]:
+                if tuple(comparison["scope"]) == scope:
+                    print_compact_comparison(comparison, labels=labels, details=details or verbose)
+        if not scopes:
+            selection = report.get("selection", {})
+            if selection.get("role"):
+                print(f"\nRole: {selection['role']}")
+            elif selection.get("worker_type"):
+                print(f"\nPool: {selection['provisioner']}/{selection['worker_type']}")
+            print("\nCOHORT HEALTH")
+            print("  ⚠ No verified cohorts available to assess.")
+            print("  Comparison unavailable")
+        print_evidence_limits(report)
+        if details or verbose:
+            print_report_details(report, labels=labels, verbose=verbose)
+        display_issues(report, details=details or verbose, verbose=verbose)
+        print("\n  Observed results only; not automatic rollout approval.")
+        if not details and not verbose:
+            print(
+                "  Use --details for revisions, task breakdowns, and history; --verbose for individual runs."
+            )
+    write_report_text(output.getvalue(), stream=sys.stdout, width=width, color=color)
 
 
 def cli_timestamp(value: str) -> dt.datetime:
@@ -1539,13 +1692,15 @@ def parse_args(argv=None, *, prog=None):
         "--workers", type=int, default=4, help="Concurrent host queries (1-20, default 4)."
     )
     parser.add_argument(
-        "--details", action="store_true", help="Print a compact per-host attribution summary."
+        "--details",
+        action="store_true",
+        help="Add revisions, outcome breakdowns, queue timestamps, and per-host evidence.",
     )
     parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="Print individual task results and configuration gaps.",
+        help="Include all details plus individual task results and configuration gaps.",
     )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -1648,7 +1803,7 @@ def main(argv=None, *, prog=None) -> int:
                     flush=True,
                 )
     if sys.stderr.isatty():
-        print(file=sys.stderr)
+        print(end="\r\n", file=sys.stderr)
     hosts.sort(key=lambda host: host["host"])
     hosts = [
         scope_host_history(

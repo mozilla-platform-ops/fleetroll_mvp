@@ -4,6 +4,44 @@ The report compares master with each override within a role, using retained host
 observations and audit events. It reads existing evidence; it does not gather,
 deploy, remove overrides, advance a rollout, or write history.
 
+## Reading the terminal report
+
+The default output shows a compact cohort table and one comparison per pair,
+followed by evidence limits. Population headings use `role: provisioner/pool`;
+`[worker-group]` appears when multiple groups occur in the report. Details and JSON
+always retain the group. Hosts in the table are currently verified; task counts
+use verified historical membership over the full report window. `Done` means
+completed tasks; unknown outcomes get a column when present. Insufficient samples
+and mixed revisions remain explicit even when there are no verified failures.
+
+Comparisons use their own shared window, with finished tasks per side against the
+minimum and attribution percentages beside the conclusion. Human statements are
+symmetric: master or the override can have a higher observed failure or exception
+rate. Equal rates are described as equal, even if both cohorts have failures.
+Signed failure-rate differences are override minus master; positive means a
+higher override rate, negative means a higher master rate. These are descriptions
+of verified samples, not causal findings, statistical significance, or rollout
+approval. No deployment/removal direction is inferred.
+
+Evidence limits keep coverage, excluded failures/exceptions/unknown outcomes,
+query errors, observation freshness, unverified configurations, and retrieval
+limits visible. Known out-of-scope work remains distinct from unknown evidence.
+Override file counts appear when they add information beyond verified cohorts;
+file presence never establishes successful Puppet application.
+
+Use `--details` for outcome breakdowns, SHA/revision distributions, precise
+timestamps, queue lookup timestamps/errors, fleet membership diagnostics, failure
+patterns, and per-host evidence. `--verbose` includes those details plus individual
+tasks and unknown history ranges. Routine compact-history span/cutoff metadata is
+shown in details rather than as a default warning. Consequential history warnings
+remain visible. JSON evidence and exit-code semantics are unchanged.
+
+Output wraps to terminal width (at most 120 columns) and uses labelled cohort rows
+on narrow terminals. Long identifiers wrap without truncation. Redirected output
+uses plain LF lines; TTY output uses explicit CRLF to remain aligned even when
+newline translation is disabled, without modifying terminal settings.
+See the [display design](rollout-report-display.md) for layout and validation notes.
+
 ## Evidence and attribution
 
 SQLite keeps ten full observations per host plus the last successful observation
@@ -85,7 +123,8 @@ from historical task outcomes and cohort attribution. Pool selection uses the
 recorded identities at the report horizon. Unknown identities and legacy mapping
 are identified; failed queue lookups show unavailable, never zero, and do not
 change the report exit status.
-Queue depth appears immediately below the report title. Zero pending tasks are
+Queue depth appears immediately below the report title; fetch timestamps and lookup
+errors are in `--details` and JSON. Zero pending tasks are
 highlighted in yellow with a warning that no new work is queued; existing running
 tasks may still produce results.
 
@@ -101,8 +140,8 @@ Attribution coverage below 80% produces a warning, without vetoing a comparison;
 statistical significance test.
 
 The rollout assessment separates the observed result, sample sufficiency, and
-attribution coverage. It starts with independent health statements for master and
-each override, using their verified tasks over the full report window. Health is
+attribution coverage. The cohort table and sample notes describe independent health
+for master and each override, using verified tasks over the full report window. Health is
 "Healthy in verified sample" when at least `--min-finished` tasks finished with no
 failed, exception, or unknown outcomes. Otherwise it reports failures, exceptions,
 unknown outcomes, or an insufficient sample. Observed failures and exceptions are
@@ -116,10 +155,14 @@ population without controls. No rollout direction is needed. Equal failure rates
 can yield no observed regression in a comparison while both cohorts correctly
 report failures in their own health statements.
 
-With a comparable sample the report also states "No regression observed
-in verified tasks", "Higher override failure rate observed", or "Higher override
-exception rate observed" by comparing the verified shared-window rates. These are
-descriptive results, not causal findings or statistical significance claims. When
+With a comparable sample the human report describes whether either cohort has a
+higher failure or exception rate, or whether the observed rates are equal. The JSON
+`observed_result` retains the existing directional values: "no regression observed
+in verified tasks", "higher override failure rate observed", or "higher override
+exception rate observed". The first of those JSON values includes cases where master
+has a higher rate; consumers needing direction should inspect both cohorts' rates
+and signed differences. These are descriptive results, not causal findings or
+statistical significance claims. When
 sample or other comparison requirements fail, it reports "Comparison unavailable"
 with the blockers. A missing master or override also makes comparison unavailable.
 Low attribution remains a prominent yellow warning with the actual percentages.
@@ -190,7 +233,7 @@ query errors remain errors.
 `pending_tasks` (null when unavailable), `checked_at`, and `error`. The same
 additive field is included in fleet-status JSON; schema version remains 1.
 
-The human report also shows all retrieved in-window outcomes across configurations,
+With `--details`, the human report also shows all retrieved in-window outcomes across configurations,
 including unattributed runs, and counts the reasons those runs were excluded from
 configuration attribution. These totals are not cohort results and do not establish
 which configuration produced a run. They cover only retrieved runs: missing host
@@ -200,7 +243,7 @@ queries and the 20-run worker history limit can leave additional jobs out.
 and compact span count. Host intervals identify raw/compact sources, retained
 maximum polling gaps, and retention cutoffs. `configuration_evidence` carries
 pinned provenance and uncertainty reasons; `configuration_gaps` lists unknown
-ranges inside the requested window. Human output gives the cutoff and span count;
+ranges inside the requested window. Detailed human output gives the cutoff and span count;
 Unverified configurations are grouped by reason with host counts. `--details`
 lists affected hosts and prints one attribution summary per host. `-v` or `--verbose` prints
 individual tasks and unknown ranges. Repeated host warnings and errors are grouped
