@@ -245,6 +245,14 @@ class TestCliValidation:
         assert "host1.example.com" in result.output
         assert "host2.example.com" in result.output
 
+    def test_run_puppet_single_hostname_dry_run(self, runner: CliRunner, mocker):
+        ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
+        result = runner.invoke(cli, ["host-run-puppet", "host1.example.com"])
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+        assert "host1.example.com" in result.output
+        ssh.assert_not_called()
+
 
 class TestCliDebugFlag:
     """Tests for --debug flag."""

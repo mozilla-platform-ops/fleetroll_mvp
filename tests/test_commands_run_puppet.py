@@ -14,6 +14,33 @@ from fleetroll.exceptions import CommandFailureError
 class TestCmdHostRunPuppet:
     """Tests for cmd_host_run_puppet function."""
 
+    @pytest.mark.parametrize("json_output", [False, True])
+    def test_single_host_without_confirm_is_read_only(
+        self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path, capsys, json_output
+    ):
+        mock_args_run_puppet.confirm = False
+        mock_args_run_puppet.json = json_output
+        mock_args_run_puppet.no_audit = False
+        mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
+        ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
+        auto_audit = mocker.patch("fleetroll.commands.run_puppet._maybe_auto_audit")
+
+        cmd_host_run_puppet(mock_args_run_puppet)
+
+        output = capsys.readouterr().out
+        if json_output:
+            preview = json.loads(output)
+            assert preview["dry_run"] is True
+            assert preview["host"] == "test.example.com"
+            assert preview["auto_audit"] is True
+        else:
+            assert "DRY RUN" in output
+            assert "test.example.com" in output
+            assert "Auto-audit after:" in output
+        ssh.assert_not_called()
+        auto_audit.assert_not_called()
+        assert not Path(mock_args_run_puppet.audit_log).exists()
+
     def test_dry_run_without_confirm_batch(
         self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
     ):
