@@ -78,11 +78,28 @@ Master and each override SHA have separate summaries, with applied revision
 distributions. Pairwise comparisons use their overlapping verified time range
 inside the requested report window. Jobs are filtered to that same window on
 both sides. The report shows rates and percentage-point differences, never an
-automatic recommendation to advance. Multiple applied revisions, unknown
-outcomes, unresolved task queries, low attribution coverage, or too few finished tasks
-qualify the comparison as insufficient evidence. Defaults require 20 finished
-tasks per side and 80% attribution coverage; these are configurable evidence
-thresholds, not statistical significance tests.
+automatic recommendation to advance. Multiple applied revisions, unknown outcomes,
+unresolved task queries, or too few finished tasks qualify the comparison as
+insufficient evidence. The minimum sample defaults to 20 finished tasks per side.
+Attribution coverage below 80% produces a warning, without vetoing a comparison;
+`--min-coverage` configures this warning threshold. Neither threshold is a
+statistical significance test.
+
+The rollout assessment separates the observed result, sample sufficiency, and
+attribution coverage. With a comparable sample it reports "No regression observed
+in verified tasks", "Higher override failure rate observed", or "Higher override
+exception rate observed" by comparing the verified shared-window rates. These are
+descriptive results, not causal findings or statistical significance claims. When
+sample or other comparison requirements fail, it reports "Comparison unavailable"
+with the blockers. A missing master or override also makes comparison unavailable.
+Low attribution remains a prominent yellow warning with the actual percentages.
+
+Unattributed failures and exceptions whose start and finish both lie inside the
+shared comparison window are highlighted alongside the result. Their host/task
+links are available with `--details` or `--verbose`. Report-wide unattributed
+outcomes are shown separately so failures before convergence or outside the shared
+window are not presented as failures in the comparison. Excluded outcomes remain
+unknown configuration evidence and do not enter either cohort's rates.
 
 Partial host observations do not automatically veto the assessment. At least
 80% of selected hosts must be successfully queried by default, configurable with
@@ -90,12 +107,23 @@ Partial host observations do not automatically veto the assessment. At least
 scope. Missing host queries and unverified current configurations remain explicit
 warnings; tasks enter comparisons only through verified historical intervals.
 Thus six unavailable hosts out of 132 pass the host-query threshold (95.5%), while
-task-attribution coverage is checked independently. Current configuration warnings
+task-attribution coverage is qualified independently. Current configuration warnings
 do not invalidate otherwise verified historical work. Collection errors remain in
 JSON and retain their nonzero exit status even when the available sample is comparable.
 The assessment and comparison JSON include `warnings` and `host_query_coverage`
 with queried/requested counts, the observed fraction, and the minimum fraction.
 Human-readable blockers state the measured coverage and required threshold.
+
+Comparison JSON adds `observed_result`, `sample_status`, `minimum_finished`,
+`attribution`, and `unattributed_failures`. `attribution` contains `status`
+("limited" or "meets threshold"), `fraction`, `warning_threshold`, and `warnings`;
+it qualifies rather than determines the comparison `status`. Unavailable
+comparisons have `observed_result: "comparison unavailable"` and
+`sample_status: "unavailable"`. The summary's `evidence` includes sample and
+attribution fields, and `summary.unattributed_outcomes` counts all retrieved
+in-window runs excluded from configuration attribution. These additive fields
+retain schema version 1. A `comparable` status may now carry low-attribution
+warnings; consumers should inspect attribution separately from sample sufficiency.
 
 Rates use completed + failed + exception as their denominator. Failed and
 exception rates remain separate. Pending/running/unknown outcomes do not count

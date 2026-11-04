@@ -195,7 +195,9 @@ Only jobs attributable to verified applied configurations enter comparisons;
 unknown jobs remain visible as exclusions with coverage counts. Missing controls,
 small samples, and incomplete evidence are explicit, not automatic approval.
 Defaults are a 24-hour report window, a one-hour observation-gap bound, 20 finished
-tasks per comparison side, and 80% attribution coverage per side. Use `--help`
+tasks per comparison side, and an 80% attribution coverage warning threshold.
+Low attribution qualifies the observed result without blocking a comparison;
+unattributed failures inside its shared window are highlighted separately. Use `--help`
 for time-window, evidence-threshold, and per-host detail options.
 
 SQLite retains ten full observations per host and a compact 30-day configuration

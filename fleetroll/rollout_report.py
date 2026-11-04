@@ -568,6 +568,9 @@ def summarize(hosts: list[dict[str, Any]]) -> dict[str, Any]:
         "truncated_hosts": [host["host"] for host in hosts if host["history_may_be_truncated"]],
         "coverage": coverage(jobs),
         "all_observed_outcomes": outcome_summary([job for job in jobs if job["in_window"]]),
+        "unattributed_outcomes": outcome_summary(
+            [job for job in jobs if job["in_window"] and job["configuration"] is None]
+        ),
         "cohorts": cohorts,
         "failure_patterns": list(patterns.values()),
     }
@@ -630,6 +633,47 @@ def assess_host_queries(queried: int, *, requested: int, minimum: float) -> dict
     }
 
 
+def assess_attribution(fraction: float | None, *, threshold: float) -> dict[str, Any]:
+    limited = fraction is None or fraction < threshold
+    return {
+        "status": "limited" if limited else "meets threshold",
+        "fraction": fraction,
+        "warning_threshold": threshold,
+        "warnings": [
+            f"configuration attribution coverage {percentage(fraction)} "
+            f"below warning threshold {percentage(threshold)}"
+        ]
+        if limited
+        else [],
+    }
+
+
+def observed_comparison_result(master, *, override, comparable: bool) -> str:
+    """Describe the verified sample without claiming significance or rollout approval."""
+    if not comparable:
+        return "comparison unavailable"
+    if override["failure_rate"] > master["failure_rate"]:
+        return "higher override failure rate observed"
+    if override["exception_rate"] > master["exception_rate"]:
+        return "higher override exception rate observed"
+    return "no regression observed in verified tasks"
+
+
+def unattributed_failures(hosts, *, start, end):
+    """Keep failed/exception runs fully inside the shared window visible as unknown evidence."""
+    return [
+        {"host": host["host"], **job}
+        for host in hosts
+        for job in host["jobs"]
+        if job["in_window"]
+        and job["configuration"] is None
+        and job["outcome"] in {"failed", "exception"}
+        and (started := parse_timestamp(job["started"])) is not None
+        and (resolved := parse_timestamp(job["resolved"])) is not None
+        and start <= started <= resolved <= end
+    ]
+
+
 def compare_cohorts(
     hosts, *, summary, since, until, min_finished, min_coverage, min_host_coverage=0.8
 ):
@@ -647,6 +691,8 @@ def compare_cohorts(
                 {
                     "scope": list(scope),
                     "status": "unavailable",
+                    "observed_result": "comparison unavailable",
+                    "sample_status": "unavailable",
                     "reasons": ["master or override cohort absent"],
                     "window": None,
                 }
@@ -670,6 +716,8 @@ def compare_cohorts(
                         "master": configs[0],
                         "override": configs[1],
                         "status": "unavailable",
+                        "observed_result": "comparison unavailable",
+                        "sample_status": "unavailable",
                         "reasons": ["no verified intervals in the requested window"],
                         "window": None,
                     }
@@ -697,6 +745,8 @@ def compare_cohorts(
                         "master": configs[0],
                         "override": configs[1],
                         "status": "unavailable",
+                        "observed_result": "comparison unavailable",
+                        "sample_status": "unavailable",
                         "reasons": ["no overlapping verified time window"],
                         "window": None,
                     }
@@ -726,6 +776,7 @@ def compare_cohorts(
                 coverage(cohort_candidates(hosts, config_id=config_id, start=start, end=end))
                 for config_id in configs
             ]
+            attribution = assess_attribution(pair_coverage["fraction"], threshold=min_coverage)
             host_coverage = assess_host_queries(
                 sum(host["query_ok"] for host in relevant),
                 requested=len(relevant),
@@ -742,17 +793,22 @@ def compare_cohorts(
                 if stat["finished"] < min_finished:
                     reasons.append(f"{label}: fewer than {min_finished} finished tasks")
                 if evidence["fraction"] is None or evidence["fraction"] < min_coverage:
-                    reasons.append(
+                    attribution["status"] = "limited"
+                    attribution["warnings"].append(
                         f"{label}: configuration attribution coverage "
-                        f"{percentage(evidence['fraction'])} below required {percentage(min_coverage)}"
+                        f"{percentage(evidence['fraction'])} below warning threshold {percentage(min_coverage)}"
                     )
                 if len({job["configuration"]["git_sha"] for job in jobs}) > 1:
                     reasons.append(f"{label}: multiple applied revisions in the comparison")
-            if pair_coverage["fraction"] is None or pair_coverage["fraction"] < min_coverage:
-                reasons.append(
-                    f"overall: configuration attribution coverage "
-                    f"{percentage(pair_coverage['fraction'])} below required {percentage(min_coverage)}"
-                )
+            warnings.extend(attribution["warnings"])
+            excluded_failures = unattributed_failures(relevant, start=start, end=end)
+            for outcome, label in (("failed", "failure"), ("exception", "exception")):
+                count = sum(job["outcome"] == outcome for job in excluded_failures)
+                if count:
+                    warnings.append(
+                        f"{count} unattributed {label}{'' if count == 1 else 's'} "
+                        "inside the comparison window"
+                    )
             if any(job.get("query_error") or job["outcome"] == "unknown" for job in candidates):
                 reasons.append("unresolved task queries or outcomes")
             differences = {}
@@ -773,6 +829,15 @@ def compare_cohorts(
                     "master_coverage": side_coverage[0],
                     "override_coverage": side_coverage[1],
                     "host_query_coverage": host_coverage,
+                    "sample_status": "sufficient"
+                    if all(stat["finished"] >= min_finished for stat in stats)
+                    else "insufficient",
+                    "minimum_finished": min_finished,
+                    "observed_result": observed_comparison_result(
+                        stats[0], override=stats[1], comparable=not reasons
+                    ),
+                    "attribution": attribution,
+                    "unattributed_failures": excluded_failures,
                     "status": "insufficient evidence" if reasons else "comparable",
                     "reasons": reasons,
                     "warnings": warnings,
@@ -795,19 +860,20 @@ def evidence_status(summary, *, min_finished, min_coverage, min_host_coverage=0.
             f"{len(summary['unverified_hosts'])} current host configuration(s) unverified"
         )
     fraction = summary["coverage"]["fraction"]
-    if fraction is None or fraction < min_coverage:
-        reasons.append(
-            f"configuration attribution coverage {percentage(fraction)} "
-            f"below required {percentage(min_coverage)}"
-        )
-    if not summary["cohorts"] or any(
+    attribution = assess_attribution(fraction, threshold=min_coverage)
+    warnings.extend(attribution["warnings"])
+    small_sample = not summary["cohorts"] or any(
         group["finished"] < min_finished for group in summary["cohorts"]
-    ):
+    )
+    if small_sample:
         reasons.append(f"fewer than {min_finished} finished tasks in at least one cohort")
     if summary["coverage"]["unresolved"]:
         reasons.append("unresolved task queries")
     return {
         "status": "insufficient evidence" if reasons else "sample available",
+        "sample_status": "insufficient" if small_sample else "sufficient",
+        "minimum_finished": min_finished,
+        "attribution": attribution,
         "reasons": reasons,
         "warnings": warnings,
         "host_query_coverage": host_coverage,
@@ -1003,21 +1069,103 @@ def print_unverified_hosts(report, *, details):
         print("  Use --details or --verbose for host names.")
 
 
-def print_assessment(evidence, *, style):
-    verdict = evidence["status"]
-    verdict_color = "yellow" if verdict == "insufficient evidence" else "cyan"
-    symbol = "⚠" if verdict == "insufficient evidence" else "◆"
-    print("  " + style(f"{symbol}  {verdict.upper()}", fg=verdict_color, bold=True))
-    print("   Evidence assessment only; not automatic rollout approval.")
-    for reason in evidence["reasons"]:
-        print(f"   • {reason}")
+def print_comparison_assessment(comparison, *, style, label=None):
+    result = comparison["observed_result"]
+    qualified = comparison["status"] != "comparable" or result.startswith("higher")
+    symbol = "⚠" if qualified else "◆"
+    if label:
+        print(f"  {label}")
+    print(
+        "  "
+        + style(
+            f"{symbol}  {result.capitalize()}",
+            fg="yellow" if qualified else "cyan",
+            bold=True,
+        )
+    )
+    for key, name in (("master_results", "Master"), ("override_results", "Override")):
+        if key in comparison:
+            outcomes = comparison[key]["outcomes"]
+            print(
+                f"    {name}: {outcomes['completed']} completed, {outcomes['failed']} failed, "
+                f"{outcomes['exception']} exceptions"
+            )
+    if "minimum_finished" in comparison:
+        print(
+            f"    Shared-window sample: {comparison['sample_status']}; "
+            f"minimum {comparison['minimum_finished']} finished tasks per side"
+        )
+    attribution = comparison.get("attribution") or {}
+    if attribution.get("status") == "limited":
+        print(
+            style(
+                f"    ⚠ Attribution coverage below {percentage(attribution['warning_threshold'])}: "
+                f"master {percentage(comparison['master_coverage']['fraction'])}; "
+                f"override {percentage(comparison['override_coverage']['fraction'])}; "
+                f"overall {percentage(attribution['fraction'])}",
+                fg="yellow",
+            )
+        )
+    for reason in comparison["reasons"]:
+        print(f"    • {reason}")
+    for warning in comparison.get("warnings", []):
+        if warning not in attribution.get("warnings", []):
+            print(style(f"    ⚠ {warning}", fg="yellow"))
+
+
+def print_assessment(report, *, style):
+    evidence = report["summary"]["evidence"]
+    comparisons = report["comparisons"]
+    labels = {
+        group["configuration"]["id"]: configuration_label(group["configuration"])
+        for group in report["summary"]["cohorts"]
+    }
+    for comparison in comparisons:
+        print_comparison_assessment(
+            comparison,
+            style=style,
+            label=(
+                f"{labels.get(comparison.get('override'), 'Standalone population')} · "
+                f"{' / '.join(comparison['scope'])}"
+            )
+            if len(comparisons) > 1
+            else None,
+        )
+    if not comparisons:
+        print("  Comparison unavailable")
+    shown_warnings = {warning for comp in comparisons for warning in comp.get("warnings", [])}
+    if any(comp.get("attribution") for comp in comparisons):
+        shown_warnings.update(evidence["attribution"]["warnings"])
     for warning in evidence.get("warnings", []):
-        print(f"   ⚠ {warning}")
+        if warning not in shown_warnings:
+            print(style(f"   ⚠ {warning}", fg="yellow"))
+    shown_reasons = {reason for comp in comparisons for reason in comp["reasons"]}
+    for reason in evidence["reasons"]:
+        if reason not in shown_reasons:
+            print(f"   Report-wide evidence limit: {reason}")
+    excluded = report["summary"]["unattributed_outcomes"]["outcomes"]
+    if excluded["failed"] or excluded["exception"]:
+        print(
+            style(
+                f"   ⚠ Full report window: unattributed failed runs: {excluded['failed']}; "
+                f"exceptions: {excluded['exception']}. Shared-window counts shown above",
+                fg="yellow",
+            )
+        )
     host_coverage = evidence.get("host_query_coverage")
     if host_coverage:
         print(
             f"   Host query coverage: {percentage(host_coverage['fraction'])}; "
             f"minimum {percentage(host_coverage['minimum_fraction'])}"
+        )
+    print("   Observed results only; not automatic rollout approval.")
+
+
+def print_unattributed_failure_details(comparison):
+    for job in comparison.get("unattributed_failures", []):
+        print(
+            f"  Unattributed {job['outcome']}: {job['host']} · "
+            f"https://firefox-ci-tc.services.mozilla.com/tasks/{job['task_id']}"
         )
 
 
@@ -1043,7 +1191,7 @@ def print_report(report, *, details=False, verbose=False, color=None):
         for line in render_queue_counts(report["queue_counts"], color=color, include_heading=False):
             print(f"  {line}")
     heading("Rollout assessment")
-    print_assessment(summary["evidence"], style=style)
+    print_assessment(report, style=style)
     heading("Fleet override status")
     print_fleet_override_status(report["fleet_override_status"])
     heading("Coverage")
@@ -1106,6 +1254,7 @@ def print_report(report, *, details=False, verbose=False, color=None):
             )
         )
         print(f"  {' / '.join(comparison['scope'])}")
+        print(f"  Observed result: {comparison['observed_result']}")
         if comparison["window"]:
             print(
                 f"  Shared window: {comparison['window']['since']} to {comparison['window']['until']}"
@@ -1131,6 +1280,8 @@ def print_report(report, *, details=False, verbose=False, color=None):
             print(f"  {reason}")
         for warning in comparison.get("warnings", []):
             print(f"  ⚠ {warning}")
+        if details or verbose:
+            print_unattributed_failure_details(comparison)
     for pattern in summary["failure_patterns"]:
         print(f"\nFailure pattern: {pattern['name']}; {len(pattern['hosts'])} host(s)")
         counts = {labels[key]: count for key, count in pattern["cohorts"].items()}
@@ -1220,7 +1371,7 @@ def parse_args(argv=None, *, prog=None):
         "--min-coverage",
         type=float,
         default=80,
-        help="Minimum classified recent-run coverage percent (default 80).",
+        help="Attribution coverage warning threshold percent (default 80); does not veto comparison.",
     )
     parser.add_argument(
         "--min-host-coverage",

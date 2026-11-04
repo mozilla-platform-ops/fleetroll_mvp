@@ -590,29 +590,30 @@ def test_report_uses_color_only_when_enabled_and_keeps_verdict_readable(env, cap
     report.print_report(result, color=True)
     colored = capsys.readouterr().out
     assert "\x1b[" in colored
-    assert "INSUFFICIENT EVIDENCE" in colored
+    assert "Comparison unavailable" in colored
     queue_line = next(line for line in colored.splitlines() if "talos-pool: 0 pending" in line)
     assert "\x1b[33m" in queue_line
     assert "⚠" in queue_line
     assert "no new work queued" in queue_line
-    assert colored.index("CURRENT QUEUE") < colored.index("INSUFFICIENT EVIDENCE")
+    assert colored.index("CURRENT QUEUE") < colored.index("Comparison unavailable")
     assert colored.index("CURRENT QUEUE") < colored.index("FLEET OVERRIDE STATUS")
     monkeypatch.setenv("NO_COLOR", "1")
     report.print_report(result)
     plain = capsys.readouterr().out
     assert "\x1b[" not in plain
-    assert "INSUFFICIENT EVIDENCE" in plain
+    assert "Comparison unavailable" in plain
     assert "1 excluded" in plain
     assert "⚠ releng-hardware/talos-pool: 0 pending — no new work queued" in plain
 
 
-def test_one_low_coverage_override_cannot_hide_behind_large_master_sample(env, capsys):
+def test_low_coverage_override_is_a_prominent_warning_with_comparable_sample(env, capsys):
     seed(env, "master")
-    seed(env, "override", sha=override(env, "branch"))
+    seed(env, "override", sha=override(env, "branch"), stamp=SINCE + dt.timedelta(minutes=60))
     for _ in range(15):
         task(env, "master", minute=80)
-    task(env, "override", minute=90)
-    for _ in range(3):
+    task(env, "override", minute=100)
+    task(env, "override", minute=70, state="failed")
+    for _ in range(2):
         task(env, "override", minute=70)
     # Three tasks fall in an evidence gap, while the large master sample could
     # make a pooled coverage percentage look adequate.
@@ -642,7 +643,84 @@ def test_one_low_coverage_override_cannot_hide_behind_large_master_sample(env, c
     )
     assert invoke(env, "--role", ROLE, min_finished=1) == 0
     result = read(capsys)
-    assert result["comparisons"][0]["status"] == "insufficient evidence"
+    comparison = result["comparisons"][0]
+    assert comparison["status"] == "comparable", comparison["reasons"]
+    assert comparison["observed_result"] == "no regression observed in verified tasks"
+    assert comparison["sample_status"] == "sufficient"
+    assert comparison["attribution"]["status"] == "limited"
+    assert comparison["reasons"] == []
+    assert "override: configuration attribution coverage 25.0%" in "\n".join(comparison["warnings"])
+    assert len(comparison["unattributed_failures"]) == 1
+    assert comparison["unattributed_failures"][0]["outcome"] == "failed"
+    report.print_report(result, color=True, details=True)
+    output = capsys.readouterr().out
+    assessment = output.split("ROLLOUT ASSESSMENT")[1].split("FLEET OVERRIDE STATUS")[0]
+    assert "No regression observed in verified tasks" in assessment
+    assert "1 unattributed failure inside the comparison window" in assessment
+    assert "override 25.0%" in assessment
+    assert "\x1b[33m" in assessment
+    assert "https://firefox-ci-tc.services.mozilla.com/tasks/" in output
+
+
+@pytest.mark.parametrize(
+    ("master_state", "override_state", "expected"),
+    [
+        ("completed", "completed", "no regression observed in verified tasks"),
+        ("failed", "failed", "no regression observed in verified tasks"),
+        ("failed", "completed", "no regression observed in verified tasks"),
+        ("completed", "failed", "higher override failure rate observed"),
+        ("completed", "exception", "higher override exception rate observed"),
+    ],
+)
+def test_observed_comparison_result_uses_verified_rates(
+    env, capsys, master_state, override_state, expected
+):
+    seed(env, "master")
+    seed(env, "override", sha=override(env, "branch"))
+    task(env, "master", minute=80, state=master_state)
+    task(env, "override", minute=80, state=override_state)
+    assert invoke(env, "--role", ROLE, min_finished=1) == int(
+        master_state != "completed" or override_state != "completed"
+    )
+    result = read(capsys)
+    comparison = result["comparisons"][0]
+    assert comparison["observed_result"] == expected
+    assert comparison["attribution"]["status"] == "meets threshold"
+    assert comparison["sample_status"] == "sufficient"
+    report.print_report(result, color=False)
+    assert expected.capitalize() in capsys.readouterr().out
+
+
+def test_small_samples_do_not_emit_positive_observed_result(env, capsys):
+    seed(env, "master")
+    seed(env, "override", sha=override(env, "branch"))
+    for host in ("master", "override"):
+        task(env, host, minute=80)
+    assert invoke(env, "--role", ROLE) == 0
+    comparison = read(capsys)["comparisons"][0]
+    assert comparison["sample_status"] == "insufficient"
+    assert comparison["observed_result"] == "comparison unavailable"
+    assert comparison["attribution"]["status"] == "meets threshold"
+
+
+def test_unattributed_failure_outside_shared_window_is_reported_separately(env, capsys):
+    seed(env, "master")
+    seed(env, "override", sha=override(env, "branch"))
+    for host in ("master", "override"):
+        task(env, host, minute=80)
+    task(env, "override", minute=10, state="failed")
+    assert invoke(env, "--role", ROLE, min_finished=1) == 0
+    result = read(capsys)
+    comparison = result["comparisons"][0]
+    assert comparison["unattributed_failures"] == []
+    assert comparison["observed_result"] == "no regression observed in verified tasks"
+    assert result["summary"]["unattributed_outcomes"]["outcomes"]["failed"] == 1
+    assert result["summary"]["evidence"]["attribution"]["status"] == "limited"
+    assert result["summary"]["evidence"]["status"] == "sample available"
+    report.print_report(result, color=False)
+    output = capsys.readouterr().out
+    assert "Full report window: unattributed failed runs: 1" in output
+    assert "unattributed failure inside the comparison window" not in output
 
 
 @pytest.mark.parametrize("missing_kind", ["unavailable", "unverified"])
