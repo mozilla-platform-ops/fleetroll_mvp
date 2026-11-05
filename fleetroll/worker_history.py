@@ -229,7 +229,7 @@ def render_history(state: dict | None, *, sha_cache: ShaInfoCache, now: datetime
         baseline["host"], record=baseline, sha_cache=sha_cache, now=now
     )
     # Exclude derived freshness from pinned provenance; time passing must not change its identity.
-    context.pop("freshness")
+    context.pop("freshness", None)
     result["provenance"] = {
         "identity": identity,
         "observation_ts": baseline["ts"],
