@@ -49,7 +49,11 @@ def append_jsonl(path: Path, record: dict[str, Any]) -> None:
                         conn.commit()
             except (sqlite3.Error, OSError):
                 logging.getLogger(__name__).exception(
-                    "Configuration boundary persistence failed; audit event retained for replay"
+                    "Override boundary persistence failed for host=%s ts=%s action=%s; "
+                    "audit event retained for replay on next database initialization",
+                    record.get("host"),
+                    record.get("ts"),
+                    record.get("action"),
                 )
 
 

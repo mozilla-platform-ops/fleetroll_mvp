@@ -185,6 +185,29 @@ def test_short_write_before_baseline_and_live_audit_logging(db_conn, cache, monk
     assert load_history(db_conn, hosts=[HOST])[HOST]["override_write"]["ts"] == stamp(3)
 
 
+def test_dropped_write_boundary_is_logged_and_replayed(
+    db_conn, cache, monkeypatch, tmp_path, caplog
+):
+    import sqlite3
+
+    db_path = db_conn.execute("PRAGMA database_list").fetchone()[2]
+    monkeypatch.setattr("fleetroll.db.get_db_path", lambda: Path(db_path))
+
+    def locked(conn, *, record):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr("fleetroll.worker_history.record_write", locked)
+    log = tmp_path / "audit.jsonl"
+    event = {"host": HOST, "ts": stamp(3), "action": "host.set_override"}
+    append_jsonl(log, event)
+    assert f"host={HOST} ts={stamp(3)} action=host.set_override" in caplog.text
+    assert "retained for replay on next database initialization" in caplog.text
+    assert HOST not in load_history(db_conn, hosts=[HOST])
+    monkeypatch.undo()
+    initialize(db_conn, audit_log=log)
+    assert load_history(db_conn, hosts=[HOST])[HOST]["override_write"]["ts"] == stamp(3)
+
+
 def test_migration_recovers_history_and_replays_writes_once(db_conn, cache, tmp_path):
     insert_host_observation(db_conn, audit())
     insert_host_observation(db_conn, audit(2, status="invalid"))
