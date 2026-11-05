@@ -14,6 +14,7 @@ from .cli_hierarchy import install_hierarchy
 from .cli_types import (
     DataFreshnessArgs,
     HostAuditArgs,
+    HostHoldArgs,
     HostIdleArgs,
     HostMonitorArgs,
     HostRebootIfIdleArgs,
@@ -31,6 +32,7 @@ from .commands import (
     cmd_data_freshness,
     cmd_gh_fetch,
     cmd_host_audit,
+    cmd_host_hold,
     cmd_host_idle,
     cmd_host_monitor,
     cmd_host_reboot_if_idle,
@@ -1185,7 +1187,57 @@ def web(host: str, port: int, dev: bool) -> None:
     cmd_web(host=args.host, port=args.port, dev=args.dev)
 
 
-install_hierarchy(cli)
+@click.group("hold")
+def host_hold() -> None:
+    """Show, set, or clear one Linux host's operator hold."""
+
+
+def _hold_action(operation: str) -> click.Command:
+    """Build hold actions with shared transport options and explicit write confirmation."""
+
+    @click.command(
+        name=operation, help=f"{operation.capitalize()} operator hold on one Linux host."
+    )
+    @click.argument("host", metavar="HOST")
+    @common_options(timeout_default=30)
+    def command(
+        host: str,
+        ssh_option: tuple[str, ...],
+        connect_timeout: int,
+        timeout: int,
+        audit_log: str | None,
+        json_output: bool,
+        confirm: bool = False,
+        reason: str | None = None,
+    ) -> None:
+        cmd_host_hold(
+            HostHoldArgs(
+                host=host,
+                operation=operation,
+                ssh_option=list(ssh_option) or None,
+                connect_timeout=connect_timeout,
+                timeout=timeout,
+                audit_log=audit_log,
+                json=json_output,
+                confirm=confirm,
+                reason=reason,
+            )
+        )
+
+    if operation != "show":
+        command = click.option(
+            "--confirm", is_flag=True, help="Apply the change; otherwise preview without SSH."
+        )(command)
+        command = click.option("--reason", help="Optional reason recorded in the audit log.")(
+            command
+        )
+    return command
+
+
+for _operation in ("show", "set", "clear"):
+    host_hold.add_command(_hold_action(_operation))
+
+install_hierarchy(cli)["host"].add_command(host_hold)
 
 
 def main():

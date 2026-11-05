@@ -479,6 +479,30 @@ uv run fleetroll override set --from-file ~/.fleetroll/overrides/0328af8c9d6f co
 uv run fleetroll override unset configs/host-lists/1804.list
 ```
 
+### Operator hold
+
+`host hold` inspects or changes `/home/cltbld/operator_hold` on one Linux host.
+The flag prevents new jobs from running; setting it does not prove an existing
+job has finished. These commands use live SSH checks and do not depend on gwhc.
+
+```bash
+uv run fleetroll host hold show t-linux64-ms-017
+# Preview without contacting the host:
+uv run fleetroll host hold set t-linux64-ms-017 --reason "maintenance"
+uv run fleetroll host hold set t-linux64-ms-017 --confirm --reason "maintenance"
+uv run fleetroll host hold clear t-linux64-ms-017 --confirm --reason "maintenance complete"
+```
+
+Set and clear require `--confirm`, verify the resulting file state, and audit the
+actor, optional reason, and outcome (including no-ops and failures). Repeating
+an already-satisfied operation succeeds without changing the existing file.
+`show` is read-only and needs no confirmation. All actions support `--json` and
+the standard SSH options; failures return nonzero and never claim a verified
+hold state. Unsupported OSes, missing worker homes, symlinks, and nonregular flag
+paths are refused. The privileged file operation requires passwordless
+`sudo -n sh` access. Recorded host observations and monitor columns are not
+updated by these commands; use `host hold show` for current hold status.
+
 ### Checking whether a host is idle
 
 `host idle` checks one Linux host over SSH using live `sudo -n gwhc --json`
@@ -585,3 +609,17 @@ uv run pytest
 # pytest-watcher (runs tests on any change)
 uv run ptw .
 ```
+
+To reproduce CI coverage locally, including the tmux integration tests:
+
+```bash
+uv run pytest --cov=fleetroll --cov-report=xml --cov-report=term
+```
+
+Coverage enables subprocess measurement so monitor code running inside tmux is
+included in the combined report. Each test starts an isolated tmux server that
+inherits the coverage environment. TUI teardown sends Ctrl-C and polls for exit
+before removing the server, allowing Python cleanup and coverage writes to finish
+even when a popup is open. If the app does not exit within five seconds, teardown
+warns and forces shutdown; that process's coverage may be incomplete. Tests can
+still run normally without `--cov`.

@@ -6,6 +6,7 @@ from .data_freshness import cmd_data_freshness
 from .gather_gh import cmd_gh_fetch
 from .gather_host import cmd_host_audit
 from .gather_tc import cmd_tc_fetch
+from .hold import cmd_host_hold
 from .idle import cmd_host_idle
 from .maintain import cmd_maintain
 from .monitor import cmd_host_monitor
@@ -22,6 +23,7 @@ __all__ = [
     "cmd_data_freshness",
     "cmd_gh_fetch",
     "cmd_host_audit",
+    "cmd_host_hold",
     "cmd_host_idle",
     "cmd_host_monitor",
     "cmd_host_reboot_if_idle",

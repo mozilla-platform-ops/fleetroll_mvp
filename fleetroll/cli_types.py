@@ -143,6 +143,21 @@ class HostRunPuppetArgs:
 
 
 @dataclass
+class HostHoldArgs:
+    """Arguments for live operator hold inspection and changes."""
+
+    host: str
+    operation: str
+    ssh_option: list[str] | None
+    connect_timeout: int
+    timeout: int
+    audit_log: str | None
+    json: bool
+    confirm: bool = False
+    reason: str | None = None
+
+
+@dataclass
 class HostIdleArgs:
     """Arguments for the read-only live idle check."""
 

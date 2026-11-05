@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -130,9 +131,25 @@ class TmuxSession:
         )
 
     def kill(self) -> None:
-        """Kill the tmux server for this session, ignoring errors if already gone."""
+        """Interrupt the app and wait for cleanup before removing the tmux server.
+
+        SIGINT lets Python run finally/atexit handlers, including saving coverage.
+        It also exits when a popup or filter input would consume a normal q key.
+        """
         if not self._started:
             return
+        if self.is_alive():
+            subprocess.run(
+                self._tmux("send-keys", "-t", self.name, "C-c"),
+                check=False,
+                capture_output=True,
+            )
+            if not self.wait_until(lambda: not self.is_alive(), timeout=5.0):
+                warnings.warn(
+                    "TUI did not exit after SIGINT; forcing tmux shutdown may lose coverage data.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
         subprocess.run(
             self._tmux("kill-server"),
             check=False,

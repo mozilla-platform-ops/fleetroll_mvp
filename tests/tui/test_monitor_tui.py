@@ -233,6 +233,20 @@ class TestQuit:
 
             assert sess.wait_until(_exited, timeout=5.0), "TUI did not exit after q"
 
+    def test_teardown_flushes_history_with_popup(self, tmux_monitor_env: dict[str, Any]) -> None:
+        """Teardown exits Python cleanly even when a popup would consume q."""
+        home_dir = tmux_monitor_env["home"]
+        hosts_file = tmux_monitor_env["hosts_file"]
+        cmd = f"{_UV_PATH} run fleetroll host-monitor {hosts_file} --filter role~talos"
+        with TmuxSession(cmd=cmd, cols=300, rows=40, env=_session_env(home_dir)) as sess:
+            assert sess.wait_for("HOST", timeout=15.0)
+            sess.send_keys("f")
+            assert sess.wait_for("Filters", timeout=5.0)
+
+        assert not sess.is_alive()
+        history = home_dir / ".fleetroll" / "filter_history"
+        assert "role~talos" in history.read_text()
+
 
 # ---------------------------------------------------------------------------
 # Filter history persistence

@@ -167,6 +167,8 @@ max-complexity = 25
 [tool.coverage.run]
 source = ["fleetroll"]
 relative_files = true
+# pytest-cov 7 delegates child-process measurement to coverage.py.
+patch = ["subprocess"]
 
 [tool.coverage.report]
 skip_empty = true

@@ -34,7 +34,7 @@ COMMAND_PATHS = {
 GROUP_HELP = {
     "override": "Create, inspect, deploy, and remove Puppet overrides.",
     "vault": "Inspect and deploy vault files.",
-    "host": "Monitor hosts, check activity, run Puppet, and request reboots.",
+    "host": "Monitor hosts, manage holds, check activity, run Puppet, and request reboots.",
     "note": "Add, show, and clear host notes.",
     "gather": (
         "Collect host state, Taskcluster data, and GitHub references. "
@@ -59,8 +59,8 @@ class GatherGroup(click.Group):
         return super().parse_args(ctx, args)
 
 
-def install_hierarchy(cli: click.Group) -> None:
-    """Reuse callbacks and parameters, copying command metadata for each path."""
+def install_hierarchy(cli: click.Group) -> dict[str, click.Group]:
+    """Reuse command callbacks and return groups for additional nested actions."""
     original = dict(cli.commands)
     groups: dict[str, click.Group] = {}
     for name, help_text in GROUP_HELP.items():
@@ -77,3 +77,4 @@ def install_hierarchy(cli: click.Group) -> None:
         # gather's old spelling is handled by GatherGroup rather than an alias.
         if legacy != "gather":
             command.hidden = True
+    return groups

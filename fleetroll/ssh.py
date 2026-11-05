@@ -683,6 +683,70 @@ def remote_run_puppet_script() -> str:
     return "sh -c " + shlex.quote(body)
 
 
+def remote_hold_script(operation: str) -> str:
+    """Inspect or change the fixed Linux operator hold flag, then verify it."""
+    if operation not in {"show", "set", "clear"}:
+        raise ValueError(f"Unsupported hold operation: {operation}")
+    root_body = r"""marker() { printf 'FLEETROLL_HOLD_%s=%s\n' "$1" "$2"; }
+fail() { marker RESULT failed; marker REASON "$1"; exit 0; }
+flag='/home/cltbld/operator_hold'
+operation=$1
+[ -d /home/cltbld ] || fail worker_home_missing
+# Avoid following special paths, including dangling symlinks.
+[ ! -L "$flag" ] || fail unsupported_flag_type
+if [ -e "$flag" ]; then
+  [ -f "$flag" ] || fail unsupported_flag_type
+  before=1
+else
+  before=0
+fi
+marker BEFORE "$before"
+case "$operation" in
+  set)
+    if [ "$before" = 0 ]; then
+      # Exclusive creation: do not truncate a file or follow a raced symlink.
+      (set -C; : > "$flag") || fail create_failed
+    fi
+    ;;
+  clear)
+    if [ "$before" = 1 ]; then
+      rm -f -- "$flag" || fail remove_failed
+    fi
+    ;;
+esac
+[ ! -L "$flag" ] || fail verification_failed
+if [ -e "$flag" ]; then
+  [ -f "$flag" ] || fail verification_failed
+  after=1
+else
+  after=0
+fi
+marker PRESENT "$after"
+case "$operation:$after" in
+  set:0|clear:1) fail verification_failed ;;
+esac
+if [ "$operation" = show ]; then
+  marker RESULT observed
+elif [ "$before" = "$after" ]; then
+  marker RESULT no_change
+else
+  marker RESULT changed
+fi
+"""
+    body = r"""marker() { printf 'FLEETROLL_HOLD_%s=%s\n' "$1" "$2"; }
+marker CHECKED_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+os_type=$(uname -s) || { marker RESULT failed; marker REASON os_detection_failed; exit 0; }
+marker OS_TYPE "$os_type"
+if [ "$os_type" != Linux ]; then
+  marker RESULT refused
+  marker REASON unsupported_os
+  exit 0
+fi
+"""
+    body += "\nsudo -n sh -c " + shlex.quote(root_body) + " sh " + shlex.quote(operation)
+    return "sh -c " + shlex.quote(body)
+
+
 def remote_idle_script() -> str:
     """Collect Linux worker health and Puppet activity without changing the host.
 
