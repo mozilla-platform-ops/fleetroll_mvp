@@ -778,6 +778,16 @@ class MonitorDisplay:
         usable_width: int,
     ) -> tuple[list[str], str]:
         """Determine which columns fit on screen with horizontal scrolling."""
+        # NOTE is the trailing column: use spare space rather than requiring
+        # the longest note to fit. Widths are rebuilt on each draw, so notes
+        # expand again when the terminal grows or the user scrolls right.
+        scrollable = [col for col in all_columns if col != "host"]
+        if scrollable and scrollable[-1] == "note":
+            preceding = ["host", *scrollable[self.col_offset : -1]]
+            remaining = usable_width - sum(widths[col] for col in preceding) - 3 * len(preceding)
+            if remaining >= len("NOTE"):
+                widths["note"] = min(widths["note"], remaining)
+
         columns, scroll_indicator, col_offset, max_col_offset = compute_visible_columns(
             all_columns, widths=widths, usable_width=usable_width, col_offset=self.col_offset
         )
