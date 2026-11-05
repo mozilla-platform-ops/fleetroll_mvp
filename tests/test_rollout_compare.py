@@ -176,6 +176,8 @@ def test_running_tasks_are_not_finished_successes(env, capsys):
         ["--candidate-pool", "releng-hardware/talos-pool"],
         ["--candidate-pool", "bad/pool/name"],
         ["--workers", "0"],
+        ["--metadata-workers", "0"],
+        ["--metadata-workers", "21"],
         ["--min-finished", "0"],
         ["--min-coverage", "nan"],
         ["--max-observation-gap", "inf"],
@@ -317,8 +319,73 @@ def test_phase_progress_is_on_stderr_and_json_mode_is_silent(env, capsys, monkey
         assert json.loads(output)["schema_version"] == 1
         assert terminal.getvalue() == ""
     else:
-        assert "Candidate: Checking workers and task outcomes 1/1" in terminal.getvalue()
-        assert "Baseline: Checking workers and task outcomes 1/1" in terminal.getvalue()
-        assert "Fetching task names for workload matching 2/2" in terminal.getvalue()
+        assert "Candidate: Processing workers and task outcomes 1/1" in terminal.getvalue()
+        assert "Baseline: Processing workers and task outcomes 1/1" in terminal.getvalue()
+        assert "1 successful, 0 errors" in terminal.getvalue()
+        assert "Fetching task names 2/2; 0 cached, 0 reused, 0 errors" in terminal.getvalue()
         assert "Matching workloads and comparing outcomes" in terminal.getvalue()
         assert "Fetching task names" not in output
+
+
+def test_warm_cache_skips_metadata_but_refreshes_outcomes_and_fetches_new_tasks(env, capsys):
+    pools(env)
+    task(env, "control")
+    canary = task(env, "canary", pool="candidate")
+    _, cold = invoke(env, capsys)
+    assert cold["task_name_lookups"]["fetched"] == 2
+    env.clients.queue.task.reset_mock()
+    env.clients.queue.status.reset_mock()
+    env.tasks[canary][1]["status"]["runs"][0]["state"] = "running"
+    _, warm = invoke(env, capsys)
+    env.clients.queue.task.assert_not_called()
+    assert env.clients.queue.status.call_count == 2
+    assert warm["task_name_lookups"]["cached"] == 2
+    assert warm["sides"]["candidate"]["observed"]["outcomes"]["running"] == 1
+    new = task(env, "control", name="new workload")
+    _, updated = invoke(env, capsys)
+    env.clients.queue.task.assert_called_once_with(new)
+    assert updated["task_name_lookups"]["cached"] == 2
+    assert updated["task_name_lookups"]["fetched"] == 1
+
+
+def test_reuses_report_metadata_for_failed_jobs(env, capsys):
+    pools(env)
+    task(env, "control", state="failed")
+    task(env, "canary", pool="candidate", state="exception")
+    _, result = invoke(env, capsys)
+    assert env.clients.queue.task.call_count == 2
+    assert result["task_name_lookups"]["reused"] == 2
+    assert result["task_name_lookups"]["fetched"] == 0
+
+
+def test_failed_name_lookups_are_retried_and_not_cached(env, capsys):
+    pools(env)
+    task(env, "control")
+    task(env, "canary", pool="candidate")
+    fetch = env.clients.queue.task.side_effect
+    env.clients.queue.task.side_effect = RuntimeError("metadata unavailable")
+    code, failed = invoke(env, capsys)
+    assert code == 1
+    assert failed["task_name_lookups"]["failed"] == 2
+    env.clients.queue.task.side_effect = fetch
+    code, recovered = invoke(env, capsys)
+    assert code == 0
+    assert recovered["task_name_lookups"]["cached"] == 0
+    assert recovered["task_name_lookups"]["fetched"] == 2
+
+
+def test_cache_bypass_and_unavailable_cache_preserve_comparison(env, capsys):
+    pools(env)
+    task(env, "control")
+    task(env, "canary", pool="candidate")
+    path = env.db.with_suffix(".task-names.sqlite3")
+    code, bypassed = invoke(env, capsys, "--no-task-name-cache")
+    assert code == 0
+    assert not path.exists()
+    assert bypassed["task_name_lookups"]["fetched"] == 2
+    path.write_text("invalid SQLite file")
+    code, result = invoke(env, capsys)
+    assert code == 0
+    assert result["comparison"] == bypassed["comparison"]
+    assert any("Task-name cache read unavailable" in warning for warning in result["warnings"])
+    assert result["task_name_lookups"]["fetched"] == 2

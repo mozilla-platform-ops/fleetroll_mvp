@@ -21,6 +21,7 @@ class RolloutProgress:
         self._label = "Preparing comparison"
         self._completed = None
         self._total = None
+        self._detail = None
         self._started = time.monotonic()
         self._frame = 0
 
@@ -31,7 +32,7 @@ class RolloutProgress:
             self._thread.start()
         return self
 
-    def update(self, label, *, completed=None, total=None):
+    def update(self, label, *, completed=None, total=None, detail=None):
         if not self.enabled:
             return
         with self._lock:
@@ -40,10 +41,13 @@ class RolloutProgress:
                 self._label = label
                 self._started = time.monotonic()
             self._completed, self._total = completed, total
+            self._detail = detail
             self._write()
 
     def _write(self, *, final=False):
         count = f" {self._completed}/{self._total}" if self._total is not None else ""
+        if self._detail:
+            count += f"; {self._detail}"
         elapsed = time.monotonic() - self._started
         marker = " " if final else "|/-\\"[self._frame % 4]
         text = f"{marker} {self._label}{count} ({elapsed:.1f}s)"

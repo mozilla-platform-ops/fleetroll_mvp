@@ -19,6 +19,7 @@ from .exceptions import FleetRollError
 logger = logging.getLogger(__name__)
 TASK_STATUS_WORKERS = 20
 TC_REQUEST_TIMEOUT_SECONDS = 30
+TC_ROOT_URL = "https://firefox-ci-tc.services.mozilla.com"
 
 
 class _TimeoutSession(requests.Session):
@@ -101,7 +102,7 @@ def load_tc_credentials() -> TaskClusterCredentials:
 def create_tc_clients(credentials: TaskClusterCredentials) -> TaskClusterClients:
     """Create authenticated Queue and Worker Manager REST clients."""
     options = {
-        "rootUrl": "https://firefox-ci-tc.services.mozilla.com",
+        "rootUrl": TC_ROOT_URL,
         "credentials": {
             "clientId": credentials.client_id,
             "accessToken": credentials.access_token,

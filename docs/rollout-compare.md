@@ -17,6 +17,22 @@ completion counts on stderr. Candidate and baseline checks are labelled separate
 task-name lookups and workload comparison have their own phases. Progress is
 silent in JSON mode, redirected stderr, and `TERM=dumb` terminals.
 
+Task names are cached separately from host evidence in a SQLite sidecar beside
+the selected `--db` (normally `~/.fleetroll/fleetroll.task-names.sqlite3`). The
+cache stores only task ID, service root URL, name, and fetch timestamp. Entries
+expire after 30 days and retention is capped at 50,000 entries across service
+roots. Failed lookups are retried on the next comparison. Cache failures warn
+and fall back to live lookups; they do not discard comparison results. Use
+`--no-task-name-cache` to bypass cache reads and writes. Names already fetched
+for failed/exception tasks in the current report are reused.
+
+Task-name requests use `--metadata-workers` (1–20, default 12), independently of
+`--workers` for host checks. Progress shows the completed/total network lookups,
+cached and reused names, and lookup errors. Worker progress distinguishes
+processed workers from successful queries. JSON adds `task_name_lookups` with
+`cached`, `reused`, `fetched`, `failed`, and cache `warnings`. Worker populations,
+task outcomes, and queue depths still refresh live on every invocation.
+
 ## Population and evidence
 
 The population is hosts identifiable in Fleetroll's recorded observations, using

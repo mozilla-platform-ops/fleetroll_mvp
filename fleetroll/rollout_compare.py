@@ -9,9 +9,20 @@ import shutil
 import sqlite3
 import sys
 from copy import copy
+from typing import TypedDict
 
 from . import rollout_report as report
 from .rollout_progress import RolloutProgress
+from .task_name_cache import load_names, save_names
+from .taskcluster import TC_ROOT_URL
+
+
+class TaskNameLookups(TypedDict):
+    cached: int
+    reused: int
+    fetched: int
+    failed: int
+    warnings: list[str]
 
 
 def parse_args(argv=None, *, prog=None):
@@ -34,6 +45,19 @@ def parse_args(argv=None, *, prog=None):
         help="Disable the default Replay: prefix fallback; match exact task names only.",
     )
     report.add_report_options(parser)
+    parser.add_argument(
+        "--metadata-workers",
+        type=int,
+        choices=range(1, 21),
+        default=12,
+        metavar="1-20",
+        help="Concurrent task-name lookups (default 12); independent of --workers.",
+    )
+    parser.add_argument(
+        "--no-task-name-cache",
+        action="store_true",
+        help="Fetch task names without reading or writing the persistent metadata cache.",
+    )
     args = parser.parse_args(argv)
     for side in ("candidate", "baseline"):
         try:
@@ -55,7 +79,9 @@ def pool_report(args, *, pool, clients, progress=None):
     return report.build_report(selected, clients=clients, progress=progress)
 
 
-def enrich_task_names(sides, *, clients, workers, progress=None):
+def enrich_task_names(
+    sides, *, clients, workers, progress=None, cache_path=None, root_url=TC_ROOT_URL
+):
     """Fetch names for successes too, without discarding outcomes on metadata errors."""
     jobs_by_task = {}
     for side in sides.values():
@@ -63,6 +89,34 @@ def enrich_task_names(sides, *, clients, workers, progress=None):
             for job in host["jobs"]:
                 if job["in_window"] and not job.get("query_error") and job.get("task_id"):
                     jobs_by_task.setdefault(job["task_id"], []).append(job)
+
+    stats: TaskNameLookups = {"cached": 0, "reused": 0, "fetched": 0, "failed": 0, "warnings": []}
+    cached = {}
+    if cache_path is not None:
+        try:
+            cached = load_names(cache_path, root_url=root_url)
+        except (OSError, sqlite3.Error) as exc:
+            stats["warnings"].append(
+                f"Task-name cache read unavailable; using live metadata: {exc}"
+            )
+    resolved = {}
+    fresh = {}
+    for task_id, jobs in jobs_by_task.items():
+        known = next(
+            (
+                job["name"]
+                for job in jobs
+                if isinstance(job.get("name"), str) and job["name"].strip()
+            ),
+            None,
+        )
+        if known:
+            resolved[task_id] = known, None
+            fresh[task_id] = known
+            stats["reused"] += 1
+        elif task_id in cached:
+            resolved[task_id] = cached[task_id], None
+            stats["cached"] += 1
 
     def fetch(task_id):
         try:
@@ -73,20 +127,42 @@ def enrich_task_names(sides, *, clients, workers, progress=None):
         except Exception as exc:
             return None, str(exc)
 
-    if progress:
-        progress("Fetching task names for workload matching", completed=0, total=len(jobs_by_task))
+    missing = jobs_by_task.keys() - resolved.keys()
+
+    def update():
+        if progress:
+            progress(
+                "Fetching task names",
+                completed=stats["fetched"] + stats["failed"],
+                total=len(missing),
+                detail=f"{stats['cached']} cached, {stats['reused']} reused, {stats['failed']} errors",
+            )
+
+    update()
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(fetch, task_id): task_id for task_id in jobs_by_task}
-        for completed, future in enumerate(concurrent.futures.as_completed(futures), start=1):
+        futures = {executor.submit(fetch, task_id): task_id for task_id in missing}
+        for future in concurrent.futures.as_completed(futures):
             name, error = future.result()
-            for job in jobs_by_task[futures[future]]:
-                job["name"], job["name_error"] = name, error
-            if progress:
-                progress(
-                    "Fetching task names for workload matching",
-                    completed=completed,
-                    total=len(jobs_by_task),
-                )
+            task_id = futures[future]
+            resolved[task_id] = name, error
+            if error:
+                stats["failed"] += 1
+            else:
+                stats["fetched"] += 1
+            if name is not None:
+                fresh[task_id] = name
+            update()
+    for task_id, (name, error) in resolved.items():
+        for job in jobs_by_task[task_id]:
+            job["name"], job["name_error"] = name, error
+    if cache_path is not None:
+        try:
+            save_names(cache_path, root_url=root_url, names=fresh)
+        except (OSError, sqlite3.Error) as exc:
+            stats["warnings"].append(
+                f"Task-name cache write unavailable; live results retained: {exc}"
+            )
+    return stats
 
 
 def jobs_for(side):
@@ -423,11 +499,12 @@ def main(argv=None, *, prog=None):
                 pool = getattr(args, label + "_pool")
                 progress.update(f"{label.capitalize()} pool: {'/'.join(pool)}")
 
-                def update(message, *, completed=None, total=None, label=label):
+                def update(message, *, completed=None, total=None, detail=None, label=label):
                     progress.update(
                         f"{label.capitalize()}: {message}",
                         completed=completed,
                         total=total,
+                        detail=detail,
                     )
 
                 sides[label] = pool_report(args, pool=pool, clients=clients, progress=update)
@@ -436,11 +513,19 @@ def main(argv=None, *, prog=None):
                 raise ValueError(
                     "candidate and baseline recorded host selections overlap; refresh observations"
                 )
-            enrich_task_names(
-                sides, clients=clients, workers=args.workers, progress=progress.update
+            metadata = enrich_task_names(
+                sides,
+                clients=clients,
+                workers=args.metadata_workers,
+                progress=progress.update,
+                cache_path=None
+                if args.no_task_name_cache
+                else args.db.with_suffix(".task-names.sqlite3"),
             )
             progress.update("Matching workloads and comparing outcomes")
             result = compare(sides, args=args)
+            result["task_name_lookups"] = metadata
+            result["warnings"].extend(metadata["warnings"])
     except (OSError, ValueError, TypeError, sqlite3.Error, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

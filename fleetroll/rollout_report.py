@@ -1856,7 +1856,7 @@ def build_report(args, *, clients=None, progress=None) -> dict[str, Any]:
         raise ValueError(str(exc)) from exc
     hosts = []
     if progress:
-        progress("Checking workers and task outcomes", completed=0, total=len(selected))
+        progress("Processing workers and task outcomes", completed=0, total=len(selected))
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {
             executor.submit(
@@ -1877,7 +1877,11 @@ def build_report(args, *, clients=None, progress=None) -> dict[str, Any]:
             hosts.append(future.result())
             if progress:
                 progress(
-                    "Checking workers and task outcomes", completed=len(hosts), total=len(selected)
+                    "Processing workers and task outcomes",
+                    completed=len(hosts),
+                    total=len(selected),
+                    detail=f"{sum(host['query_ok'] for host in hosts)} successful, "
+                    f"{sum(bool(host['error']) for host in hosts)} errors",
                 )
             elif sys.stderr.isatty():
                 print(
