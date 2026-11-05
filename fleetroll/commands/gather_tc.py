@@ -508,6 +508,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     legacy_hosts = 0
     pool_mismatches = 0
     uncertain_historical = 0
+    ambiguous_hosts = 0
     unresolved_hosts = 0
 
     # Load credentials
@@ -787,6 +788,14 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 attempt["resolution_source"] = "historical_worker_identity"
                 attempt["historical_baseline"] = historical[attempt["host"]]["provenance"]
             insert_tc_lookup_attempt(db_conn, attempt)
+            if attempt["status"] == "worker_ambiguous":
+                ambiguous_hosts += 1
+                if verbose and not quiet:
+                    click.echo(
+                        f"WARNING: {attempt['host']}: multiple workers match "
+                        f"{attempt['identity']['worker_id']}; skipping ambiguous match",
+                        err=True,
+                    )
 
         # Commit all inserts
         db_conn.commit()
@@ -824,6 +833,8 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             resolution_warnings.append(f"{legacy_hosts} legacy fallback(s)")
         if pool_mismatches:
             resolution_warnings.append(f"{pool_mismatches} pool mismatch(es)")
+        if ambiguous_hosts:
+            resolution_warnings.append(f"{ambiguous_hosts} ambiguous worker match(es)")
         if uncertain_historical:
             resolution_warnings.append(f"{uncertain_historical} uncertain historical identit(ies)")
         if quiet:

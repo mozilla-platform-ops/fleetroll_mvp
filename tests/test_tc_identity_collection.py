@@ -242,6 +242,23 @@ def test_legacy_duplicate_worker_ids_are_not_arbitrarily_matched(tc_env, db_conn
     attempt = get_latest_tc_lookup_attempts(db_conn, ["host.example.com"])["host.example.com"]
     assert attempt["status"] == "worker_ambiguous"
     assert attempt["resolution_source"] == "legacy_role"
+    assert (
+        "host.example.com: multiple workers match host; skipping ambiguous match" in result.output
+    )
+    assert "1 ambiguous worker match(es)" in result.output
+
+
+def test_ambiguous_worker_match_is_quiet_in_quiet_mode(tc_env, db_conn, tmp_path):
+    seed(db_conn, "host.example.com", legacy=True, role="gecko_t_linux_talos")
+    tc_env.return_value = WorkerFetchResult(
+        workers=[
+            worker({**IDENTITY, "workerId": "host"}),
+            worker({**IDENTITY, "workerId": "host", "workerGroup": "elsewhere"}),
+        ],
+        status_errors=0,
+    )
+    result = invoke(["host.example.com"], tmp_path=tmp_path, quiet=True)
+    assert "multiple workers match" not in result.output
 
 
 def test_failed_windows_discovery_does_not_discard_observed_linux_success(
