@@ -507,6 +507,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     api_errors = 0
     legacy_hosts = 0
     pool_mismatches = 0
+    uncertain_historical = 0
     unresolved_hosts = 0
 
     # Load credentials
@@ -557,8 +558,10 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                     if baseline["status"] == "present"
                     else None
                 )
-                if baseline["contradiction_status"] != "none_known":
+                if baseline["contradiction_status"] == "contradicted":
                     pool_mismatches += 1
+                elif baseline["contradiction_status"] != "none_known":
+                    uncertain_historical += 1
                 if verbose and not quiet:
                     click.echo(
                         f"{host}: historical identity from {baseline['observation_ts']}; "
@@ -821,6 +824,8 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             resolution_warnings.append(f"{legacy_hosts} legacy fallback(s)")
         if pool_mismatches:
             resolution_warnings.append(f"{pool_mismatches} pool mismatch(es)")
+        if uncertain_historical:
+            resolution_warnings.append(f"{uncertain_historical} uncertain historical identit(ies)")
         if quiet:
             output = format_tc_fetch_quiet(
                 worker_count=worker_records_written,

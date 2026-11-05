@@ -494,3 +494,26 @@ def test_historical_success_does_not_clear_override_block(tc_env, db_conn):
     assert result.exit_code == 0, result.output
     assert "contradiction=contradicted" in result.output
     assert load_history(db_conn, hosts=["host"]) == before
+
+
+def test_historical_uncertain_is_not_counted_as_pool_mismatch(tc_env, db_conn):
+    seed(db_conn, "host")
+    tc_env.return_value = WorkerFetchResult(workers=[worker()], status_errors=0)
+    result = CliRunner().invoke(cli, ["gather", "tc", "host", "--use-historical-identity", "-v"])
+    assert result.exit_code == 0, result.output
+    assert "contradiction=uncertain" in result.output
+    assert "1 uncertain historical identit(ies)" in result.output
+    assert "pool mismatch" not in result.output
+
+
+def test_historical_contradicted_is_counted_as_pool_mismatch(tc_env, db_conn):
+    from fleetroll.worker_history import record_write
+
+    seed(db_conn, "host")
+    record_write(db_conn, record={"host": "host", "action": "host.set_override", "ts": NEW_TS})
+    db_conn.commit()
+    tc_env.return_value = WorkerFetchResult(workers=[worker()], status_errors=0)
+    result = CliRunner().invoke(cli, ["gather", "tc", "host", "--use-historical-identity", "-v"])
+    assert result.exit_code == 0, result.output
+    assert "1 pool mismatch(es)" in result.output
+    assert "uncertain historical" not in result.output
