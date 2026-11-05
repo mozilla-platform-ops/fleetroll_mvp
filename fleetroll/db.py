@@ -106,6 +106,9 @@ def init_db(db_path: Path, *, audit_log: Path | None = None) -> None:
         from .configuration_history import initialize
 
         initialize(conn, audit_log=audit_log)
+        from .worker_history import initialize as initialize_worker_history
+
+        initialize_worker_history(conn, audit_log=audit_log or db_path.parent / "audit.jsonl")
         conn.commit()
     finally:
         conn.close()
@@ -187,6 +190,10 @@ def _insert_host_observation(
     from .configuration_history import record_observation
 
     record_observation(conn, record, overrides_dir=overrides_dir)
+
+    from .worker_history import record_observation as record_worker_observation
+
+    record_worker_observation(conn, record=record)
 
     # Find most recent ok=1 record
     last_ok_row = conn.execute(

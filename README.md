@@ -187,6 +187,13 @@ Quiet mode prints status, collected/requested counts, and elapsed time in at mos
 See [worker identity collection](docs/worker-identity.md) for configuration
 sources and supported launch configurations.
 
+For SSH-unreachable hosts, monitor JSON also exposes a durable historical worker
+identity with its original timestamp and contradiction signals. An explicit
+`uv run fleetroll gather tc --use-historical-identity HOST_OR_FILE` queries that
+exact identity without changing normal lookup behavior. Historical lookup success
+does not clear contradictions or authorize recovery. See the
+[version 3 historical identity contract](docs/historical-worker-identity.md).
+
 #### Reviewing rollout jobs on master and overrides
 
 `fleetroll rollout report` groups hosts within a role into verified master

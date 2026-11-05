@@ -886,12 +886,19 @@ def host_reboot_if_idle(
     is_flag=True,
     help="Single-line output.",
 )
-def gather_tc(host: str, verbose: int, quiet: bool):
+@click.option(
+    "--use-historical-identity",
+    is_flag=True,
+    help="Query the exact retained historical identity; does not authorize recovery.",
+)
+def gather_tc(host: str, verbose: int, quiet: bool, use_historical_identity: bool):
     """Fetch TaskCluster worker data for hosts."""
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
 
-    args = TcFetchArgs(host=host, verbose=verbose, quiet=quiet)
+    args = TcFetchArgs(
+        host=host, verbose=verbose, quiet=quiet, use_historical_identity=use_historical_identity
+    )
     cmd_tc_fetch(args)
 
 

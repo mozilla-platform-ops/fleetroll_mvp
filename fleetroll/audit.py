@@ -43,6 +43,9 @@ def append_jsonl(path: Path, record: dict[str, Any]) -> None:
                         if "source_ts" not in columns:
                             initialize(conn, audit_log=path)
                         record_boundary(conn, record)
+                        from .worker_history import record_write
+
+                        record_write(conn, record=record)
                         conn.commit()
             except (sqlite3.Error, OSError):
                 logging.getLogger(__name__).exception(

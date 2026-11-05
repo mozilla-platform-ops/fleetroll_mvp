@@ -56,21 +56,17 @@ def _unresolved_override(sha: str | None, *, sha_cache: ShaInfoCache) -> bool:
     return any(not re.fullmatch(r"(?:''|\"\")?[ \t]*(?:#.*)?", value) for value in assignments)
 
 
-def build_monitor_json_record(
+def build_configured_worker_type(
     host: str,
     *,
     record: dict[str, Any] | None,
-    tc_record: dict[str, Any] | None,
     sha_cache: ShaInfoCache,
-    lookup_attempt: dict[str, Any] | None = None,
-    now: datetime | None = None,
+    now: datetime,
 ) -> dict[str, Any]:
-    """Preserve raw audit fields and qualify each independent evidence source."""
+    """Resolve recorded intent and override convergence without identity fallback."""
     # gather_tc imports monitor.cache; defer to avoid a package initialization cycle.
     from ..gather_tc import map_roles_to_worker_types, resolve_host_worker_types
 
-    now = now or datetime.now(UTC)
-    result = dict(record or {"host": host})
     observed = (record or {}).get("observed") or {}
     audit_status = "missing" if record is None else "ok" if record.get("ok") else "failed"
     ts = (record or {}).get("ts")
@@ -106,7 +102,7 @@ def build_monitor_json_record(
             application = "failed"
         elif observed.get("puppet_success") is not True and matches:
             application = "unknown"
-    configured = {
+    return {
         **(configured_pool or {"provisioner": None, "worker_type": None}),
         "status": "resolved" if resolved else "unresolved",
         "reason": (
@@ -125,6 +121,32 @@ def build_monitor_json_record(
         "override_sha256": override_sha,
         "application_status": application,
     }
+
+
+def build_monitor_json_record(
+    host: str,
+    *,
+    record: dict[str, Any] | None,
+    tc_record: dict[str, Any] | None,
+    sha_cache: ShaInfoCache,
+    lookup_attempt: dict[str, Any] | None = None,
+    historical_state: dict[str, Any] | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Preserve raw audit fields and qualify each independent evidence source."""
+    from ...worker_history import render_history
+
+    now = now or datetime.now(UTC)
+    result = dict(record or {"host": host})
+    observed = (record or {}).get("observed") or {}
+    audit_status = "missing" if record is None else "ok" if record.get("ok") else "failed"
+    ts = (record or {}).get("ts")
+    configured = build_configured_worker_type(host, record=record, sha_cache=sha_cache, now=now)
+    configured_pool = (
+        {key: configured[key] for key in ("provisioner", "worker_type")}
+        if configured["status"] == "resolved"
+        else None
+    )
     identity = observed.get("tc_worker_identity") or {}
     host_identity = {
         "provisioner": identity.get("provisionerId"),
@@ -184,10 +206,27 @@ def build_monitor_json_record(
         "observed_identity_match": _match(host_identity if valid_identity else None, tc_identity),
         "record": tc_record,
     }
+    historical = render_history(historical_state, sha_cache=sha_cache, now=now)
+    baseline_identity = (
+        {key: historical[key] for key in tc_identity} if historical["status"] == "present" else None
+    )
+    taskcluster["historical_identity_match"] = _match(baseline_identity, tc_identity)
+    latest_lookup["historical_identity_match"] = _match(baseline_identity, attempt_identity)
+    for evidence, source in ((taskcluster, tc), (latest_lookup, attempt)):
+        provenance = source.get("historical_baseline")
+        evidence["historical_baseline"] = provenance
+        evidence["historical_baseline_match"] = (
+            "unknown"
+            if not provenance or historical["status"] != "present"
+            else "match"
+            if provenance == historical["provenance"]
+            else "mismatch"
+        )
     result.update(
-        worker_evidence_schema_version=2,
+        worker_evidence_schema_version=3,
         configured_worker_type=configured,
         observed_worker_identity=observed_identity,
+        historical_worker_identity=historical,
         taskcluster=taskcluster,
     )
     return result
@@ -200,6 +239,7 @@ def build_monitor_json_snapshot(
     tc_data: dict,
     sha_cache: ShaInfoCache,
     lookup_attempts: dict | None = None,
+    historical_states: dict | None = None,
 ) -> dict[str, dict[str, Any]]:
     now = datetime.now(UTC)
     return {
@@ -209,6 +249,7 @@ def build_monitor_json_snapshot(
             tc_record=tc_data.get(strip_fqdn(host)),
             sha_cache=sha_cache,
             lookup_attempt=(lookup_attempts or {}).get(host),
+            historical_state=(historical_states or {}).get(host),
             now=now,
         )
         for host in hosts
@@ -228,6 +269,7 @@ def follow_monitor_json(
         latest, _ = provider.load_latest_records(hosts=hosts)
         tc_data = provider.load_tc_workers(hosts=hosts)
         lookup_attempts = provider.load_tc_lookup_attempts(hosts=hosts)
+        historical_states = provider.load_worker_history(hosts=hosts)
         # Re-read metadata so newly collected override content is visible in follow mode.
         sha_cache.override_cache.clear()
         current = build_monitor_json_snapshot(
@@ -236,6 +278,7 @@ def follow_monitor_json(
             tc_data=tc_data,
             sha_cache=sha_cache,
             lookup_attempts=lookup_attempts,
+            historical_states=historical_states,
         )
         for host, record in current.items():
             if record != previous.get(host):

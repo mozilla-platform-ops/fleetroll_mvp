@@ -219,6 +219,7 @@ def test_follow_emits_tc_only_and_failed_host_changes(evidence, mocker):
     provider.load_latest_records.return_value = ({HOST: record}, {})
     provider.load_tc_workers.return_value = {"ms017": updated_tc}
     provider.load_tc_lookup_attempts.return_value = {}
+    provider.load_worker_history.return_value = {}
     mocker.patch("fleetroll.commands.monitor.json_output.time.sleep")
     stream = follow_monitor_json([HOST], provider=provider, initial=initial, sha_cache=cache)
     changed = next(stream)
@@ -262,7 +263,9 @@ def test_once_and_initial_follow_use_same_contract(evidence, tmp_path, monkeypat
     assert json.loads(once.output) == json.loads(initial.output)
     assert json.loads(once.output)[HOST]["taskcluster"]["identity"]["worker_type"] == OVERRIDE
     assert follow.call_args.kwargs["initial"] == json.loads(once.output)
-    assert json.loads(once.output)[HOST]["worker_evidence_schema_version"] == 2
+    assert json.loads(once.output)[HOST]["worker_evidence_schema_version"] == 3
+    assert json.loads(once.output)[HOST]["historical_worker_identity"]["status"] == "present"
+    assert json.loads(once.output)[HOST]["historical_worker_identity"]["observation_ts"] == TS
     assert (
         json.loads(once.output)[HOST]["taskcluster"]["latest_lookup_status"] == "pool_query_failed"
     )

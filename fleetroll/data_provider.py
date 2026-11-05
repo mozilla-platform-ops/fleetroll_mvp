@@ -23,6 +23,8 @@ class DataProvider(Protocol):
 
     def load_tc_lookup_attempts(self, *, hosts: list[str]) -> dict[str, dict[str, Any]]: ...
 
+    def load_worker_history(self, *, hosts: list[str]) -> dict[str, dict[str, Any]]: ...
+
     def load_github_refs(self) -> dict[str, dict[str, Any]]: ...
 
     def load_windows_pools(self) -> dict[str, dict[str, Any]]: ...
@@ -40,6 +42,12 @@ class LocalProvider:
         from .commands.monitor.data import load_latest_records
 
         return load_latest_records(self._conn, hosts=hosts)
+
+    def load_worker_history(self, *, hosts: list[str]) -> dict[str, dict[str, Any]]:
+        from .worker_history import load_history
+
+        self._conn.commit()
+        return load_history(self._conn, hosts=hosts)
 
     def load_tc_workers(self, *, hosts: list[str]) -> dict[str, dict[str, Any]]:
         from .commands.monitor.data import load_tc_worker_data_from_db

@@ -8,6 +8,7 @@ import sqlite3
 import textwrap
 import time
 from collections import defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -289,12 +290,14 @@ def index_workers(workers: list[dict[str, Any]]) -> dict[Any, Any]:
     """Index full identities; allow legacy short IDs only when unambiguous."""
     result: dict[Any, Any] = {}
     by_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_identity: dict[tuple, list[dict[str, Any]]] = defaultdict(list)
     for worker in workers:
         worker_id = worker.get("workerId")
         if worker_id:
-            result[(worker.get("workerGroup"), worker_id)] = worker
+            by_identity[(worker.get("workerGroup"), worker_id)].append(worker)
             by_id[worker_id].append(worker)
     result.update({key: values[0] for key, values in by_id.items() if len(values) == 1})
+    result.update({key: values[0] for key, values in by_identity.items() if len(values) == 1})
     return result
 
 
@@ -498,6 +501,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     start_time = time.time()
     verbose = getattr(args, "verbose", 0)
     quiet = getattr(args, "quiet", False)
+    use_historical = getattr(args, "use_historical_identity", False)
 
     # Track warnings for quiet mode
     api_errors = 0
@@ -537,6 +541,29 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         # Map hosts to roles from SQLite
         host_to_role = get_host_roles_bulk(set(hosts), db_conn)
         observed_identities = get_observed_identities(hosts, db_conn=db_conn)
+        historical = {}
+        if use_historical:
+            from ..worker_history import IDENTITY_FIELDS, load_history, render_history
+            from .monitor.cache import ShaInfoCache
+
+            overrides = db_path.parent / OVERRIDES_DIR_NAME
+            cache = ShaInfoCache(overrides, db_path.parent / "vault_yamls")
+            states = load_history(db_conn, hosts=hosts)
+            for host in hosts:
+                baseline = render_history(states.get(host), sha_cache=cache, now=datetime.now(UTC))
+                historical[host] = baseline
+                observed_identities[host] = (
+                    {field: baseline[key] for key, field in IDENTITY_FIELDS.items()}
+                    if baseline["status"] == "present"
+                    else None
+                )
+                if baseline["contradiction_status"] != "none_known":
+                    pool_mismatches += 1
+                if verbose and not quiet:
+                    click.echo(
+                        f"{host}: historical identity from {baseline['observation_ts']}; "
+                        f"contradiction={baseline['contradiction_status']} (diagnostic evidence only)"
+                    )
 
         # Track hosts without roles for logging
         for host, role in host_to_role.items():
@@ -714,6 +741,9 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         # Write worker records to SQLite
         for record in worker_records:
             host = record["host"]
+            if use_historical:
+                record["resolution_source"] = "historical_worker_identity"
+                record["historical_baseline"] = historical[host]["provenance"]
             short_host = record["worker_id"]
 
             if verbose >= 1 and not quiet:
@@ -750,6 +780,9 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
             ts=utc_now_iso(),
             started_ts=ts,
         ):
+            if use_historical:
+                attempt["resolution_source"] = "historical_worker_identity"
+                attempt["historical_baseline"] = historical[attempt["host"]]["provenance"]
             insert_tc_lookup_attempt(db_conn, attempt)
 
         # Commit all inserts

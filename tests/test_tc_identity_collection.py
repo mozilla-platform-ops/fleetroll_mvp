@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -371,3 +372,113 @@ def test_failed_audit_blocks_legacy_old_pool(tc_env, db_conn, tmp_path):
     assert (
         get_latest_tc_lookup_attempts(db_conn, ["host"])["host"]["status"] == "identity_unresolved"
     )
+
+
+@pytest.mark.parametrize("failure", [None, "missing", "api", "task", "ambiguous"])
+def test_historical_lookup_while_ssh_fails(tc_env, db_conn, failure):
+    seed(db_conn, "host.example.com")
+    insert_host_observation(
+        db_conn, {"host": "host.example.com", "ts": "2026-11-05T00:00:00Z", "ok": False}
+    )
+    db_conn.commit()
+    if failure == "api":
+        tc_env.side_effect = FleetRollError("private-error")
+    else:
+        workers = [] if failure == "missing" else [worker()]
+        if failure == "task":
+            workers = [worker(latestTask={"taskId": "test-task", "runId": 0})]
+        if failure == "ambiguous":
+            workers = [worker(), worker()]
+        tc_env.return_value = WorkerFetchResult(
+            workers=workers, status_errors=int(failure == "task")
+        )
+    result = CliRunner().invoke(
+        cli, ["gather", "tc", "--use-historical-identity", "host.example.com", "-v"]
+    )
+    assert (result.exit_code == 0) == (failure is None), result.output
+    assert tc_env.call_args.kwargs["worker_ids"] == set()
+    assert tc_env.call_args.kwargs["worker_identities"] == {("mdc1", "not-the-hostname")}
+    assert tc_env.call_args.kwargs["worker_type"] == IDENTITY["workerType"]
+    attempt = get_latest_tc_lookup_attempts(db_conn, ["host.example.com"])["host.example.com"]
+    assert attempt["resolution_source"] == "historical_worker_identity"
+    assert attempt["historical_baseline"]["observation_ts"] == NEW_TS
+    assert (
+        attempt["status"]
+        == {
+            None: "success",
+            "missing": "worker_missing",
+            "api": "pool_query_failed",
+            "task": "task_lookup_failed",
+            "ambiguous": "worker_ambiguous",
+        }[failure]
+    )
+    successful = get_latest_tc_workers(db_conn, ["host.example.com"])["host.example.com"]
+    if failure is None:
+        assert successful["historical_baseline"] == attempt["historical_baseline"]
+        assert attempt["successful_observation_ts"] == successful["ts"]
+    else:
+        assert successful["ts"] == OLD_TS
+        assert attempt["successful_observation_ts"] is None
+
+
+def test_historical_mode_never_falls_back_for_missing_baseline(tc_env, db_conn):
+    seed(db_conn, "host", legacy=True, role="gecko_t_linux_talos")
+    result = CliRunner().invoke(cli, ["gather", "tc", "host", "--use-historical-identity", "-q"])
+    assert result.exit_code != 0
+    tc_env.assert_not_called()
+    attempt = get_latest_tc_lookup_attempts(db_conn, ["host"])["host"]
+    assert attempt["status"] == "identity_unresolved"
+    assert attempt["resolution_source"] == "historical_worker_identity"
+    assert attempt["historical_baseline"] is None
+
+
+def test_historical_query_pins_baseline_during_concurrent_replacement(tc_env, db_conn):
+    from datetime import UTC, datetime
+
+    from fleetroll.commands.monitor.cache import ShaInfoCache
+    from fleetroll.worker_history import load_history, render_history
+
+    seed(db_conn, "host")
+    replacement = {**IDENTITY, "workerGroup": "new-group", "workerId": "new-id"}
+
+    def fetch(*args, **kwargs):
+        insert_host_observation(
+            db_conn,
+            {
+                "host": "host",
+                "ts": "2026-11-05T00:00:00Z",
+                "ok": True,
+                "observed": {"tc_worker_identity_status": "ok", "tc_worker_identity": replacement},
+            },
+        )
+        db_conn.commit()
+        return WorkerFetchResult(workers=[worker()], status_errors=0)
+
+    tc_env.side_effect = fetch
+    result = CliRunner().invoke(cli, ["gather", "tc", "host", "--use-historical-identity"])
+    assert result.exit_code == 0, result.output
+    attempt = get_latest_tc_lookup_attempts(db_conn, ["host"])["host"]
+    assert attempt["identity"]["worker_id"] == IDENTITY["workerId"]
+    assert attempt["historical_baseline"]["observation_ts"] == NEW_TS
+    path = Path(db_conn.execute("PRAGMA database_list").fetchone()[2]).parent
+    current = render_history(
+        load_history(db_conn, hosts=["host"])["host"],
+        sha_cache=ShaInfoCache(path / "overrides", path / "vault"),
+        now=datetime.now(UTC),
+    )
+    assert current["worker_id"] == "new-id"
+    assert current["provenance"] != attempt["historical_baseline"]
+
+
+def test_historical_success_does_not_clear_override_block(tc_env, db_conn):
+    from fleetroll.worker_history import load_history, record_write
+
+    seed(db_conn, "host")
+    record_write(db_conn, record={"host": "host", "action": "host.set_override", "ts": NEW_TS})
+    db_conn.commit()
+    before = load_history(db_conn, hosts=["host"])
+    tc_env.return_value = WorkerFetchResult(workers=[worker()], status_errors=0)
+    result = CliRunner().invoke(cli, ["gather", "tc", "host", "--use-historical-identity", "-v"])
+    assert result.exit_code == 0, result.output
+    assert "contradiction=contradicted" in result.output
+    assert load_history(db_conn, hosts=["host"]) == before

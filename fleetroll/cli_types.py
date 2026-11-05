@@ -188,6 +188,7 @@ class TcFetchArgs:
     host: str
     verbose: int
     quiet: bool
+    use_historical_identity: bool = False
 
 
 @dataclass

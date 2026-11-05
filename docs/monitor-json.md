@@ -1,8 +1,8 @@
-# Monitor JSON worker evidence (version 2)
+# Monitor JSON worker evidence (version 3)
 
 `fleetroll host monitor HOST_OR_FILE --once --json` emits a host-keyed object.
 Each value preserves the latest raw host audit, including `observed.role` as
-the Puppet role, and adds `worker_evidence_schema_version: 2` plus three objects.
+the Puppet role, and adds `worker_evidence_schema_version: 3` plus four objects.
 A host without an audit now has an object with `host` and explicit missing
 evidence instead of `null`. Existing audit fields are unchanged when present.
 All timestamps are the original source timestamps; generating a report does not
@@ -15,6 +15,12 @@ Updates occur on host audit changes, TC-only changes (including failed lookup at
 and transitions to stale evidence. Polling runs every half second and can coalesce
 intermediate observations; this is a latest-state feed, not an event audit trail.
 Snapshot and follow output retain their existing different outer framing.
+
+Version 3 adds `historical_worker_identity` for unreachable-host investigation,
+with durable timestamps, contradiction reasons, and an explicit historical TC
+lookup path. See the [historical identity contract](historical-worker-identity.md)
+for its full shape, retention, override rules, examples, and consumer migration.
+Historical evidence never resolves or refreshes current-evidence fields below.
 
 ## Configured worker type
 
@@ -102,7 +108,7 @@ The attempt includes:
   Host-configured identities have all four fields. Legacy lookup knows the pool
   and short worker ID but leaves group null; it never invents a group. Unresolved
   identities have all four fields null and do not reuse an older pool.
-- `resolution_source`: `host_configuration`, `legacy_override`, `legacy_role`,
+- `resolution_source`: `host_configuration`, `historical_worker_identity`, `legacy_override`, `legacy_role`,
   or `unknown`. This describes the query's resolution method, not Puppet intent.
   A failed host audit blocks legacy fallback even if older role data exists.
 - `status` and a concise `error` from fixed messages. Raw API exceptions,
@@ -121,7 +127,7 @@ The attempt includes:
 | `identity_unresolved` | No usable query identity; no old-pool fallback. |
 | `pool_query_failed` | The worker-list request failed; recorded for every affected host. |
 | `worker_missing` | No worker matched the queried pool/group/ID. |
-| `worker_ambiguous` | A legacy short ID matched multiple workers. |
+| `worker_ambiguous` | The full identity or legacy short ID matched multiple workers. |
 | `task_lookup_failed` | Worker matched, but its latest task run could not be collected. |
 | `unknown` | No persisted attempt exists, including pre-migration observations. |
 
@@ -141,7 +147,7 @@ An abbreviated applied override example:
     "ts": "2026-11-05T04:00:00Z",
     "ok": true,
     "observed": {"role": "gecko_t_linux_2404_talos"},
-    "worker_evidence_schema_version": 2,
+    "worker_evidence_schema_version": 3,
     "configured_worker_type": {
       "worker_type": "gecko-t-linux-talos-2404-tc-v115",
       "source": "override",
