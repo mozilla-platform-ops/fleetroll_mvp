@@ -1820,10 +1820,12 @@ def validate_report_options(args, *, parser):
     return args
 
 
-def build_report(args, *, clients=None) -> dict[str, Any]:
+def build_report(args, *, clients=None, progress=None) -> dict[str, Any]:
     """Collect a report without rendering; callers own presentation and exit policy."""
     overrides_dir = args.audit_log.parent / OVERRIDES_DIR_NAME
     history_metadata: dict[str, Any] = {}
+    if progress:
+        progress("Loading recorded host evidence")
     try:
         records, refs, warnings = load_evidence(
             args.db,
@@ -1853,6 +1855,8 @@ def build_report(args, *, clients=None) -> dict[str, Any]:
     except (OSError, ValueError, TypeError, sqlite3.Error, RuntimeError) as exc:
         raise ValueError(str(exc)) from exc
     hosts = []
+    if progress:
+        progress("Checking workers and task outcomes", completed=0, total=len(selected))
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {
             executor.submit(
@@ -1871,14 +1875,20 @@ def build_report(args, *, clients=None) -> dict[str, Any]:
         }
         for future in concurrent.futures.as_completed(futures):
             hosts.append(future.result())
-            if sys.stderr.isatty():
+            if progress:
+                progress(
+                    "Checking workers and task outcomes", completed=len(hosts), total=len(selected)
+                )
+            elif sys.stderr.isatty():
                 print(
                     f"\rChecking workers {len(hosts)}/{len(selected)}",
                     end="",
                     file=sys.stderr,
                     flush=True,
                 )
-    if sys.stderr.isatty():
+    if progress:
+        progress("Attributing tasks and summarizing outcomes")
+    elif sys.stderr.isatty():
         print(end="\r\n", file=sys.stderr)
     hosts.sort(key=lambda host: host["host"])
     hosts = [
@@ -1943,6 +1953,8 @@ def build_report(args, *, clients=None) -> dict[str, Any]:
         for entry in entries
         if entry.get("action", "host.audit") == "host.audit" and entry.get("ok")
     }
+    if progress:
+        progress("Checking pool queue depth")
     report["queue_counts"] = collect_queue_counts(
         report["fleet_override_status"],
         observations=successful,

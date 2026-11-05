@@ -11,6 +11,7 @@ import sys
 from copy import copy
 
 from . import rollout_report as report
+from .rollout_progress import RolloutProgress
 
 
 def parse_args(argv=None, *, prog=None):
@@ -47,14 +48,14 @@ def parse_args(argv=None, *, prog=None):
     return report.validate_report_options(args, parser=parser)
 
 
-def pool_report(args, *, pool, clients):
+def pool_report(args, *, pool, clients, progress=None):
     selected = copy(args)
     selected.hosts, selected.role = [], None
     selected.provisioner, selected.worker_type = pool
-    return report.build_report(selected, clients=clients)
+    return report.build_report(selected, clients=clients, progress=progress)
 
 
-def enrich_task_names(sides, *, clients, workers):
+def enrich_task_names(sides, *, clients, workers, progress=None):
     """Fetch names for successes too, without discarding outcomes on metadata errors."""
     jobs_by_task = {}
     for side in sides.values():
@@ -72,12 +73,20 @@ def enrich_task_names(sides, *, clients, workers):
         except Exception as exc:
             return None, str(exc)
 
+    if progress:
+        progress("Fetching task names for workload matching", completed=0, total=len(jobs_by_task))
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(fetch, task_id): task_id for task_id in jobs_by_task}
-        for future in concurrent.futures.as_completed(futures):
+        for completed, future in enumerate(concurrent.futures.as_completed(futures), start=1):
             name, error = future.result()
             for job in jobs_by_task[futures[future]]:
                 job["name"], job["name_error"] = name, error
+            if progress:
+                progress(
+                    "Fetching task names for workload matching",
+                    completed=completed,
+                    total=len(jobs_by_task),
+                )
 
 
 def jobs_for(side):
@@ -407,18 +416,31 @@ def print_comparison(result, *, details=False, verbose=False):
 def main(argv=None, *, prog=None):
     args = parse_args(argv, prog=prog)
     try:
-        clients = report.create_tc_clients(report.load_tc_credentials())
-        sides = {
-            label: pool_report(args, pool=getattr(args, label + "_pool"), clients=clients)
-            for label in ("candidate", "baseline")
-        }
-        candidate_hosts = {host["host"] for host in sides["candidate"]["hosts"]}
-        if candidate_hosts & {host["host"] for host in sides["baseline"]["hosts"]}:
-            raise ValueError(
-                "candidate and baseline recorded host selections overlap; refresh observations"
+        with RolloutProgress(enabled=not args.json) as progress:
+            clients = report.create_tc_clients(report.load_tc_credentials())
+            sides = {}
+            for label in ("candidate", "baseline"):
+                pool = getattr(args, label + "_pool")
+                progress.update(f"{label.capitalize()} pool: {'/'.join(pool)}")
+
+                def update(message, *, completed=None, total=None, label=label):
+                    progress.update(
+                        f"{label.capitalize()}: {message}",
+                        completed=completed,
+                        total=total,
+                    )
+
+                sides[label] = pool_report(args, pool=pool, clients=clients, progress=update)
+            candidate_hosts = {host["host"] for host in sides["candidate"]["hosts"]}
+            if candidate_hosts & {host["host"] for host in sides["baseline"]["hosts"]}:
+                raise ValueError(
+                    "candidate and baseline recorded host selections overlap; refresh observations"
+                )
+            enrich_task_names(
+                sides, clients=clients, workers=args.workers, progress=progress.update
             )
-        enrich_task_names(sides, clients=clients, workers=args.workers)
-        result = compare(sides, args=args)
+            progress.update("Matching workloads and comparing outcomes")
+            result = compare(sides, args=args)
     except (OSError, ValueError, TypeError, sqlite3.Error, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

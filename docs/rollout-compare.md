@@ -12,6 +12,10 @@ Bare pool names default to `releng-hardware`. The two pools must differ.
 One candidate worker and many candidate workers use the same interface.
 Use `--details` for per-worker and task-mix details, `--verbose` for underlying
 report evidence and individual runs, or `--json` for machine-readable output.
+Interactive terminals show phase labels, a spinner, elapsed time, and worker/task
+completion counts on stderr. Candidate and baseline checks are labelled separately;
+task-name lookups and workload comparison have their own phases. Progress is
+silent in JSON mode, redirected stderr, and `TERM=dumb` terminals.
 
 ## Population and evidence
 

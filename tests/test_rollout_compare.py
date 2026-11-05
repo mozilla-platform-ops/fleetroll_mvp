@@ -7,6 +7,7 @@ from click.testing import CliRunner
 from fleetroll import rollout_compare as compare
 from fleetroll.cli import cli
 
+from tests.test_rollout_progress import Terminal
 from tests.test_rollout_report import (
     SINCE,
     UNTIL,
@@ -300,3 +301,24 @@ def test_task_identity_mismatch_is_reported_and_cannot_enter_rates(env, capsys):
     assert code == 1
     assert result["comparison"]["status"] == "unavailable"
     assert result["comparison"]["candidate"]["finished"] == 0
+
+
+@pytest.mark.parametrize("json_output", [False, True])
+def test_phase_progress_is_on_stderr_and_json_mode_is_silent(env, capsys, monkeypatch, json_output):
+    pools(env)
+    task(env, "control")
+    task(env, "canary", pool="candidate")
+    terminal = Terminal()
+    monkeypatch.setenv("TERM", "xterm")
+    monkeypatch.setattr(compare.sys, "stderr", terminal)
+    assert compare.main(arguments(env, *(["--json"] if json_output else []))) == 0
+    output = capsys.readouterr().out
+    if json_output:
+        assert json.loads(output)["schema_version"] == 1
+        assert terminal.getvalue() == ""
+    else:
+        assert "Candidate: Checking workers and task outcomes 1/1" in terminal.getvalue()
+        assert "Baseline: Checking workers and task outcomes 1/1" in terminal.getvalue()
+        assert "Fetching task names for workload matching 2/2" in terminal.getvalue()
+        assert "Matching workloads and comparing outcomes" in terminal.getvalue()
+        assert "Fetching task names" not in output
