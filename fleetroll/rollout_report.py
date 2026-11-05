@@ -1693,24 +1693,8 @@ def cli_timestamp(value: str) -> dt.datetime:
     return stamp
 
 
-def parse_args(argv=None, *, prog=None):
-    parser = argparse.ArgumentParser(description=__doc__, prog=prog)
-    parser.add_argument("hosts", nargs="*", help="Hostnames or one host-list file.")
-    selection = parser.add_mutually_exclusive_group()
-    selection.add_argument(
-        "--role",
-        help="Select current hosts and assess historical evidence only in this Puppet role.",
-    )
-    selection.add_argument(
-        "--worker-type",
-        help="Select current hosts and assess history only in this worker type or "
-        "provisioner/worker-type (default provisioner: releng-hardware).",
-    )
-    parser.add_argument(
-        "--provisioner",
-        default=None,
-        help="Provisioner for a bare worker type (default releng-hardware).",
-    )
+def add_report_options(parser):
+    """Shared evidence, window, output and sample controls for rollout commands."""
     parser.add_argument(
         "--worker-group",
         default="mdc1",
@@ -1769,6 +1753,27 @@ def parse_args(argv=None, *, prog=None):
         help="Include all details plus individual task results and configuration gaps.",
     )
     parser.add_argument("--json", action="store_true")
+
+
+def parse_args(argv=None, *, prog=None):
+    parser = argparse.ArgumentParser(description=__doc__, prog=prog)
+    parser.add_argument("hosts", nargs="*", help="Hostnames or one host-list file.")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument(
+        "--role",
+        help="Select current hosts and assess historical evidence only in this Puppet role.",
+    )
+    selection.add_argument(
+        "--worker-type",
+        help="Select current hosts and assess history only in this worker type or "
+        "provisioner/worker-type (default provisioner: releng-hardware).",
+    )
+    parser.add_argument(
+        "--provisioner",
+        default=None,
+        help="Provisioner for a bare worker type (default releng-hardware).",
+    )
+    add_report_options(parser)
     args = parser.parse_args(argv)
     if bool(args.hosts) + bool(args.role) + bool(args.worker_type) != 1:
         parser.error("pass exactly one of hostnames/file, --role, or --worker-type")
@@ -1790,6 +1795,11 @@ def parse_args(argv=None, *, prog=None):
         args.provisioner, args.worker_type = provisioner, pool
     else:
         args.provisioner = DEFAULT_TC_PROVISIONER
+    return validate_report_options(args, parser=parser)
+
+
+def validate_report_options(args, *, parser):
+    """Resolve one fixed window and validate shared report controls."""
     if (
         not 1 <= args.workers <= 20
         or not math.isfinite(args.max_observation_gap)
@@ -1810,8 +1820,8 @@ def parse_args(argv=None, *, prog=None):
     return args
 
 
-def main(argv=None, *, prog=None) -> int:
-    args = parse_args(argv, prog=prog)
+def build_report(args, *, clients=None) -> dict[str, Any]:
+    """Collect a report without rendering; callers own presentation and exit policy."""
     overrides_dir = args.audit_log.parent / OVERRIDES_DIR_NAME
     history_metadata: dict[str, Any] = {}
     try:
@@ -1838,10 +1848,10 @@ def main(argv=None, *, prog=None) -> int:
         )
         if not selected:
             raise ValueError("no matching recorded hosts; refresh gather host or check selection")
-        clients = create_tc_clients(load_tc_credentials())
+        if clients is None:
+            clients = create_tc_clients(load_tc_credentials())
     except (OSError, ValueError, TypeError, sqlite3.Error, RuntimeError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        raise ValueError(str(exc)) from exc
     hosts = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {
@@ -1939,13 +1949,23 @@ def main(argv=None, *, prog=None) -> int:
         overrides_dir=overrides_dir,
         queue=clients.queue,
     )
+    return report
+
+
+def main(argv=None, *, prog=None) -> int:
+    args = parse_args(argv, prog=prog)
+    try:
+        report = build_report(args)
+    except (OSError, ValueError, TypeError, sqlite3.Error, RuntimeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
     if args.json:
         print(json.dumps(report, indent=2))
     else:
         print_report(report, details=args.details, verbose=args.verbose)
     failed = any(
         group["outcomes"][outcome]
-        for group in summary["cohorts"]
+        for group in report["summary"]["cohorts"]
         for outcome in ("failed", "exception", "unknown")
     )
-    return int(bool(errors or failed))
+    return int(bool(report["errors"] or failed))

@@ -1281,7 +1281,23 @@ def _hold_action(operation: str) -> click.Command:
 for _operation in ("show", "set", "clear"):
     host_hold.add_command(_hold_action(_operation))
 
-install_hierarchy(cli)["host"].add_command(host_hold)
+
+@click.command(
+    "compare",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    add_help_option=False,
+)
+@click.pass_context
+def rollout_compare(ctx: click.Context):
+    """Compare candidate and baseline worker pools."""
+    from .rollout_compare import main
+
+    ctx.exit(main(ctx.args, prog=ctx.command_path))
+
+
+_groups = install_hierarchy(cli)
+_groups["host"].add_command(host_hold)
+_groups["rollout"].add_command(rollout_compare)
 
 
 def main():

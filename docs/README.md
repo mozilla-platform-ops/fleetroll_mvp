@@ -10,7 +10,7 @@ contracts in more detail.
 | --- | --- |
 | Find and order hosts | [Filter, sort, and saved filters](monitor-filter-sort.md) |
 | Record operational context | [Host notes](notes-feature.md) |
-| Check configuration and task outcomes | [Verify a rollout](rollout-health-verification.md), [rollout report](rollout-report.md) |
+| Check configuration and task outcomes | [Verify a rollout](rollout-health-verification.md), [rollout report](rollout-report.md), [compare pools](rollout-compare.md) |
 | Understand when Puppet runs | [Puppet execution in Ronin](puppet-execution-mechanisms.md) |
 | Inspect Windows workers | [Windows hosts](windows-support.md) |
 | Use the browser host grid | [Web interface](web-interface.md) |

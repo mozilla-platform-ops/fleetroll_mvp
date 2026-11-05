@@ -62,6 +62,10 @@ def observation(host, *, stamp=UNTIL, sha=None, git=MASTER, **changes):
 
 @pytest.fixture
 def env(tmp_path, temp_db, db_conn, monkeypatch):
+    return make_env(tmp_path, temp_db=temp_db, db_conn=db_conn, monkeypatch=monkeypatch)
+
+
+def make_env(tmp_path, *, temp_db, db_conn, monkeypatch):
     directory = tmp_path / "overrides"
     directory.mkdir()
     clients = SimpleNamespace(queue=Mock(), worker_manager=Mock())

@@ -245,6 +245,24 @@ exit 2 indicates invalid input or unavailable local evidence. Exit 0 is not a
 rollout go-ahead. See [rollout report](docs/rollout-report.md) for the
 history model, limitations, and versioned JSON schema.
 
+#### Comparing a candidate pool with a baseline
+
+```bash
+uv run fleetroll rollout compare \
+  --candidate-pool releng-hardware/gecko-t-linux-talos-2404-tc-v115 \
+  --baseline-pool releng-hardware/gecko-t-linux-talos-2404
+```
+
+The comparison uses one fixed time window and Fleetroll's recorded worker
+population. It shows observed and configuration-attributed outcomes on both
+sides, then compares verified tasks with matching names and Puppet roles. Exact
+names take precedence; unmatched replay names automatically try a `Replay: `
+prefix fallback, with its use reported. Use `--exact-task-names` to disable it.
+Use `--details` for worker and workload breakdowns, or `--json` for the versioned
+comparison contract. Small samples, workload differences, missing workers and
+attribution limits remain visible. See [pool comparison](docs/rollout-compare.md)
+for selection rules, limits and exit status.
+
 #### Data freshness
 
 `data freshness` reports host-audit and Taskcluster observation freshness
