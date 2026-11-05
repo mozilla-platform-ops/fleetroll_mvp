@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .data_freshness import cmd_data_freshness
+from .diagnose import cmd_host_diagnose
 from .gather_gh import cmd_gh_fetch
 from .gather_host import cmd_host_audit
 from .gather_tc import cmd_tc_fetch
@@ -23,6 +24,7 @@ __all__ = [
     "cmd_data_freshness",
     "cmd_gh_fetch",
     "cmd_host_audit",
+    "cmd_host_diagnose",
     "cmd_host_hold",
     "cmd_host_idle",
     "cmd_host_monitor",

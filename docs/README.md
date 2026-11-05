@@ -26,6 +26,7 @@ contracts in more detail.
 | Puppet run fields and collector paths | [Puppet metadata](reference/puppet-state-tracking.md) |
 | Taskcluster identity selection | [Worker identity collection](reference/worker-identity.md) |
 | Machine-readable host and worker evidence | [Monitor JSON v3](reference/monitor-json.md) |
+| Live worker health diagnostics | [Host diagnosis JSON v1](reference/host-diagnose.md) |
 | Retained identity for unreachable hosts | [Historical worker identity](reference/historical-worker-identity.md) |
 | Configuration timelines and storage measurements | [Compact configuration history](reference/configuration-history.md) |
 | Consumers and compatibility expectations | [Tool integrations](reference/tool-integrations.md) |

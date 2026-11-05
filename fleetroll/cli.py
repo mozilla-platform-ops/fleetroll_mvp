@@ -14,6 +14,7 @@ from .cli_hierarchy import install_hierarchy
 from .cli_types import (
     DataFreshnessArgs,
     HostAuditArgs,
+    HostDiagnoseArgs,
     HostHoldArgs,
     HostIdleArgs,
     HostMonitorArgs,
@@ -32,6 +33,7 @@ from .commands import (
     cmd_data_freshness,
     cmd_gh_fetch,
     cmd_host_audit,
+    cmd_host_diagnose,
     cmd_host_hold,
     cmd_host_idle,
     cmd_host_monitor,
@@ -808,6 +810,35 @@ def host_run_puppet(
         quiet=quiet,
     )
     cmd_host_run_puppet(args)
+
+
+@cli.command("host-diagnose")
+@click.argument("host", metavar="HOST")
+@click.option("--json", "json_output", is_flag=True, help="Emit versioned diagnostic JSON.")
+@click.option("--timeout", type=click.IntRange(min=1), default=30, show_default=True)
+@click.option("--connect-timeout", type=click.IntRange(min=1), default=10, show_default=True)
+@click.option("--ssh-option", multiple=True, help="Extra ssh option (repeatable).")
+def host_diagnose(
+    host: str,
+    json_output: bool,
+    timeout: int,
+    connect_timeout: int,
+    ssh_option: tuple[str, ...],
+) -> None:
+    """Diagnose one Linux host using live gwhc without changing the host.
+
+    Completed healthy or unhealthy diagnoses exit 0. Failed or unsupported
+    checks exit 1. Legacy evidence is diagnostic only; zombie remains unknown.
+    """
+    cmd_host_diagnose(
+        HostDiagnoseArgs(
+            host=host,
+            json=json_output,
+            timeout=timeout,
+            connect_timeout=connect_timeout,
+            ssh_option=list(ssh_option) or None,
+        )
+    )
 
 
 @cli.command("host-idle")

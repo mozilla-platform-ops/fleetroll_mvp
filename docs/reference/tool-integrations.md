@@ -21,6 +21,7 @@ check exit status. Tables and diagnostic text are not stable parsing interfaces.
 
 | Machine interface | Contract | Preserve |
 | --- | --- | --- |
+| Live worker diagnosis | Diagnosis v1: [host diagnose JSON](host-diagnose.md) | Collection success separate from health, valid exit 1 reports, full structured checks, upstream schema status and source times. Legacy evidence does not qualify for automatic zombie recovery. Medic integration is pending. |
 | Host snapshot and worker evidence | Worker evidence v3: [monitor JSON](monitor-json.md), [historical identity](historical-worker-identity.md) | Host-keyed snapshots, full identity, source timestamps, current/historical distinction, lookup outcomes, pinned provenance. Follow mode uses different framing and is not a durable event stream. |
 | Collection freshness | Freshness v2: [usage](../../README.md#data-freshness), [producer](../../fleetroll/commands/data_freshness.py) | Separate host/TC sources, required sources, coverage, overall status, failures. Without `--require-fresh`, successful reporting does not imply fresh data. |
 | Hostname selection | Unversioned `host monitor --once --hostname-only` | One FQDN per line and documented filter semantics. Candidate selection does not authorize actions. |

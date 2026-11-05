@@ -531,6 +531,23 @@ paths are refused. The privileged file operation requires passwordless
 `sudo -n sh` access. Recorded host observations and monitor columns are not
 updated by these commands; use `host hold show` for current hold status.
 
+### Diagnosing worker health
+
+`host diagnose` collects live Linux gwhc evidence without changing the host or
+recorded observations. It preserves structured checks and valid unhealthy reports
+on gwhc exit 1. A completed diagnosis exits 0 even when the worker is unhealthy;
+collection or validation failures exit 1 with JSON still printed.
+
+```bash
+uv run fleetroll host diagnose t-linux64-ms-017 --json
+```
+
+The versioned Fleetroll envelope keeps health separate from collection status.
+Current unversioned gwhc reports are diagnostic only: normalized zombie status
+remains unknown pending the upstream contract. See the
+[diagnosis JSON contract](docs/reference/host-diagnose.md) for compatibility,
+fields, failures, and migration from idle diagnostics. Medic integration is separate.
+
 ### Checking whether a host is idle
 
 `host idle` checks one Linux host over SSH using live `sudo -n gwhc --json`

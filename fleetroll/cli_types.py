@@ -158,6 +158,17 @@ class HostHoldArgs:
 
 
 @dataclass
+class HostDiagnoseArgs:
+    """Arguments for read-only live health diagnosis."""
+
+    host: str
+    ssh_option: list[str] | None
+    connect_timeout: int
+    timeout: int
+    json: bool
+
+
+@dataclass
 class HostIdleArgs:
     """Arguments for the read-only live idle check."""
 

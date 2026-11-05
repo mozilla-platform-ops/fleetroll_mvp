@@ -15,6 +15,7 @@ COMMAND_PATHS = {
     "host-set-vault": ("vault", "set"),
     "host-monitor": ("host", "monitor"),
     "host-idle": ("host", "idle"),
+    "host-diagnose": ("host", "diagnose"),
     "host-run-puppet": ("host", "run-puppet"),
     "host-reboot-if-idle": ("host", "reboot-if-idle"),
     "note-add": ("note", "add"),

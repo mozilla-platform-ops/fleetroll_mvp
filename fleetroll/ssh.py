@@ -747,6 +747,28 @@ fi
     return "sh -c " + shlex.quote(body)
 
 
+def remote_diagnose_script() -> str:
+    """Collect gwhc once, preserving stdout and its exit code independently."""
+    body = r"""marker() { printf 'FLEETROLL_DIAGNOSE_%s=%s\n' "$1" "$2"; }
+marker CHECKED_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+os_type=$(uname -s 2>/dev/null)
+marker OS_TYPE "$os_type"
+if [ "$os_type" != Linux ]; then
+  marker ERROR unsupported_os
+  exit 0
+fi
+if ! command -v gwhc >/dev/null 2>&1; then
+  marker ERROR gwhc_missing
+  exit 0
+fi
+gwhc_json=$(sudo -n gwhc --json)
+marker GWHC_EXIT "$?"
+marker JSON_BEGIN ""
+printf '%s\n' "$gwhc_json"
+"""
+    return "sh -c " + shlex.quote(body)
+
+
 def remote_idle_script() -> str:
     """Collect Linux worker health and Puppet activity without changing the host.
 

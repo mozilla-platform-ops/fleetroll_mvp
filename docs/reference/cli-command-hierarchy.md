@@ -14,6 +14,7 @@ Both `fleetroll` and `fr` expose the same hierarchy.
 | show-vault | vault show |
 | host-set-vault | vault set |
 | host-monitor | host monitor |
+| host-diagnose | host diagnose |
 | host-run-puppet | host run-puppet |
 | host-reboot-if-idle | host reboot-if-idle |
 | note-add | note add |
