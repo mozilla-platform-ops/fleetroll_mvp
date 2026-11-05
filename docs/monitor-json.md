@@ -22,10 +22,9 @@ lookup path. See the [historical identity contract](historical-worker-identity.m
 for its full shape, retention, override rules, examples, and consumer migration.
 Historical evidence never resolves or refreshes current-evidence fields below.
 
-Before changing this schema or its evidence semantics, review the
-[tool integration inventory](tool-integrations.md) for affected consumers,
-support decisions, and migration coordination. Consumers also depend on source
-timestamps, lookup provenance, and failure behavior, not only field names.
+For schema or evidence-semantic changes (including timestamps, provenance, and
+failure behavior), check the [integration inventory](tool-integrations.md) for
+affected consumers and migration requirements.
 
 ## Configured worker type
 

@@ -1,193 +1,134 @@
 # Tool integrations
 
-This inventory records tools and agents that consume Fleetroll data or invoke
-its commands. Use it when changing CLI behavior, JSON schemas, evidence semantics,
-or storage. External integrations are described by function so their requirements
-remain useful across tool names and implementations.
+Use this inventory when changing Fleetroll's CLI, JSON, evidence semantics, or
+storage. The initial survey covered repository scripts and agent instructions,
+plus local relops-infra, ronin_puppet, pool-classifier, and worker_rehab_tool
+checkouts. Add newly discovered consumers and their owners; private scripts and
+operator sessions may have other dependencies.
 
-The initial survey covered repository scripts and agent instructions, plus local
-checkouts of relops-infra, ronin_puppet, pool-classifier, and worker_rehab_tool.
-It found the consumers below and a proposed pool-analysis integration; it is not
-an exhaustive inventory of private scripts or operator sessions. Add a record
-when another consumer is identified, including its owner and contact route.
+## Interfaces and compatibility
 
-## Support decisions and compatibility
-
-| Decision | Meaning |
+| Support | Meaning |
 | --- | --- |
-| Supported | A documented Fleetroll interface whose behavior must be considered when changing the producer. This does not guarantee an external tool's policy or availability. |
-| Best-effort | A convenience workflow or repository-specific asset; check its callers when changing it, but it has no independently versioned compatibility contract. |
-| Unsupported | An internal interface or proposed dependency that consumers must not assume is stable or available. |
-| Deprecated | Still available with a documented migration and removal policy. No integration below currently has this decision. |
+| Supported | Documented interface; changes require compatibility review. External policy and availability remain the consumer's responsibility. |
+| Best-effort | Convenience workflow or repository asset; check callers, but no independent versioned contract. |
+| Unsupported | Internal interface or proposal with no stability or availability guarantee. |
 
-Prefer canonical grouped CLI commands. Existing flat aliases are retained as
-described in [CLI command hierarchy](cli-command-hierarchy.md); this inventory
-does not introduce a removal schedule. Human-readable tables and diagnostic text
-are for people, not stable parsing interfaces. Use JSON or `--hostname-only`
-where provided. Keep machine output on stdout separate from stderr diagnostics,
-and check the command's exit status.
+No listed integration is deprecated. Prefer grouped CLI commands; retained flat
+aliases follow the [CLI hierarchy](cli-command-hierarchy.md), with no new removal
+schedule here. Parse JSON or `--hostname-only`, separate stdout from stderr, and
+check exit status. Tables and diagnostic text are not stable parsing interfaces.
 
-Monitor worker evidence currently uses `worker_evidence_schema_version: 3`;
-freshness reports separately use `schema_version: 2`. These versions are not
-interchangeable and are independent of the Fleetroll package version. Consumers
-should explicitly accept the versions they implement, tolerate additive fields,
-and stop automated actions on unsupported versions or invalid required evidence.
-
-For incompatible schema or semantic changes, update the relevant contract and
-schema version, review every affected entry here, and document the consumer
-migration in release notes. Coordinate with the recorded contact before retiring
-an interface or changing evidence meaning. No fixed compatibility window is
-promised. Recheck working integrations when upgrading; a package upgrade alone
-does not establish consumer compatibility.
-
-## Shared application contract
-
-Fleetroll owns collection and the meaning of its reported evidence. Consuming
-applications own their decisions, thresholds, actions, and outcome tracking.
-Applications may combine evidence from several producers, but must preserve each
-producer's identity, source timestamp, and uncertainty rather than presenting a
-join as a new observation.
-
-The supported machine interfaces today are CLI output contracts:
-
-| Contract | Version and authoritative definition | Required behavior at the boundary |
+| Machine interface | Contract | Preserve |
 | --- | --- | --- |
-| Host snapshot and worker evidence | Worker evidence v3; [monitor JSON](monitor-json.md) and [historical identity](historical-worker-identity.md) | Preserve host-keyed snapshot framing, full worker identity, source timestamps, current versus historical evidence, lookup outcomes, and pinned provenance. Follow output has different framing and is not a durable event stream. |
-| Collection freshness | Freshness v2; [freshness reporting](../README.md#data-freshness) and [producer](../fleetroll/commands/data_freshness.py) | Report host and TC sources separately, required sources, coverage, overall status, and failures. Without `--require-fresh`, successful reporting does not imply fresh data. |
-| Hostname selection | Unversioned documented `host monitor --once --hostname-only` CLI | Emit one FQDN per line; preserve documented filter semantics. Lists select candidates, not action permissions. |
+| Host snapshot and worker evidence | Worker evidence v3: [monitor JSON](monitor-json.md), [historical identity](historical-worker-identity.md) | Host-keyed snapshots, full identity, source timestamps, current/historical distinction, lookup outcomes, pinned provenance. Follow mode uses different framing and is not a durable event stream. |
+| Collection freshness | Freshness v2: [usage](../README.md#data-freshness), [producer](../fleetroll/commands/data_freshness.py) | Separate host/TC sources, required sources, coverage, overall status, failures. Without `--require-fresh`, successful reporting does not imply fresh data. |
+| Hostname selection | Unversioned `host monitor --once --hostname-only` | One FQDN per line and documented filter semantics. Candidate selection does not authorize actions. |
 
-For every consumer, record accepted schema versions, required fields and enum
-values, identity/join keys, freshness policy, command exit handling, and owner.
-Treat full provisioner/pool/group/worker-ID identity as distinct from a hostname
-or short worker label. An exact historical baseline includes provenance, not
-just equal identity strings. Missing, unknown, failed, stale, and contradicted
-evidence are distinct states; a previous success must not hide a later failure.
-Consumers must reject unknown values where a decision requires a known state.
+Schema versions are independent of each other and the package version. Consumers
+must explicitly accept versions they implement, tolerate additive fields, and stop
+automated actions on unsupported versions or invalid required evidence. Record
+required fields/enums, join keys, freshness policy, exit handling, and owner.
 
-Removing or renaming fields, changing types or timestamp meaning, changing
-identity resolution, and reinterpreting status values are incompatible changes.
-Adding a status that consumers must understand also requires migration review.
-An additive optional field can remain within the existing version only when it
-preserves existing behavior. Producer changes must update contract examples and
-behavior tests; consumers need fixtures for accepted versions, missing evidence,
-failed lookups, mismatched identities/provenance, and unsupported versions.
+Fleetroll owns evidence collection and meaning; consumers own decisions, actions,
+and outcome tracking. Joins must preserve producer identity, source timestamps,
+and uncertainty. Full provisioner/pool/group/worker-ID identity differs from a
+hostname; historical baseline equality also requires provenance. Keep missing,
+unknown, failed, stale, and contradicted states distinct. Previous success cannot
+hide a later failure; reject unknown values when a decision needs a known state.
 
-If a shared HTTP API is introduced for external applications, define its own
-versioning, authentication, authorization, errors, and freshness behavior before
-declaring it supported. Reuse the documented evidence semantics where applicable;
-do not silently equate a local web route or database table with this external
-contract. New application integrations belong in this inventory before other
-applications rely on them.
+Field removal/renaming, type or timestamp changes, identity-resolution changes,
+and reinterpreted or newly required statuses need migration review. For incompatible
+changes, update the contract and schema version, review affected consumers with
+their owners, and document migration in release notes. Optional additions may keep
+the version only if behavior is preserved. No fixed compatibility window is
+promised; recheck integrations on upgrade.
 
-## Automated worker recovery tool
+Update producer examples and behavior tests. Consumer fixtures should cover
+accepted/unsupported versions, missing evidence, lookup failures, and identity or
+provenance mismatches. A future shared HTTP API needs explicit versioning,
+authentication, authorization, errors, and freshness semantics before support;
+local web routes and database tables do not provide that contract.
 
-**Owner:** Release Operations operators of the recovery workflow.
-**Contact:** coordinate through the Fleetroll maintainer (`aerickson`) using a
-[repository issue](https://github.com/mozilla-platform-ops/fleetroll_mvp/issues)
-until a separate integration owner/contact is recorded.
-**Decision:** supported CLI and versioned evidence contracts; external recovery
-policy and actions remain the consuming tool's responsibility. Host-list paths
-and named filter files are best-effort repository assets.
+## Automated worker recovery
 
-A recovery tool can identify silent Linux hardware workers, repair a clock over
-SSH where appropriate, reset selected machines through an out-of-band management
-interface, collect post-recovery diagnostics, and track repeated failures. Its
-Fleetroll integration uses local CLI subprocesses and recorded observations;
-it does not read SQLite or the audit log directly or depend on a central HTTP API.
+**Owner:** Release Operations recovery operators. **Support:** supported CLI and
+versioned evidence; best-effort host lists and named filters.
 
-| Interface | Use and required contract |
+The recovery tool uses local CLI subprocesses and recorded observations to find
+silent Linux workers, triage clocks, request out-of-band resets, collect
+diagnostics, and track repeat failures. It does not read SQLite/audit logs directly
+or depend on a central HTTP API.
+
+| Interface | Dependency |
 | --- | --- |
-| `fleetroll data freshness HOSTS_FILE --json --require-fresh` | Validate freshness schema v2, required host and TC sources, per-source and overall status, failure list, and exit status. Fleet coverage is separate from individual recovery eligibility. |
-| `fleetroll host monitor HOST_OR_FILE --once --json` | Read a host-keyed snapshot with matching `host` fields and worker evidence v3, including explicit missing evidence. Producing the snapshot does not refresh collection timestamps. |
-| `--filter-file configs/filters/moonshots-hung.yaml` | Select candidates using the checked-in filter: host prefix, TC inactivity over four hours, data age over four hours, no note, and hostname ordering. Selection alone does not authorize recovery. |
-| `fleetroll gather tc HOST_OR_FILE --use-historical-identity` | Query the exact retained provisioner, pool, group, and worker ID in one batch, pinning historical provenance and recording both successful observations and failed attempts. |
-| `fleetroll host monitor HOST_OR_FILE --once --hostname-only --filter QUERY` | Obtain observed Linux fleet membership for reporting without parsing a table. |
-| `fleetroll gather host HOST` | Collect a live host audit to append to a diagnostic report. Diagnostic text is not parsed as an automation contract. |
-| `configs/host-lists/linux/all.list` and `all_moonshots.list` | Supply expected inventory, bound candidate membership, and provide the population for a fleet reset circuit breaker. These paths require a local repository checkout. |
+| `fleetroll data freshness HOSTS_FILE --json --require-fresh` | Freshness v2, required host/TC sources, per-source and overall status, failures, exit status. Fleet coverage differs from per-host eligibility. |
+| `fleetroll host monitor HOST_OR_FILE --once --json` | Host-keyed snapshot, matching `host` fields, worker evidence v3, explicit missing evidence, unchanged source timestamps. |
+| `--filter-file configs/filters/moonshots-hung.yaml` | Host prefix, TC inactivity/data age over four hours, no note, hostname ordering. Selects candidates only. |
+| `fleetroll gather tc HOST_OR_FILE --use-historical-identity` | Batch queries of exact retained identities, pinned provenance, successful observations and failed attempts. |
+| `fleetroll host monitor HOST_OR_FILE --once --hostname-only --filter QUERY` | Observed Linux fleet membership for reporting. |
+| `fleetroll gather host HOST` | Live audit for diagnostics; diagnostic text is not parsed. |
+| `configs/host-lists/linux/all.list` and `all_moonshots.list` | Expected inventory, candidate membership, fleet circuit-breaker denominator; requires a local checkout. |
 
-The consumer currently requires the following evidence before automatic recovery:
+Automatic recovery currently requires:
 
-1. A complete historical identity collected successfully from host configuration,
-   with its original timestamp and provenance, `contradiction_status: none_known`,
-   and no uncertainty reasons. A failed latest SSH audit may coexist with this
-   baseline; it must not silently replace or refresh it.
-2. A new successful historical-identity TC lookup during this recovery check.
-   Both the latest attempt and retained successful observation must match all
-   four identity fields and the exact baseline provenance. The attempt's
-   `successful_observation_ts` must link to the retained observation timestamp.
-3. Ordered, timezone-aware lookup and observation timestamps, a known
-   `last_date_active`, and the raw worker record's task state. Missing workers,
-   lookup failures, missing activity, provenance changes, or running/pending tasks
-   block recovery rather than proving inactivity.
+1. A complete host-collected historical identity with original timestamp and
+   provenance, `contradiction_status: none_known`, and no uncertainty reasons.
+   A later SSH failure may coexist without replacing or refreshing this baseline.
+2. A successful historical TC lookup during this check. Both latest attempt and
+   retained success must match all four identity fields and exact provenance, with
+   `latest_lookup.successful_observation_ts == taskcluster.observation_ts`.
+3. Ordered, timezone-aware lookup/observation timestamps, known `last_date_active`,
+   and raw task state. Missing workers/activity, failed lookups, changed provenance,
+   or running/pending tasks block recovery.
 
-The current consumer policy requires at least 65% fresh host and TC coverage,
-normally within a 15-minute loop interval. Per-host identity age must exceed
-four hours and be at most seven days; activity must be over four hours old at
-query start. Lookup evidence must be younger than the configured freshness limit
-and under one hour. These are consumer defaults, not Fleetroll retention or
-health guarantees. Fleetroll retains historical baselines without automatic expiry.
+Consumer defaults are at least 65% fresh host/TC coverage, normally within a
+15-minute loop; per-host identity age over four hours and at most seven days;
+activity over four hours old at query start; and lookup evidence younger than both
+the configured freshness limit and one hour. These are consumer policy, not
+Fleetroll guarantees. Historical baselines have no automatic expiry.
 
-The tool refreshes and validates TC evidence before each automatic batch and again
-after clock triage, immediately before requesting resets. Preview also refreshes
-TC data. It owns confirmation, inventory checks, the default 20% fleet circuit
-breaker, recency exclusions, cooldowns, reset execution, and recovery verification.
-An evidence check is a snapshot, not a worker reservation or proof of recovery.
+The tool refreshes/validates TC evidence before each automatic batch and again
+following clock triage immediately before resets; previews also refresh TC data.
+It owns confirmation, inventory checks, the default 20% fleet circuit breaker,
+recency exclusions, cooldowns, resets, and recovery verification. Evidence is a
+snapshot, not a worker reservation or proof of recovery.
 
-See [monitor JSON](monitor-json.md) and
-[historical worker identity](historical-worker-identity.md) for producer semantics.
-Changes to identity retention, contradiction handling, provenance equality,
-lookup/observation linkage, activity timestamps, or raw task-state fields require
-review of this consumer even if the outer JSON shape stays unchanged.
+Review this consumer for changes to retention, contradictions, provenance equality,
+lookup/observation linkage, activity timestamps, or raw task-state fields, even
+when JSON shape is unchanged. Producer details remain in the contracts above.
 
-## Repository shell helpers and session launcher
+## Other consumers
 
-**Owner/contact:** Fleetroll maintainer (`aerickson`), through repository issues.
-**Decision:** best-effort wrappers over supported CLI commands.
-
-`tools/gather-*.sh` collect host and TC observations;
-`tools/monitor-*.sh` and `tools/start_fleetroll_tmux.py` launch operator views.
+**Repository helpers and session launcher** — Fleetroll-maintained, best-effort
+wrappers over supported CLI. `tools/gather-*.sh` collect observations;
+`tools/monitor-*.sh` and `tools/start_fleetroll_tmux.py` launch views.
 `tools/list_bad_linux_hosts.sh` and `tools/list_hosts_by_override_branch.sh`
-consume filtered hostname-only output for candidate lists and rollout targeting.
-Some helpers still invoke retained flat aliases. Check these callers during any
-alias, filtering, host-list, exit-code, or output change. Their space-separated
-output is a convenience format, not a separately versioned API. A candidate list
-does not establish that a host is safe to reset or mutate.
+consume filtered hostname-only output. Check callers for alias, filter, host-list,
+exit-code, or output changes; some still use flat aliases. Their space-separated
+output has no separate API contract.
 
-## Operator and coding-agent workflows
+**Operator and coding-agent workflows** — Owned by Release Operations and the
+Fleetroll maintainer; supported CLI, best-effort prose workflows. `AGENTS.md` and
+sibling runbooks depend on recorded JSON, timestamps, filtering, refreshes,
+mutation previews/confirmation, exit status, and verification that distinguishes
+override writes from Puppet application. Update current instructions/examples
+when these change. Historical incident notes may use superseded commands; health
+flags do not grant mutation authority.
 
-**Owner/contact:** Release Operations and Fleetroll maintainer (`aerickson`),
-through repository issues.
-**Decision:** supported documented CLI behavior; best-effort prose workflows.
+**Pool analysis and rollout correlation (proposed)** — Owned by Pool Classifier
+and Fleetroll maintainers; unsupported proposal, with no implemented consumer
+found in the surveyed checkout. Would join physical-host configuration/provenance
+with TC outcomes and capacity using host-to-worker identity, freshness,
+role/cohort context, and product links. Agree on a versioned interface before
+implementation; proposed fields, centralized storage, and an authenticated read
+API are not current promises.
 
-Repository `AGENTS.md` and sibling operational runbooks direct agents to inspect
-recorded monitor JSON first, gather when fresh evidence is needed, preview
-mutations, and verify the resulting observations. They depend on observation
-timestamps, filtering, dry-run/confirmation behavior, exit statuses, and the
-distinction between writing an override and Puppet successfully applying it.
-Update current instructions and command examples when these interfaces change.
-Historical incident notes may describe superseded commands and are not a current
-contract. No agent should infer mutation authority from a JSON health flag alone.
+Add new integrations before other applications rely on them.
 
-## Pool analysis and rollout correlation (proposed)
+## Storage and internals
 
-**Owner/contact:** Pool Classifier and Fleetroll maintainers; coordinate via the
-Fleetroll maintainer (`aerickson`) until a dedicated contact is recorded.
-**Decision:** unsupported as a deployed integration; design intent only.
-
-The sibling Pool Classifier design proposes joining physical-host state and
-configuration provenance with Taskcluster workload outcomes and capacity signals.
-It calls for stable host-to-worker identity, observation freshness, role and
-configuration/cohort context, and links between products. The survey found a
-proposal, not an implemented Fleetroll consumer in that checkout. Do not promise
-all proposed fields, centralized persistence, or a shared authenticated read API
-as part of today's contract. Agree on a versioned interface before implementation.
-
-## Storage and internal interfaces
-
-No external direct SQLite or audit-log reader was identified in this survey.
-Direct access to `~/.fleetroll/fleetroll.db`, internal Python helpers, and raw
-storage schemas is unsupported as an external compatibility contract. Repository
-web/TUI code, benchmarks, and tests use internal helpers and must evolve with
-them. Audit logging remains an operator record; its presence does not make its
-raw schema a versioned integration API. Record any discovered external reader
-here and decide its support and migration path explicitly.
+No external SQLite or audit-log reader was identified. Direct database access,
+internal Python helpers, and raw storage/audit schemas are unsupported external
+interfaces. Repository web/TUI code, benchmarks, and tests must evolve with them.
+Record discovered external readers here and decide support and migration explicitly.

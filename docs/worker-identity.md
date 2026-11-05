@@ -16,11 +16,10 @@ Configuration selection follows the managed launch paths in ronin_puppet:
 - Running generic-worker/start-worker arguments take precedence, including
   `--config PATH`, `--config=PATH`, and runner positional configuration paths.
   Relative paths are rejected because their working directory is unknown.
-- Shell-wrapper configuration paths are fallback hints, used only when no running
-  generic-worker/start-worker executable supplies a configuration. A stale wrapper
-  reference to `/etc/start-worker.yml` does not override a direct generic-worker's
-  selected configuration. Missing, unreadable, invalid, or unresolved active
-  configurations still fail collection; they do not fall back to a wrapper.
+- Shell-wrapper paths are fallback hints only when no running worker/runner
+  executable supplies a configuration. Stale wrapper paths cannot override active
+  selections; missing, unreadable, invalid, or unresolved active configurations
+  fail collection without wrapper fallback.
 - When no running configuration is found on Linux, use `/etc/start-worker.yml`,
   which the managed desktop launcher passes to start-worker.
 - On macOS, when no running configuration is found, inspect `ProgramArguments`
@@ -32,10 +31,9 @@ Configuration selection follows the managed launch paths in ronin_puppet:
   file by existence alone.
 - Runner YAML supplies identity through `provider.workerPoolID`, `workerGroup`,
   and `workerID`. Direct worker configuration supplies the four identity fields.
-  When active start-worker and generic-worker executables refer to different
-  files, all identities must agree. Multiple selected wrapper configurations must
-  also agree when wrappers supply the fallback. Unsupported custom launch
-  arrangements require collector support.
+  All selected active configurations must agree on identity, as must selected
+  wrapper configurations when used as fallback. Custom launch arrangements
+  require collector support.
 
 `gather tc` prefers the observed identity and matches `(workerGroup, workerId)`
 within the observed provisioner/pool. `WORKER_TYPE_OVERRIDE` is deployment intent:
