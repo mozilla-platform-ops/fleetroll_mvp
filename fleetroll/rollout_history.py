@@ -252,6 +252,10 @@ def build_history(
             last_break, boundary, continuous = stamp, stamp, False
             continue
         audits = [entry for entry in entries if entry.get("action", "host.audit") == "host.audit"]
+        # A failed collection says nothing about the host's configuration. Keep
+        # the last successful observation as the continuity anchor; the normal
+        # maximum gap still bounds how long that evidence can be carried.
+        audits = [entry for entry in audits if entry.get("ok") or entry.get("_compact_invalidated")]
         if not audits:
             continue
         proofs = [

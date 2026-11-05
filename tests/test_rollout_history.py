@@ -112,12 +112,12 @@ def test_long_observation_gap_is_not_bridged(tmp_path):
     assert classify(intervals, time(11, 55))[0] is not None
 
 
-def test_failed_observation_breaks_continuity(tmp_path):
+def test_failed_observation_does_not_break_bounded_continuity(tmp_path):
     failed = {**observation(10, minute=5), "ok": False}
     intervals = history(
         [observation(10), failed, observation(10, minute=30, applied=time(10))], tmp_path
     )
-    assert classify(intervals, time(10, 15))[0] is None
+    assert classify(intervals, time(10, 15))[0] is not None
     assert classify(intervals, time(10, 30))[0] is not None
 
 

@@ -624,7 +624,7 @@ def test_low_coverage_override_is_a_prominent_warning_with_comparable_sample(env
     # make a pooled coverage percentage look adequate.
     failed = {
         "host": "override",
-        "action": "host.audit",
+        "action": "host.set_override",
         "ts": (SINCE + dt.timedelta(minutes=65)).isoformat(),
         "ok": False,
     }

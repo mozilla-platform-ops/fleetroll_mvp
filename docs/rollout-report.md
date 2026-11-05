@@ -104,8 +104,10 @@ absence alone does not prove master convergence.
 Verified intervals end at successful observations, never at now. Initial coverage
 starts no earlier than the successful Puppet timestamp and observation-gap bound.
 Matching observations bridge only within that bound. Repeated Puppet runs do not
-move activation forward; revision changes create transitions. Failed observations,
-unverified state, writes/removals, and same-timestamp conflicts break continuity.
+move activation forward; revision changes create transitions. Failed collections
+provide no configuration evidence and do not themselves break continuity, but the
+gap between successful observations remains bounded. Unverified state,
+writes/removals, and same-timestamp conflicts break continuity.
 Unobserved changes reverted between scans are undetectable.
 
 A task must start and finish within one verified interval; a running task is

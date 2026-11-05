@@ -2,8 +2,10 @@
 
 Fleetroll retains 30 days of compact configuration evidence alongside the latest
 ten full observations per host and the last-success exception. Stable polling
-extends span endpoints; material configuration changes, failures, writes, and
-observation gaps preserve uncertainty boundaries. Reports read this history
+extends span endpoints; material configuration changes, unverified state, writes,
+and observation gaps preserve uncertainty boundaries. Failed collections provide
+no configuration evidence, so matching observations may bridge them within the
+configured gap bound. Reports read this history
 without gathering data or modifying storage.
 
 The timeline records role, applied repository/revision, configured/applied

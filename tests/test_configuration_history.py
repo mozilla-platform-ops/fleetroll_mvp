@@ -162,6 +162,14 @@ def test_failed_scans_and_long_outages_preserve_last_success(env):
     assert classified(intervals(env), 178)
 
 
+def test_failed_scan_does_not_break_matching_retained_observations(env):
+    records = [observation(0), {**observation(3), "ok": False}, observation(6)]
+    store(env, records)
+    assert classified(intervals(env, records), 4)
+    assert classified(intervals(env), 4)
+    assert classified(intervals(env, gap=180), 2) is None
+
+
 @pytest.mark.parametrize("action", sorted(compact.WRITE_ACTIONS))
 @pytest.mark.parametrize("ok", [True, False])
 def test_write_attempt_requires_new_convergence_and_replay_is_idempotent(env, action, ok):
