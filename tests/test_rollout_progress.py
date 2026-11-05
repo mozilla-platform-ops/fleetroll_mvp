@@ -1,10 +1,11 @@
 """Spinner liveness, cleanup and output separation."""
 
 import io
+import os
 import threading
 
 import pytest
-from fleetroll.rollout_progress import RolloutProgress
+from fleetroll.rollout_progress import RolloutProgress, progress_timing
 
 
 class Terminal(io.StringIO):
@@ -60,3 +61,40 @@ def test_noninteractive_or_disabled_progress_is_silent(monkeypatch, mode):
         progress.update("Fetching task names", completed=1, total=2)
     assert stream.getvalue() == ""
     assert not progress.enabled
+
+
+@pytest.mark.parametrize(
+    ("completed", "total", "elapsed", "expected"),
+    [
+        (0, 10, 5, " (5.0s)"),
+        (0, 0, 5, " (5.0s)"),
+        (1, 10, 0, " (0.0s)"),
+        (1, 10, 0.5, " (0.5s)"),
+        (4, 10, 2, " (2.0s; 2.0/s; ETA ~3s)"),
+        (10, 10, 2, " (2.0s; 5.0/s)"),
+        (None, None, 2, " (2.0s)"),
+    ],
+)
+def test_phase_estimates_need_elapsed_time_and_work(completed, total, elapsed, expected):
+    assert progress_timing(completed=completed, total=total, elapsed=elapsed) == expected
+
+
+def test_timing_stays_visible_in_narrow_terminal_and_resets_between_phases(monkeypatch):
+    from fleetroll import rollout_progress
+
+    now = 100
+    monkeypatch.setattr(rollout_progress.time, "monotonic", lambda: now)
+    monkeypatch.setattr(
+        rollout_progress.shutil, "get_terminal_size", lambda **_: os.terminal_size((80, 24))
+    )
+    monkeypatch.setenv("TERM", "xterm")
+    terminal = Terminal()
+    progress = RolloutProgress(stream=terminal)
+    progress.update("Fetching task names", completed=0, total=10, detail="2375 cached")
+    now += 2
+    progress.update("Fetching task names", completed=4, total=10, detail="2375 cached; " * 20)
+    assert "2.0/s; ETA ~3s" in terminal.getvalue()
+    progress.update("Matching workloads")
+    final = terminal.getvalue().split("\r")[-1]
+    assert "(0.0s)" in final
+    assert "ETA" not in final

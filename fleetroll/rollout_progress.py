@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import sys
 import threading
 import time
+
+
+def progress_timing(*, completed, total, elapsed):
+    """Estimate from completed network lookups/host checks in this phase only."""
+    timing = f"{elapsed:.1f}s"
+    if elapsed >= 1 and completed and total:
+        rate = completed / elapsed
+        timing += f"; {rate:.1f}/s"
+        if completed < total:
+            remaining = math.ceil((total - completed) / rate)
+            timing += f"; ETA ~{remaining}s"
+    return f" ({timing})"
 
 
 class RolloutProgress:
@@ -50,8 +63,11 @@ class RolloutProgress:
             count += f"; {self._detail}"
         elapsed = time.monotonic() - self._started
         marker = " " if final else "|/-\\"[self._frame % 4]
-        text = f"{marker} {self._label}{count} ({elapsed:.1f}s)"
+        timing = progress_timing(completed=self._completed, total=self._total, elapsed=elapsed)
+        text = f"{marker} {self._label}{count}"
         width = max(1, shutil.get_terminal_size(fallback=(100, 24)).columns - 1)
+        # Preserve elapsed/rate/ETA when a long label would otherwise hide them.
+        text = text[: max(0, width - len(timing))] + timing
         self.stream.write("\r" + text[:width] + "\x1b[K" + ("\r\n" if final else ""))
         self.stream.flush()
         self._frame += 1

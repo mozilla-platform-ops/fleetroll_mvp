@@ -16,6 +16,21 @@ Interactive terminals show phase labels, a spinner, elapsed time, and worker/tas
 completion counts on stderr. Candidate and baseline checks are labelled separately;
 task-name lookups and workload comparison have their own phases. Progress is
 silent in JSON mode, redirected stderr, and `TERM=dumb` terminals.
+After at least one second and one completion, counted phases also show average
+completions per second and an approximate remaining time. Task-name rates count
+completed network lookups (including errors), excluding cached/reused names;
+worker rates count processed hosts. Estimates reset for each phase and disappear
+when no work remains. They are not counts of underlying HTTP attempts or retries.
+
+Text output starts with the matched comparison result, every unavailability
+reason, matched finished counts, attribution, and successfully queried workers.
+Observed failures/exceptions/unknowns are highlighted even outside the matched
+sample. Rate differences appear in text only when the comparison is available;
+JSON retains the full computed values and status. Default outcome rows omit zero
+counts and repeated success percentages; `--details` retains the full breakdown.
+Repeated worker errors are grouped per side with up to three example hosts.
+`--details` lists every worker with concise errors; `--verbose` and `--json`
+preserve full SDK diagnostics. Other query errors remain individually visible.
 
 Task names are cached separately from host evidence in a SQLite sidecar beside
 the selected `--db` (normally `~/.fleetroll/fleetroll.task-names.sqlite3`). The

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import re
 import shutil
 import sqlite3
 import sys
@@ -380,12 +381,79 @@ def compare(sides, *, args):
     }
 
 
+def concise_worker_error(message):
+    """Remove SDK transport dumps from worker errors while retaining their category."""
+    if re.search(r"errorCode:\s+ResourceNotFound\b", message):
+        return "Taskcluster worker not found (ResourceNotFound)"
+    lines = message.strip().splitlines()
+    return lines[0] if lines else "unspecified worker error"
+
+
+def comparison_errors(result, *, verbose=False):
+    """Group equal worker errors per side; retain every original in JSON/verbose."""
+    if verbose:
+        return result["errors"]
+    grouped = {}
+    covered = set()
+    for label, side in result["sides"].items():
+        for worker in side["workers"]:
+            if worker["error"]:
+                original = f"{label}: {worker['host']}: {worker['error']}"
+                if original in result["errors"]:
+                    covered.add(original)
+                    key = label, concise_worker_error(worker["error"])
+                    grouped.setdefault(key, []).append(worker["host"])
+    messages = []
+    for (label, error), hosts in grouped.items():
+        examples = ", ".join(hosts[:3])
+        if len(hosts) > 3:
+            examples += f", +{len(hosts) - 3} more"
+        messages.append(f"{label}: {len(hosts)} worker(s): {error} ({examples})")
+    messages.extend(message for message in result["errors"] if message not in covered)
+    return messages
+
+
+def print_assessment(result, *, output):
+    """Lead with evidence limits and keep all observed problems visible."""
+    pair = result["comparison"]
+    print(f"  MATCHED VERIFIED COMPARISON: {pair['observed_result']}", file=output)
+    for reason in pair["reasons"]:
+        print(f"    Blocker: {reason}", file=output)
+    for label, side in result["sides"].items():
+        matched = pair[label]
+        fraction = side["coverage"]["fraction"]
+        coverage = f"{fraction:.1%}" if fraction is not None else "unknown"
+        print(
+            f"    {label.capitalize()}: {matched['finished']} matched finished; "
+            f"{matched['outcomes']['failed']} failed, {matched['outcomes']['exception']} exception; "
+            f"attribution {coverage}; workers {side['queried_hosts']}/{side['requested_hosts']}",
+            file=output,
+        )
+        observed = side["observed"]["outcomes"]
+        if any(observed[key] for key in ("failed", "exception", "unknown")):
+            print(
+                f"      All observed: {observed['failed']} failed, "
+                f"{observed['exception']} exception, {observed['unknown']} unknown "
+                "(includes unmatched and unattributed tasks)",
+                file=output,
+            )
+    if pair["status"] == "comparable":
+        for key in ("failure_rate_difference_pp", "exception_rate_difference_pp"):
+            if pair[key] is not None:
+                print(
+                    f"    {key.replace('_', ' ')} (candidate - baseline): {pair[key]:+.2f}",
+                    file=output,
+                )
+
+
 def print_comparison(result, *, details=False, verbose=False):
     # Use the report renderer's wrapping and TTY newline handling.
     from io import StringIO
 
     output = StringIO()
     print("◈ FLEETROLL / ROLLOUT COMPARE", file=output)
+    print_assessment(result, output=output)
+    pair = result["comparison"]
     print(f"  Window: {result['window']['since']} → {result['window']['until']}", file=output)
     if result["task_matching"]["strip_prefix"]:
         print(
@@ -406,11 +474,18 @@ def print_comparison(result, *, details=False, verbose=False):
             counts = side[kind]["outcomes"]
             print(
                 f"    {kind.capitalize()}: "
-                + ", ".join(f"{counts[key]} {key}" for key in report.OUTCOMES),
+                + (
+                    ", ".join(
+                        f"{counts[key]} {key}"
+                        for key in report.OUTCOMES
+                        if counts[key] or details or verbose
+                    )
+                    or "no tasks"
+                ),
                 file=output,
             )
             rate = side[kind]["success_rate"]
-            if rate is not None:
+            if rate is not None and (details or verbose):
                 print(f"      Finished-task success rate: {rate:.2%}", file=output)
         coverage = side["coverage"]
         print(
@@ -446,23 +521,16 @@ def print_comparison(result, *, details=False, verbose=False):
                     file=output,
                 )
                 if worker["error"]:
-                    print(f"      Error: {worker['error']}", file=output)
+                    error = worker["error"] if verbose else concise_worker_error(worker["error"])
+                    print(f"      Error: {error}", file=output)
             for task in side["task_mix"]:
                 print(
                     f"    Task mix: {task['role']} / {task['name']}: {task['finished']} finished; "
                     f"{task['outcomes']['failed']} failed; {task['outcomes']['exception']} exceptions",
                     file=output,
                 )
-    pair = result["comparison"]
-    print(f"\n  MATCHED VERIFIED COMPARISON: {pair['observed_result']}", file=output)
-    for key in ("failure_rate_difference_pp", "exception_rate_difference_pp"):
-        if pair[key] is not None:
-            print(
-                f"    {key.replace('_', ' ')} (candidate - baseline): {pair[key]:+.2f}", file=output
-            )
-    for reason in pair["reasons"]:
-        print(f"    {reason}", file=output)
     if details or verbose:
+        print("\n  WORKLOAD COMPARISONS", file=output)
         for task in pair["tasks"]:
             print(f"    {task['role']} / {task['name']}: {task['observed_result']}", file=output)
             for label in ("candidate", "baseline"):
@@ -474,8 +542,10 @@ def print_comparison(result, *, details=False, verbose=False):
                 )
     for message in result["warnings"]:
         print(f"  Warning: {message}", file=output)
-    for message in result["errors"]:
+    for message in comparison_errors(result, verbose=verbose):
         print(f"  Error: {message}", file=output)
+    if result["errors"] and not verbose:
+        print("  Use --details for every worker; --verbose or --json for full errors.", file=output)
     print("  Observed results only; not automatic rollout approval.", file=output)
     report.write_report_text(
         output.getvalue(),

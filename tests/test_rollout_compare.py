@@ -93,6 +93,10 @@ def test_many_candidates_match_only_shared_names_and_expose_task_mix(env, capsys
     assert result["comparison"]["candidate"]["finished"] == 1
     assert result["sides"]["candidate"]["requested_hosts"] == 2
     assert result["sides"]["baseline"]["unmatched_verified"]["outcomes"]["failed"] == 1
+    compare.print_comparison(result)
+    text = capsys.readouterr().out
+    assert "All observed: 1 failed, 0 exception, 0 unknown" in text
+    assert text.index("All observed:") < text.index("Window:")
 
 
 def test_unknown_configuration_failure_remains_visible(env, capsys):
@@ -389,3 +393,85 @@ def test_cache_bypass_and_unavailable_cache_preserve_comparison(env, capsys):
     assert result["comparison"] == bypassed["comparison"]
     assert any("Task-name cache read unavailable" in warning for warning in result["warnings"])
     assert result["task_name_lookups"]["fetched"] == 2
+
+
+@pytest.mark.parametrize("minimum", [1, 20])
+def test_text_leads_with_assessment_blockers_and_sample_counts(env, capsys, minimum):
+    pools(env)
+    task(env, "control")
+    task(env, "canary", pool="candidate")
+    _, result = invoke(env, capsys, "--min-finished", str(minimum))
+    compare.print_comparison(result)
+    text = capsys.readouterr().out
+    assert text.index("MATCHED VERIFIED COMPARISON:") < text.index("Window:")
+    assert "Candidate: 1 matched finished" in text
+    assert "Baseline: 1 matched finished" in text
+    assert "attribution 100.0%" in text
+    if minimum == 20:
+        assert text.index("Blocker: insufficient finished sample") < text.index("CANDIDATE:")
+        assert "minimum 20 per side" in text
+        assert "difference pp" not in text
+    else:
+        assert "same observed failure and exception rates" in text
+        assert "failure rate difference pp (candidate - baseline): +0.00" in text
+    assert "Observed: 1 completed" in text
+    assert "0 pending" not in text
+
+
+def test_worker_errors_group_by_side_without_losing_full_diagnostics(env, capsys):
+    pools(env)
+    for number in range(4):
+        seed(env, f"control-{number}")
+    task(env, "canary", pool="candidate")
+    fetch = env.clients.worker_manager.getWorker.side_effect
+
+    def get_worker(provisioner, pool, group, worker):
+        if worker.startswith("control"):
+            raise RuntimeError(
+                f"Worker {worker} not found.\n\n---\n\n* method: getWorker\n"
+                "* errorCode: ResourceNotFound\n* statusCode: 404\n* time: test-timestamp"
+            )
+        return fetch(provisioner, pool, group, worker)
+
+    env.clients.worker_manager.getWorker.side_effect = get_worker
+    code, result = invoke(env, capsys)
+    assert code == 1
+    assert len(result["errors"]) == 5
+    assert all("* method: getWorker" in error for error in result["errors"])
+    compare.print_comparison(result)
+    text = " ".join(capsys.readouterr().out.split())
+    assert "baseline: 5 worker(s): Taskcluster worker not found (ResourceNotFound)" in text
+    assert "+2 more" in text
+    assert "* method:" not in text
+    assert "--verbose or --json for full errors" in text
+    compare.print_comparison(result, details=True)
+    text = capsys.readouterr().out
+    assert "control-3:" in text
+    assert "* method:" not in text
+    compare.print_comparison(result, verbose=True)
+    assert "* method: getWorker" in capsys.readouterr().out
+
+
+def test_grouping_keeps_distinct_worker_errors_and_nonworker_errors_separate():
+    result = {
+        "sides": {
+            "candidate": {"workers": [{"host": "a", "error": "observation failed"}]},
+            "baseline": {
+                "workers": [
+                    {"host": "b", "error": "observation failed"},
+                    {"host": "c", "error": "permission denied"},
+                ]
+            },
+        },
+        "errors": [
+            "candidate: a: observation failed",
+            "baseline: b: observation failed",
+            "baseline: c: permission denied",
+            "baseline: task query unavailable",
+        ],
+    }
+    errors = compare.comparison_errors(result)
+    assert len(errors) == 4
+    assert errors[0] == "candidate: 1 worker(s): observation failed (a)"
+    assert errors[-1] == "baseline: task query unavailable"
+    assert compare.comparison_errors(result, verbose=True) == result["errors"]
