@@ -13,6 +13,14 @@ missing-configuration or conflicting-observation markers. Audit fields are
 whitelisted; credentials and configuration contents are excluded. Updates share
 the host-observation transaction and happen before raw pruning.
 
+Database initialization replays override writes from the audit log on every
+start, which heals any boundary dropped by a failed database write. The scan is
+linear in audit log size (about 6 ms for 3,000 records) and is bounded by log
+rotation at 100 MB. `configuration_history` performs the same scan. Replay reads
+the default `audit.jsonl` beside the database unless the caller passes
+`audit_log`; only `gather host` does, so a custom `--audit-log` used elsewhere is
+not replayed by those commands.
+
 Only a successful audit with collection status `ok` and four nonempty string
 identity fields qualifies. A newer complete collection replaces the baseline,
 including when its identity is unchanged. Baselines have no automatic expiry.
