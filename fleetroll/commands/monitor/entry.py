@@ -121,7 +121,11 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     print(h)
             elif args.json:
                 payload = build_monitor_json_snapshot(
-                    sorted_hosts, latest=latest, tc_data=tc_data, sha_cache=sha_cache
+                    sorted_hosts,
+                    latest=latest,
+                    tc_data=tc_data,
+                    sha_cache=sha_cache,
+                    lookup_attempts=provider.load_tc_lookup_attempts(hosts=sorted_hosts),
                 )
                 print(json.dumps(payload, indent=2, sort_keys=True))
             else:
@@ -153,7 +157,11 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
 
             if args.json:
                 payload = build_monitor_json_snapshot(
-                    sorted_hosts, latest=latest, tc_data=tc_data, sha_cache=sha_cache
+                    sorted_hosts,
+                    latest=latest,
+                    tc_data=tc_data,
+                    sha_cache=sha_cache,
+                    lookup_attempts=provider.load_tc_lookup_attempts(hosts=sorted_hosts),
                 )
                 print(json.dumps(payload, indent=2, sort_keys=True), flush=True)
                 for record in follow_monitor_json(

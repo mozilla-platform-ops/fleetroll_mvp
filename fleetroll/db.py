@@ -3,6 +3,7 @@
 Provides storage for high-frequency data:
 - host_observations: Host audit records
 - tc_workers: TaskCluster worker data
+- tc_lookup_attempts: Latest completed per-host lookup result
 - github_refs: GitHub branch references
 
 All tables use hybrid schema (indexed columns + JSON blob) and automatic
@@ -66,6 +67,15 @@ def init_db(db_path: Path, *, audit_log: Path | None = None) -> None:
                 type TEXT NOT NULL,
                 data JSON NOT NULL,
                 PRIMARY KEY (host, ts)
+            )
+        """)
+
+        # Latest lookup attempts have bounded retention: one row per host.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS tc_lookup_attempts (
+                host TEXT PRIMARY KEY,
+                ts TEXT NOT NULL,
+                data JSON NOT NULL
             )
         """)
 
@@ -270,6 +280,31 @@ def insert_tc_worker(
         """,
         (host, host, retention_limit),
     )
+
+
+def insert_tc_lookup_attempt(conn: sqlite3.Connection, record: dict[str, Any]) -> None:
+    """Keep one latest completed attempt per host, independently of worker successes."""
+    conn.execute(
+        """
+        INSERT INTO tc_lookup_attempts (host, ts, data) VALUES (?, ?, ?)
+        ON CONFLICT (host) DO UPDATE SET ts=excluded.ts, data=excluded.data
+        WHERE excluded.ts >= tc_lookup_attempts.ts
+        """,
+        (record["host"], record["ts"], json.dumps(record)),
+    )
+
+
+def get_latest_tc_lookup_attempts(
+    conn: sqlite3.Connection, hosts: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Return completed lookup attempts keyed by full hostname; never infer legacy attempts."""
+    if not hosts:
+        return {}
+    placeholders = ",".join("?" for _ in hosts)
+    rows = conn.execute(
+        f"SELECT host, data FROM tc_lookup_attempts WHERE host IN ({placeholders})", hosts
+    ).fetchall()
+    return {row["host"]: json.loads(row["data"]) for row in rows}
 
 
 def insert_github_ref(

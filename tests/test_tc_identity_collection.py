@@ -8,7 +8,12 @@ import pytest
 from click.testing import CliRunner
 from fleetroll.cli import cli
 from fleetroll.commands import gather_tc
-from fleetroll.db import get_latest_tc_workers, insert_host_observation, insert_tc_worker
+from fleetroll.db import (
+    get_latest_tc_lookup_attempts,
+    get_latest_tc_workers,
+    insert_host_observation,
+    insert_tc_worker,
+)
 from fleetroll.exceptions import FleetRollError
 from fleetroll.taskcluster import WorkerFetchResult
 
@@ -93,6 +98,16 @@ def test_unknown_role_uses_configured_pool_and_full_identity(tc_env, db_conn, tm
     assert record["worker_id"] == "not-the-hostname"
     assert record["worker_group"] == "mdc1"
     assert record["worker_type"] == IDENTITY["workerType"]
+    attempt = get_latest_tc_lookup_attempts(db_conn, ["host.example.com"])["host.example.com"]
+    assert attempt["status"] == "success"
+    assert attempt["successful_observation_ts"] == NEW_TS
+    assert attempt["identity"] == {
+        "provisioner": IDENTITY["provisionerId"],
+        "worker_type": IDENTITY["workerType"],
+        "worker_group": IDENTITY["workerGroup"],
+        "worker_id": IDENTITY["workerId"],
+    }
+    assert attempt["resolution_source"] == "host_configuration"
     assert "legacy" not in result.output
 
 
@@ -110,6 +125,9 @@ def test_explicit_identity_failure_blocks_legacy_fallback(tc_env, db_conn, tmp_p
         assert "host: worker identity unresolved" in result.output
     tc_env.assert_not_called()
     assert get_latest_tc_workers(db_conn, ["host"])["host"]["ts"] == OLD_TS
+    attempt = get_latest_tc_lookup_attempts(db_conn, ["host"])["host"]
+    assert attempt["status"] == "identity_unresolved"
+    assert all(value is None for value in attempt["identity"].values())
 
 
 @pytest.mark.parametrize("quiet", [False, True])
@@ -174,6 +192,20 @@ def test_partial_success_preserves_failed_host_timestamp(tc_env, db_conn, tmp_pa
     records = get_latest_tc_workers(db_conn, ["good", "bad"])
     assert records["good"]["ts"] == NEW_TS
     assert records["bad"]["ts"] == OLD_TS
+    attempts = get_latest_tc_lookup_attempts(db_conn, ["good", "bad"])
+    assert attempts["good"]["status"] == "success"
+    assert (
+        attempts["bad"]["status"]
+        == {
+            "unresolved": "identity_unresolved",
+            "missing": "worker_missing",
+            "wrong-group": "worker_missing",
+            "api": "pool_query_failed",
+            "task-status": "task_lookup_failed",
+        }[failure]
+    )
+    assert attempts["bad"]["ts"] == NEW_TS
+    assert attempts["bad"]["successful_observation_ts"] is None
 
 
 @pytest.mark.parametrize("quiet", [False, True])
@@ -206,6 +238,9 @@ def test_legacy_duplicate_worker_ids_are_not_arbitrarily_matched(tc_env, db_conn
     result = invoke(["host.example.com"], tmp_path=tmp_path)
     assert result.exit_code != 0
     assert get_latest_tc_workers(db_conn, ["host.example.com"])["host.example.com"]["ts"] == OLD_TS
+    attempt = get_latest_tc_lookup_attempts(db_conn, ["host.example.com"])["host.example.com"]
+    assert attempt["status"] == "worker_ambiguous"
+    assert attempt["resolution_source"] == "legacy_role"
 
 
 def test_failed_windows_discovery_does_not_discard_observed_linux_success(
@@ -261,3 +296,78 @@ def test_all_pool_requests_failed_still_prints_one_quiet_summary(tc_env, db_conn
     assert "long private API diagnostic" not in result.output
     assert len(result.output.splitlines()) == 1
     assert get_latest_tc_workers(db_conn, ["host"])["host"]["ts"] == OLD_TS
+
+
+def test_pool_failure_fans_out_and_does_not_store_private_errors(tc_env, db_conn, tmp_path):
+    seed(db_conn, "first")
+    seed(db_conn, "second", identity={**IDENTITY, "workerId": "second-id"})
+    tc_env.side_effect = FleetRollError("secret-in-a-private-url-or-token")
+    assert invoke(["first", "second"], tmp_path=tmp_path).exit_code != 0
+    attempts = get_latest_tc_lookup_attempts(db_conn, ["first", "second"])
+    assert set(attempts) == {"first", "second"}
+    assert all(record["status"] == "pool_query_failed" for record in attempts.values())
+    assert "secret-in-a-private-url-or-token" not in str(attempts)
+    assert all(
+        record["ts"] == OLD_TS for record in get_latest_tc_workers(db_conn, list(attempts)).values()
+    )
+
+
+@pytest.mark.parametrize("failure", ["missing", "api", "task", "unresolved"])
+def test_success_then_failure_preserves_success_and_tracks_changed_pool(
+    tc_env, db_conn, tmp_path, monkeypatch, failure
+):
+    seed(db_conn, "host")
+    tc_env.return_value = WorkerFetchResult(workers=[worker()], status_errors=0)
+    assert invoke(["host"], tmp_path=tmp_path).exit_code == 0
+    successful = get_latest_tc_workers(db_conn, ["host"])["host"]
+    later_ts = "2026-11-05T00:00:00Z"
+    monkeypatch.setattr(gather_tc, "utc_now_iso", lambda: later_ts)
+    changed_identity = {**IDENTITY, "workerType": "new-pool", "workerId": "new-id"}
+    insert_host_observation(
+        db_conn,
+        {
+            "host": "host",
+            "ts": later_ts,
+            "ok": True,
+            "observed": {
+                "tc_worker_identity_status": "missing" if failure == "unresolved" else "ok",
+                "tc_worker_identity": changed_identity,
+            },
+        },
+    )
+    db_conn.commit()
+    if failure == "api":
+        tc_env.side_effect = FleetRollError("test failure")
+    else:
+        tc_env.return_value = WorkerFetchResult(
+            workers=[worker(changed_identity, latestTask={"taskId": "task", "runId": 0})]
+            if failure == "task"
+            else [],
+            status_errors=1 if failure == "task" else 0,
+        )
+    assert invoke(["host"], tmp_path=tmp_path).exit_code != 0
+    assert get_latest_tc_workers(db_conn, ["host"])["host"] == successful
+    attempt = get_latest_tc_lookup_attempts(db_conn, ["host"])["host"]
+    assert attempt["ts"] == later_ts
+    assert attempt["status"] != "success"
+    assert attempt["identity"]["worker_type"] == (None if failure == "unresolved" else "new-pool")
+
+
+def test_failure_without_previous_success_is_stored(tc_env, db_conn, tmp_path):
+    assert invoke(["never-seen"], tmp_path=tmp_path).exit_code != 0
+    assert get_latest_tc_workers(db_conn, ["never-seen"]) == {}
+    assert (
+        get_latest_tc_lookup_attempts(db_conn, ["never-seen"])["never-seen"]["status"]
+        == "identity_unresolved"
+    )
+
+
+def test_failed_audit_blocks_legacy_old_pool(tc_env, db_conn, tmp_path):
+    seed(db_conn, "host", legacy=True, role="gecko_t_linux_talos")
+    insert_host_observation(db_conn, {"host": "host", "ts": "2026-11-05T00:00:00Z", "ok": False})
+    db_conn.commit()
+    assert invoke(["host"], tmp_path=tmp_path).exit_code != 0
+    tc_env.assert_not_called()
+    assert (
+        get_latest_tc_lookup_attempts(db_conn, ["host"])["host"]["status"] == "identity_unresolved"
+    )

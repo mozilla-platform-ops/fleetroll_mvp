@@ -62,6 +62,7 @@ def build_monitor_json_record(
     record: dict[str, Any] | None,
     tc_record: dict[str, Any] | None,
     sha_cache: ShaInfoCache,
+    lookup_attempt: dict[str, Any] | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Preserve raw audit fields and qualify each independent evidence source."""
@@ -153,13 +154,29 @@ def build_monitor_json_record(
     tc_identity = {
         key: tc.get(key) for key in ("provisioner", "worker_type", "worker_group", "worker_id")
     }
+    attempt = lookup_attempt or {}
+    attempt_identity = attempt.get("identity") or {}
+    latest_lookup = {
+        **attempt,
+        "status": attempt.get("status", "unknown"),
+        "ts": attempt.get("ts"),
+        "identity": attempt.get("identity"),
+        "freshness": _freshness(attempt.get("ts"), now=now),
+        "configured_pool_match": _match(
+            configured_pool,
+            {key: attempt_identity.get(key) for key in ("provisioner", "worker_type")},
+        ),
+        "observed_identity_match": _match(
+            host_identity if valid_identity else None, attempt_identity
+        ),
+    }
     taskcluster = {
         "identity": tc_identity,
         "observation_ts": tc.get("ts"),
         "last_date_active": tc.get("last_date_active"),
         "record_status": "stored_success" if tc_record else "missing",
-        # Failed lookups are not persisted. Never label a retained success as the latest attempt.
-        "latest_lookup_status": "unknown",
+        "latest_lookup_status": latest_lookup["status"],
+        "latest_lookup": latest_lookup,
         "freshness": _freshness(tc.get("ts"), now=now),
         "configured_pool_match": _match(
             configured_pool, {key: tc_identity[key] for key in ("provisioner", "worker_type")}
@@ -168,7 +185,7 @@ def build_monitor_json_record(
         "record": tc_record,
     }
     result.update(
-        worker_evidence_schema_version=1,
+        worker_evidence_schema_version=2,
         configured_worker_type=configured,
         observed_worker_identity=observed_identity,
         taskcluster=taskcluster,
@@ -182,6 +199,7 @@ def build_monitor_json_snapshot(
     latest: dict,
     tc_data: dict,
     sha_cache: ShaInfoCache,
+    lookup_attempts: dict | None = None,
 ) -> dict[str, dict[str, Any]]:
     now = datetime.now(UTC)
     return {
@@ -190,6 +208,7 @@ def build_monitor_json_snapshot(
             record=latest.get(host),
             tc_record=tc_data.get(strip_fqdn(host)),
             sha_cache=sha_cache,
+            lookup_attempt=(lookup_attempts or {}).get(host),
             now=now,
         )
         for host in hosts
@@ -208,10 +227,15 @@ def follow_monitor_json(
     while True:
         latest, _ = provider.load_latest_records(hosts=hosts)
         tc_data = provider.load_tc_workers(hosts=hosts)
+        lookup_attempts = provider.load_tc_lookup_attempts(hosts=hosts)
         # Re-read metadata so newly collected override content is visible in follow mode.
         sha_cache.override_cache.clear()
         current = build_monitor_json_snapshot(
-            hosts, latest=latest, tc_data=tc_data, sha_cache=sha_cache
+            hosts,
+            latest=latest,
+            tc_data=tc_data,
+            sha_cache=sha_cache,
+            lookup_attempts=lookup_attempts,
         )
         for host, record in current.items():
             if record != previous.get(host):

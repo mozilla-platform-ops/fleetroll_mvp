@@ -176,6 +176,10 @@ requires a successful `gather host` refresh; Fleetroll does not fall back to a
 possibly outdated pool. Unresolved hosts, missing workers, and API failures make
 `gather tc` exit nonzero, including in quiet mode. Successful hosts are still
 saved, and failed hosts retain their previous TC observation timestamps.
+The latest completed lookup attempt is stored separately for each requested host,
+including failures. Monitor JSON exposes that result and its queried identity
+without refreshing the retained successful observation's timestamp. See the
+[monitor JSON contract](docs/monitor-json.md) for lookup statuses and migration.
 Quiet mode prints status, collected/requested counts, and elapsed time in at most
 80 characters. Use
 `uv run fleetroll gather tc -v <host-list>` for per-host diagnostics.

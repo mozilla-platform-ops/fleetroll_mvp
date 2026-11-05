@@ -18,6 +18,7 @@ from fleetroll.db import (
     get_db_path,
     init_db,
     insert_host_observation,
+    insert_tc_lookup_attempt,
     insert_tc_worker,
 )
 
@@ -217,6 +218,7 @@ def test_follow_emits_tc_only_and_failed_host_changes(evidence, mocker):
     updated_tc = {**tc, "last_date_active": "2026-11-05T04:05:00Z"}
     provider.load_latest_records.return_value = ({HOST: record}, {})
     provider.load_tc_workers.return_value = {"ms017": updated_tc}
+    provider.load_tc_lookup_attempts.return_value = {}
     mocker.patch("fleetroll.commands.monitor.json_output.time.sleep")
     stream = follow_monitor_json([HOST], provider=provider, initial=initial, sha_cache=cache)
     changed = next(stream)
@@ -233,6 +235,20 @@ def test_once_and_initial_follow_use_same_contract(evidence, tmp_path, monkeypat
     conn = get_connection(get_db_path())
     insert_host_observation(conn, record)
     insert_tc_worker(conn, tc)
+    insert_tc_lookup_attempt(
+        conn,
+        {
+            "host": HOST,
+            "ts": TS,
+            "status": "pool_query_failed",
+            "identity": {
+                "provisioner": "releng-hardware",
+                "worker_type": "new-pool",
+                "worker_group": "test-group",
+                "worker_id": "ms017",
+            },
+        },
+    )
     conn.commit()
     conn.close()
     runner = CliRunner()
@@ -246,3 +262,98 @@ def test_once_and_initial_follow_use_same_contract(evidence, tmp_path, monkeypat
     assert json.loads(once.output) == json.loads(initial.output)
     assert json.loads(once.output)[HOST]["taskcluster"]["identity"]["worker_type"] == OVERRIDE
     assert follow.call_args.kwargs["initial"] == json.loads(once.output)
+    assert json.loads(once.output)[HOST]["worker_evidence_schema_version"] == 2
+    assert (
+        json.loads(once.output)[HOST]["taskcluster"]["latest_lookup_status"] == "pool_query_failed"
+    )
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "success",
+        "pool_query_failed",
+        "worker_missing",
+        "identity_unresolved",
+        "worker_ambiguous",
+        "task_lookup_failed",
+    ],
+)
+def test_latest_attempt_is_independent_of_successful_evidence(evidence, status):
+    record, tc, cache = evidence
+    attempt = {
+        "host": HOST,
+        "ts": "2026-11-05T04:05:00Z",
+        "status": status,
+        "identity": {
+            "provisioner": "releng-hardware",
+            "worker_type": "different-pool",
+            "worker_group": "test-group",
+            "worker_id": "ms017",
+        },
+    }
+    if status == "identity_unresolved":
+        attempt["identity"] = dict.fromkeys(attempt["identity"])
+    output = build_monitor_json_record(
+        HOST, record=record, tc_record=tc, lookup_attempt=attempt, sha_cache=cache, now=NOW
+    )["taskcluster"]
+    assert output["record"] == tc
+    assert output["observation_ts"] == TS
+    assert output["latest_lookup_status"] == status
+    assert output["latest_lookup"]["freshness"] == "fresh"
+    assert output["latest_lookup"]["configured_pool_match"] == (
+        "unknown" if status == "identity_unresolved" else "mismatch"
+    )
+
+
+def test_legacy_success_does_not_synthesize_attempt(evidence):
+    output = build(evidence)["taskcluster"]
+    assert output["record_status"] == "stored_success"
+    assert output["latest_lookup_status"] == "unknown"
+    assert output["latest_lookup"]["ts"] is None
+    assert output["latest_lookup"]["identity"] is None
+    assert output["latest_lookup"]["freshness"] == "unknown"
+
+
+def test_attempt_only_update_emitted_using_real_provider(evidence, tmp_path, mocker):
+    from fleetroll.data_provider import LocalProvider
+
+    record, tc, cache = evidence
+    db_path = tmp_path / "monitor.db"
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        insert_host_observation(conn, record)
+        insert_tc_worker(conn, tc)
+        conn.commit()
+        provider = LocalProvider(conn)
+        initial = build_monitor_json_snapshot(
+            [HOST], latest={HOST: record}, tc_data={"ms017": tc}, sha_cache=cache
+        )
+        attempt = {"host": HOST, "ts": TS, "status": "worker_missing", "identity": {}}
+        insert_tc_lookup_attempt(conn, attempt)
+        conn.commit()
+        mocker.patch("fleetroll.commands.monitor.json_output.time.sleep")
+        stream = follow_monitor_json([HOST], provider=provider, initial=initial, sha_cache=cache)
+        update = next(stream)
+        assert update["taskcluster"]["latest_lookup_status"] == "worker_missing"
+        assert update["taskcluster"]["record"] == tc
+        assert update["observed"] == record["observed"]
+        stream.close()
+    finally:
+        conn.close()
+
+
+def test_attempt_freshness_does_not_refresh_success(evidence):
+    record, tc, cache = evidence
+    tc["ts"] = "2026-11-05T02:00:00Z"
+    output = build_monitor_json_record(
+        HOST,
+        record=record,
+        tc_record=tc,
+        sha_cache=cache,
+        now=NOW,
+        lookup_attempt={"host": HOST, "ts": TS, "status": "pool_query_failed"},
+    )["taskcluster"]
+    assert output["freshness"] == "stale"
+    assert output["latest_lookup"]["freshness"] == "fresh"

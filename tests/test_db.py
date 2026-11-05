@@ -11,10 +11,12 @@ from fleetroll.db import (
     get_db_path,
     get_latest_github_refs,
     get_latest_host_observations,
+    get_latest_tc_lookup_attempts,
     get_latest_tc_workers,
     init_db,
     insert_github_ref,
     insert_host_observation,
+    insert_tc_lookup_attempt,
     insert_tc_worker,
 )
 
@@ -62,6 +64,50 @@ def test_init_db_enables_wal_mode(temp_db):
         cursor = conn.execute("PRAGMA journal_mode")
         mode = cursor.fetchone()[0]
         assert mode.lower() == "wal"
+    finally:
+        conn.close()
+
+
+def test_lookup_migration_preserves_legacy_success_without_inventing_attempt(temp_db):
+    conn = get_connection(temp_db)
+    successful = {"host": "host", "ts": "2026-11-04T00:00:00Z", "type": "worker"}
+    insert_tc_worker(conn, successful)
+    conn.execute("DROP TABLE tc_lookup_attempts")
+    conn.commit()
+    conn.close()
+    init_db(temp_db)
+    init_db(temp_db)
+    conn = get_connection(temp_db)
+    try:
+        assert get_latest_tc_workers(conn, ["host"])["host"] == successful
+        assert get_latest_tc_lookup_attempts(conn, ["host"]) == {}
+    finally:
+        conn.close()
+
+
+def test_lookup_retention_is_one_per_full_hostname_and_rejects_older_attempts(temp_db):
+    conn = get_connection(temp_db)
+    try:
+        for day in range(1, 20):
+            insert_tc_lookup_attempt(
+                conn,
+                {
+                    "host": "host.first.test",
+                    "ts": f"2026-11-{day:02d}T00:00:00Z",
+                    "status": "worker_missing",
+                },
+            )
+        latest = get_latest_tc_lookup_attempts(conn, ["host.first.test"])["host.first.test"]
+        insert_tc_lookup_attempt(
+            conn, {**latest, "ts": "2026-11-01T00:00:00Z", "status": "success"}
+        )
+        insert_tc_lookup_attempt(conn, {**latest, "host": "host.second.test", "status": "success"})
+        records = get_latest_tc_lookup_attempts(conn, ["host.first.test", "host.second.test"])
+        assert records["host.first.test"] == latest
+        assert records["host.second.test"]["status"] == "success"
+        assert conn.execute("SELECT COUNT(*) FROM tc_lookup_attempts").fetchone()[0] == 2
+        assert get_latest_tc_lookup_attempts(conn, []) == {}
+        conn.commit()
     finally:
         conn.close()
 

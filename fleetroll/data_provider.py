@@ -21,6 +21,8 @@ class DataProvider(Protocol):
 
     def load_tc_workers(self, *, hosts: list[str]) -> dict[str, dict[str, Any]]: ...
 
+    def load_tc_lookup_attempts(self, *, hosts: list[str]) -> dict[str, dict[str, Any]]: ...
+
     def load_github_refs(self) -> dict[str, dict[str, Any]]: ...
 
     def load_windows_pools(self) -> dict[str, dict[str, Any]]: ...
@@ -44,6 +46,12 @@ class LocalProvider:
 
         self._conn.commit()
         return load_tc_worker_data_from_db(self._conn, hosts=hosts)
+
+    def load_tc_lookup_attempts(self, *, hosts: list[str]) -> dict[str, dict[str, Any]]:
+        from .db import get_latest_tc_lookup_attempts
+
+        self._conn.commit()
+        return get_latest_tc_lookup_attempts(self._conn, hosts)
 
     def load_github_refs(self) -> dict[str, dict[str, Any]]:
         from .commands.monitor.data import load_github_refs_from_db

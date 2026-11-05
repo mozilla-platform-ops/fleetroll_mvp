@@ -21,6 +21,7 @@ from ..taskcluster import (
     fetch_workers,
     load_tc_credentials,
 )
+from ..tc_lookup import build_lookup_attempts
 from ..utils import (
     default_audit_log_path,
     format_elapsed_time,
@@ -267,6 +268,9 @@ def get_observed_identities(
     keys = ("provisionerId", "workerType", "workerGroup", "workerId")
     for host, record in latest.items():
         observed = record.get("observed", {})
+        if not record.get("ok"):
+            result[host] = None
+            continue
         if "tc_worker_identity_status" not in observed:
             continue
         result[host] = None
@@ -521,6 +525,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         get_db_path,
         get_latest_tc_workers,
         init_db,
+        insert_tc_lookup_attempt,
         insert_tc_worker,
     )
 
@@ -631,6 +636,8 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
         # Fetch data for each workerType
         ts = utc_now_iso()
         worker_type_to_workers: dict[tuple[str, str], dict[Any, Any]] = {}
+        workers_by_pool: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        failed_pools: set[tuple[str, str]] = set()
         task_status_errors = 0
 
         for provisioner, worker_type in worker_type_to_hosts:
@@ -656,6 +663,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                     verbose=(verbose >= 2 and not quiet),
                 )
                 workers_list = fetch_result.workers
+                workers_by_pool[worker_type_key] = workers_list
                 task_status_errors += fetch_result.status_errors
 
                 if verbose >= 2 and not quiet:
@@ -685,6 +693,7 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
 
             except FleetRollError as e:
                 api_errors += 1
+                failed_pools.add(worker_type_key)
                 if not quiet:
                     click.echo(f" FAILED: {e}", err=True)
                 # Store empty result so we still write scan record
@@ -727,6 +736,21 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
                 state = record["state"]
                 quarantine = record["quarantine_until"]
                 click.echo(f"    Wrote record: state={state}, quarantine={quarantine}")
+
+        # Persist successes and completed attempts in the same transaction. Failures
+        # advance attempt evidence without changing the last successful observation.
+        for attempt in build_lookup_attempts(
+            hosts,
+            host_to_worker_type=host_to_worker_type,
+            observed_identities=observed_identities,
+            host_to_override_pool=host_to_override_pool,
+            workers_by_pool=workers_by_pool,
+            failed_pools=failed_pools,
+            worker_records=worker_records,
+            ts=utc_now_iso(),
+            started_ts=ts,
+        ):
+            insert_tc_lookup_attempt(db_conn, attempt)
 
         # Commit all inserts
         db_conn.commit()
