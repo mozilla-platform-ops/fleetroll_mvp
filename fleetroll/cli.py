@@ -147,7 +147,13 @@ def cli(ctx: click.Context, debug: bool):
     show_default=True,
     help="Directory for the generated filename; ignored with --output.",
 )
-def create_override(source: str, output: Path | None, output_dir: Path) -> None:
+@click.option(
+    "--worker-type",
+    help="Set WORKER_TYPE_OVERRIDE and append -wt-<worker-type> to the generated filename.",
+)
+def create_override(
+    source: str, *, output: Path | None, output_dir: Path, worker_type: str | None
+) -> None:
     """Create an override from a branch, PR number, or PR URL.
 
     Requires git and network access to verify the branch, plus gh for PR inputs.
@@ -155,7 +161,7 @@ def create_override(source: str, output: Path | None, output_dir: Path) -> None:
     """
     from .commands.create_override import create_override as generate
 
-    generate(source, output=output, output_dir=output_dir)
+    generate(source, output=output, output_dir=output_dir, worker_type=worker_type)
 
 
 @cli.command("gather-host")

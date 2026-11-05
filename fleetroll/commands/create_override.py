@@ -29,8 +29,15 @@ def _quote(value: str) -> str:
     return f'"{value}"'
 
 
-def create_override(source: str, *, output: Path | None, output_dir: Path) -> Path:
+def create_override(
+    source: str, *, output: Path | None, output_dir: Path, worker_type: str | None = None
+) -> Path:
     """Resolve a source, verify its branch, and exclusively create an override."""
+    if worker_type is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", worker_type):
+        raise UserError(
+            "Invalid worker type: use a bare worker type starting with a letter or digit, "
+            "containing only letters, digits, hyphens, and underscores."
+        )
     repo = f"https://github.com/{UPSTREAM}.git"
     branch = source
     pr_url = None
@@ -72,6 +79,8 @@ def create_override(source: str, *, output: Path | None, output_dir: Path) -> Pa
     else:
         filename = branch.replace("/", "_") + ".override"
 
+    if worker_type is not None:
+        filename = filename.removesuffix(".override") + f"-wt-{worker_type}.override"
     path = output if output is not None else output_dir / filename
     if path.exists() or path.is_symlink():
         raise UserError(f"Override file already exists: {path}")
@@ -95,6 +104,11 @@ def create_override(source: str, *, output: Path | None, output_dir: Path) -> Pa
     repo_block = f"PUPPET_REPO={_quote(repo)}"
     if not pr_url:
         repo_block += f"\n# PUPPET_REPO={_quote(f'https://github.com/{user}/ronin_puppet.git')}"
+    worker_assignment = (
+        f"WORKER_TYPE_OVERRIDE={_quote(worker_type)}"
+        if worker_type is not None
+        else "# WORKER_TYPE_OVERRIDE=''"
+    )
     content = f"""# If you place this file at `/etc/puppet/ronin_settings`
 # the `run-puppet.sh` script will use the values here.
 
@@ -109,7 +123,7 @@ PUPPET_MAIL={_quote(user + "@mozilla.com")}
 # taskcluster overrides
 # To change worker pools, set WORKER_TYPE_OVERRIDE to the target role's base
 # worker type with your desired suffix appended (verify every target host).
-# WORKER_TYPE_OVERRIDE=''
+{worker_assignment}
 """
     try:
         with path.open("x", encoding="utf-8") as file:

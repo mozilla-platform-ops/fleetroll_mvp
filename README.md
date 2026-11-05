@@ -417,6 +417,7 @@ Create an override from an upstream branch, a PR number, or a GitHub PR URL:
 
 ```bash
 uv run fleetroll override create my-branch
+uv run fleetroll override create my-branch --worker-type gecko-t-linux-talos-2404-tc-v115
 uv run fleetroll override create 123 --output-dir configs/overrides
 uv run fleetroll override create https://github.com/mozilla-platform-ops/ronin_puppet/pull/123 --output rollout.override
 ```
@@ -426,8 +427,13 @@ fork repositories for PRs, and refuses to overwrite existing files. It requires
 `git` and network access, plus `gh` for PR inputs. Output defaults to a generated
 filename in the current directory; parent directories must already exist.
 `tools/create_override.sh` remains a wrapper with `configs/overrides` as its
-default output directory. Generated files leave the worker type assignment empty
-and commented out for the operator to fill in when needed.
+default output directory. Without `--worker-type`, generated files leave the worker
+type assignment empty and commented out, and use the usual base filename. With
+`--worker-type <type>`, the file sets `WORKER_TYPE_OVERRIDE` and its generated name
+ends in `-wt-<type>.override` (for both branch and PR inputs). Pass a bare worker
+type, without a provisioner prefix. An explicit `--output` path is used exactly
+as supplied, including when a worker type is set. Verify that the worker type
+matches every target host's role before deployment.
 
 When an override sets `WORKER_TYPE_OVERRIDE`, `override set` checks each
 host's latest successful recorded role against its normal worker type. The base

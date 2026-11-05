@@ -152,6 +152,81 @@ def test_explicit_output_and_escaped_branch(override_tool, tmp_path):
     assert subprocess.run(["/bin/bash", "-n", str(output)], check=False).returncode == 0
 
 
+@pytest.mark.parametrize(
+    ("source", "stem"), [("feature/fix", "feature_fix"), ("42", "pr-42-test-pr")]
+)
+def test_worker_type_sets_assignment_and_filename(override_tool, source, stem):
+    _, overrides, _ = override_tool
+    worker_type = "gecko-t-linux-talos-2404-tc-v115"
+    result = CliRunner().invoke(
+        cli,
+        [
+            "override",
+            "create",
+            source,
+            "--output-dir",
+            str(overrides),
+            "--worker-type",
+            worker_type,
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    output = overrides / f"{stem}-wt-{worker_type}.override"
+    assert f'\nWORKER_TYPE_OVERRIDE="{worker_type}"\n' in output.read_text()
+    assert subprocess.run(["/bin/bash", "-n", str(output)], check=False).returncode == 0
+    # The default variant can coexist with the worker-pool variant.
+    plain = CliRunner().invoke(cli, ["override", "create", source, "--output-dir", str(overrides)])
+    assert plain.exit_code == 0, plain.output
+    assert "\nWORKER_TYPE_OVERRIDE=" not in (overrides / f"{stem}.override").read_text()
+    duplicate = CliRunner().invoke(
+        cli,
+        [
+            "override",
+            "create",
+            source,
+            "--output-dir",
+            str(overrides),
+            "--worker-type",
+            worker_type,
+        ],
+    )
+    assert duplicate.exit_code != 0
+    assert "already exists" in str(duplicate.exception)
+
+
+def test_worker_type_respects_explicit_output(override_tool, tmp_path):
+    output = tmp_path / "custom.override"
+    result = CliRunner().invoke(
+        cli,
+        ["override", "create", "my-branch", "--worker-type", "test-pool", "--output", str(output)],
+    )
+    assert result.exit_code == 0, result.output
+    assert '\nWORKER_TYPE_OVERRIDE="test-pool"\n' in output.read_text()
+
+
+@pytest.mark.parametrize(
+    "worker_type", ["", "../pool", "provisioner/pool", "$(id)", "pool\necho bad"]
+)
+def test_invalid_worker_type_leaves_no_file_or_lookup(override_tool, worker_type):
+    _, overrides, log = override_tool
+    result = CliRunner().invoke(
+        cli,
+        [
+            "override",
+            "create",
+            "my-branch",
+            "--output-dir",
+            str(overrides),
+            "--worker-type",
+            worker_type,
+        ],
+    )
+    assert result.exit_code != 0
+    assert "Invalid worker type" in str(result.exception)
+    assert not list(overrides.iterdir())
+    assert not log.exists()
+
+
 def test_pr_title_newlines_stay_in_comments(override_tool, monkeypatch):
     script, overrides, _ = override_tool
     pr = json.loads(os.environ["PR_REPLY"])
