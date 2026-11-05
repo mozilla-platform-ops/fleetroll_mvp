@@ -374,6 +374,18 @@ def test_failed_audit_blocks_legacy_old_pool(tc_env, db_conn, tmp_path):
     )
 
 
+def test_failed_audit_does_not_reuse_retained_complete_identity(tc_env, db_conn, tmp_path):
+    seed(db_conn, "host")
+    insert_host_observation(db_conn, {"host": "host", "ts": "2026-11-05T00:00:00Z", "ok": False})
+    db_conn.commit()
+    assert gather_tc.get_observed_identities(["host"], db_conn=db_conn) == {"host": None}
+    assert invoke(["host"], tmp_path=tmp_path).exit_code != 0
+    tc_env.assert_not_called()
+    attempt = get_latest_tc_lookup_attempts(db_conn, ["host"])["host"]
+    assert attempt["status"] == "identity_unresolved"
+    assert attempt["identity"]["worker_id"] is None
+
+
 @pytest.mark.parametrize("failure", [None, "missing", "api", "task", "ambiguous"])
 def test_historical_lookup_while_ssh_fails(tc_env, db_conn, failure):
     seed(db_conn, "host.example.com")

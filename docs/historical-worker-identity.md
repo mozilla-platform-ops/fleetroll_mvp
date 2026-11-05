@@ -109,6 +109,13 @@ produces `identity_unresolved`. Diagnostic queries are allowed despite uncertain
 or contradiction, and success never clears those signals. Normal lookup behavior
 is unchanged.
 
+Normal `gather tc` deliberately does not reuse a retained identity when the latest
+host audit failed (for example, one SSH timeout). A failed latest audit resolves to
+no identity: no Taskcluster query is made, legacy role/override fallback is blocked,
+and the attempt is recorded as `identity_unresolved`, even when an earlier complete
+identity exists. Use `--use-historical-identity` to query unreachable hosts. This
+keeps stale identity from becoming an implicit default.
+
 Attempts use `resolution_source: historical_worker_identity` and retain pinned
 `historical_baseline`. Successful observations retain the same provenance;
 `successful_observation_ts` links the attempt to its produced observation.
