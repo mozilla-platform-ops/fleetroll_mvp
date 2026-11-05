@@ -33,6 +33,7 @@ from .formatting import (
     format_monitor_row,
     render_monitor_lines,
 )
+from .json_output import build_monitor_json_snapshot, follow_monitor_json
 from .query import apply_query, parse_query_safe
 
 if TYPE_CHECKING:
@@ -119,7 +120,9 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 for h in sorted_hosts:
                     print(h)
             elif args.json:
-                payload = {host: latest.get(host) for host in sorted_hosts}
+                payload = build_monitor_json_snapshot(
+                    sorted_hosts, latest=latest, tc_data=tc_data, sha_cache=sha_cache
+                )
                 print(json.dumps(payload, indent=2, sort_keys=True))
             else:
                 header, lines = render_monitor_lines(
@@ -148,65 +151,66 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 ),
             )
 
-            columns = None
-            widths = None
             if args.json:
-                payload = {host: latest.get(host) for host in sorted_hosts}
-                print(json.dumps(payload, indent=2, sort_keys=True))
-            else:
-                columns, widths = compute_columns_and_widths(
-                    hosts=sorted_hosts,
-                    latest=latest,
-                    latest_ok=latest_ok,
-                    tc_data=tc_data,
-                    max_width=0,
-                    cap_widths=False,
-                    sep_len=2,
-                    sha_cache=sha_cache,
-                    github_refs=github_refs,
-                    notes_data=notes_data,
+                payload = build_monitor_json_snapshot(
+                    sorted_hosts, latest=latest, tc_data=tc_data, sha_cache=sha_cache
                 )
-                header, lines = render_monitor_lines(
-                    hosts=sorted_hosts,
-                    latest=latest,
-                    latest_ok=latest_ok,
-                    tc_data=tc_data,
-                    max_width=0,
-                    cap_widths=False,
-                    col_sep="  ",
-                    sha_cache=sha_cache,
-                    github_refs=github_refs,
-                    notes_data=notes_data,
-                )
-                print(header)
-                for line in lines:
-                    print(line)
+                print(json.dumps(payload, indent=2, sort_keys=True), flush=True)
+                for record in follow_monitor_json(
+                    sorted_hosts, provider=provider, initial=payload, sha_cache=sha_cache
+                ):
+                    print(json.dumps(record, sort_keys=True), flush=True)
+                return
+            columns, widths = compute_columns_and_widths(
+                hosts=sorted_hosts,
+                latest=latest,
+                latest_ok=latest_ok,
+                tc_data=tc_data,
+                max_width=0,
+                cap_widths=False,
+                sep_len=2,
+                sha_cache=sha_cache,
+                github_refs=github_refs,
+                notes_data=notes_data,
+            )
+            header, lines = render_monitor_lines(
+                hosts=sorted_hosts,
+                latest=latest,
+                latest_ok=latest_ok,
+                tc_data=tc_data,
+                max_width=0,
+                cap_widths=False,
+                col_sep="  ",
+                sha_cache=sha_cache,
+                github_refs=github_refs,
+                notes_data=notes_data,
+            )
+            print(header)
+            for line in lines:
+                print(line)
             for record in tail_audit_log(
                 db_conn,
                 hosts=hosts,
                 latest=latest,
             ):
-                if args.json:
-                    print(json.dumps(record, sort_keys=True))
-                elif columns is not None and widths is not None:
-                    if record.get("ok"):
-                        latest_ok[record["host"]] = record
-                    host = record["host"]
-                    short_host = strip_fqdn(host)
-                    print(
-                        format_monitor_row(
-                            host,
-                            record,
-                            last_ok=latest_ok.get(host),
-                            tc_data=tc_data.get(short_host),
-                            columns=columns,
-                            widths=widths,
-                            col_sep="  ",
-                            github_refs=github_refs,
-                            sha_cache=sha_cache,
-                            notes_data=notes_data,
-                        )
+                if record.get("ok"):
+                    latest_ok[record["host"]] = record
+                host = record["host"]
+                short_host = strip_fqdn(host)
+                print(
+                    format_monitor_row(
+                        host,
+                        record,
+                        last_ok=latest_ok.get(host),
+                        tc_data=tc_data.get(short_host),
+                        columns=columns,
+                        widths=widths,
+                        col_sep="  ",
+                        github_refs=github_refs,
+                        sha_cache=sha_cache,
+                        notes_data=notes_data,
                     )
+                )
             return
 
         filters_configs_dir = Path("configs/filters")

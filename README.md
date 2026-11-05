@@ -377,6 +377,11 @@ os=M|L
 
 ##### JSON output
 
+Monitor JSON preserves raw host audit fields and adds configured worker pool,
+host-collected identity, and Taskcluster evidence with timestamps and statuses.
+See the [versioned monitor JSON contract](docs/monitor-json.md) for examples,
+follow-mode semantics, and automation migration guidance.
+
 ```bash
 # emit one JSON object per host instead of a table
 uv run fleetroll host monitor configs/host-lists/1804.list --once --json
