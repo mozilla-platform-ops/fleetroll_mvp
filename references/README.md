@@ -17,7 +17,7 @@ This directory contains production-ready reference implementations of puppet wra
 
 These scripts integrate with fleetroll's puppet state tracking feature by writing metadata to `/etc/puppet/last_run_metadata.json` after each puppet run. This provides ground-truth tracking of applied configuration instead of relying on heuristics.
 
-See [`docs/puppet-state-tracking.md`](../docs/puppet-state-tracking.md) for complete feature documentation.
+See [`docs/reference/puppet-state-tracking.md`](../docs/reference/puppet-state-tracking.md) for complete feature documentation.
 
 ## Templating Approach
 
@@ -37,7 +37,9 @@ To render the Linux ERB template, you'll need a puppet/ERB processor that provid
 
 ## State File Format
 
-**Location**: `/etc/puppet/last_run_metadata.json` (same path on Linux and macOS)
+**Reference writer default**: `/etc/puppet/last_run_metadata.json` on both platforms.
+Fleetroll's macOS collector reads `/opt/puppet_environments/last_run_metadata.json`;
+pass that path as the writer's seventh argument when integrating on macOS.
 
 **Format**: JSON with schema versioning
 
@@ -116,7 +118,7 @@ fi
 - Override path: `/opt/puppet_environments/ronin_settings`
 - Vault path: `/var/root/vault.yaml`
 - SHA command: `shasum -a 256` (auto-detected)
-- State file: `/etc/puppet/last_run_metadata.json`
+- State file: `/opt/puppet_environments/last_run_metadata.json` (explicit in the macOS wrapper)
 
 ## Deployment
 
@@ -244,21 +246,20 @@ fleetroll host-monitor host-list.txt
 
 ## Fleetroll Integration
 
-Once deployed, fleetroll commands will automatically use the new state file:
+Once deployed at the collector's expected path, refresh and inspect with Fleetroll:
 
 ```bash
 # Audit host (reads state file via SSH)
-fleetroll gather-host t-linux64-ms-238
+uv run fleetroll gather host t-linux64-ms-238
 
-# Monitor hosts (shows APPLIED status based on state)
-fleetroll host-monitor hosts.txt
+# Monitor hosts
+uv run fleetroll host monitor hosts.txt
 ```
 
-The monitor will show:
-- **PP_SHA** - Git SHA that puppet applied (7 chars)
-- **PP_LAST** - Time since last puppet run
-- **APPLIED** - Whether current override was applied (SHA comparison)
-- **HEALTHY** - Whether applied AND worker is active
+The monitor shows `PP_SHA`, `PP_LAST`, `PP_EXP`, `PP_MATCH`, and `HEALTHY`.
+See [rollout verification](../docs/rollout-health-verification.md) for current
+column meanings and the distinction between revision matching, file convergence,
+and task outcomes.
 
 ## Backward Compatibility
 
@@ -301,12 +302,12 @@ Check:
 ## Support
 
 For issues or questions:
-- See [`docs/puppet-state-tracking.md`](../docs/puppet-state-tracking.md) for feature details
+- See [`docs/reference/puppet-state-tracking.md`](../docs/reference/puppet-state-tracking.md) for feature details
 - Check the test script output for validation errors
 - Review stderr logs from puppet runs for state writing warnings
 
 ## Related Documentation
 
-- [`docs/puppet-state-tracking.md`](../docs/puppet-state-tracking.md) - Complete feature documentation
+- [`docs/reference/puppet-state-tracking.md`](../docs/reference/puppet-state-tracking.md) - Complete feature documentation
 - [`docs/rollout-health-verification.md`](../docs/rollout-health-verification.md) - Health verification workflow
 - `examples/` - Original example scripts (before state tracking integration)

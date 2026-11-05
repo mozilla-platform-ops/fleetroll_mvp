@@ -1,8 +1,9 @@
-# project presentation
+# Project presentation
 
-## overview
+The Slidev deck is an overview, not an operational reference. For current commands
+and behavior, use the [documentation index](../README.md).
 
-Uses Slidev (https://sli.dev/).
+Run from this directory with [Slidev](https://sli.dev/):
 
 ```bash
 # install slidev tool globally
@@ -14,6 +15,6 @@ slidev
 # follow onscreen directions to view the slides
 ```
 
-## getting started / writing slide decks
+## Editing the deck
 
 https://sli.dev/guide/

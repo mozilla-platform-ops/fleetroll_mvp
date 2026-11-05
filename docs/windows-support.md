@@ -1,260 +1,79 @@
-# Windows Support
+# Windows hosts
 
-Beads epic mvp-3jw.
+Fleetroll gathers Windows hardware-worker metadata over SSH/PowerShell and
+normalizes it for the monitor (epic `mvp-3jw`). Windows provisioning uses PXE
+installation and initial convergence; pool-hash changes trigger reimaging.
+Override and vault management do not apply to these hosts.
 
-## Pre-Design Notes (3/5/26)
+## SSH access
 
-### Metadata Script and Output
+Hosts under `*.wintest2.releng.mdc1.mozilla.com` use the shared
+`id_rsa.win_audit_2021_02-17` key from the team's password safe (search
+`win_audit`). Save it under `~/.ssh/` with mode `0600`. The remote user is
+`administrator`, added automatically when no user is specified.
 
-The fleetroll script is located at C:\management_scripts\fleetroll_mvp_collect.ps1
+Configure SSH once:
 
-It produces ronin_puppet_run.json in the same dir. It will overwrite the json if it exists.
-
-#### Metadata format (early prototype)
-
-Need to verify against a live host for the actual format.
-
-```yaml
-{
-  "schema_version": 1,
-  "ts": "2026-02-09T21:03:49Z",
-  "duration_s": 0,
-  "success": "NA",
-  "exit_code": "NA",
-  "role": "win116424h2hwalhpa",
-  "git_repo": "https://github.com/mozilla-platform-ops/ronin_puppet.git",
-  "git_branch": "RELOPS-1768",
-  "git_sha": "deadbeef",
-  "git_dirty": "NA",
-  "vault_path": "NA",
-  "vault_sha": "NA",
-  "override_path": "NA",
-  "override_sha": "NA",
-  "bootstrap_stage": "complete",
-  "bootstrap_complete": true
-}
+```sshconfig
+Host *.wintest2.releng.mdc1.mozilla.com
+    User administrator
+    IdentityFile ~/.ssh/id_rsa.win_audit_2021_02-17
+    IdentitiesOnly yes
 ```
 
-#### Investigation of Deployed Host
-
-Observations:
-- metadata file doesn't exist, we have to run the script to create
-  - the timestamp emitted is when the script ran, not when the host was converged
+Or pass the key per collection:
 
 ```bash
-$ ssh administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com
-PS C:\Users\Administrator> cd C:\management_scripts\
-PS C:\management_scripts> dir
-
-
-    Directory: C:\management_scripts
-
-
-Mode                 LastWriteTime         Length Name
-----                 -------------         ------ ----
--a----          3/3/2026   9:43 PM           8997 fleetroll_mvp_collect.ps1
--a----          3/3/2026   9:43 PM           2962 force_pxe_install.ps1
--a----          3/3/2026   9:43 PM           3993 pool_audit.ps1
-
-
-PS C:\management_scripts> .\fleetroll_mvp_collect.ps1
-Wrote manifest: C:\management_scripts\ronin_puppet_run.json
-Resolved repo path: C:\ronin
-bootstrap_stage: complete
-bootstrap_complete: True
-git_sha: 9af2bb80e5d8bea3f92d6e3d726280ae6b46fc22
-PS C:\management_scripts>
-PS C:\management_scripts> ls
-
-
-    Directory: C:\management_scripts
-
-
-Mode                 LastWriteTime         Length Name
-----                 -------------         ------ ----
--a----          3/3/2026   9:43 PM           8997 fleetroll_mvp_collect.ps1
--a----          3/3/2026   9:43 PM           2962 force_pxe_install.ps1
--a----          3/3/2026   9:43 PM           3993 pool_audit.ps1
--a----          3/5/2026   9:53 PM            549 ronin_puppet_run.json
-
-
-PS C:\management_scripts> cat .\ronin_puppet_run.json
-{
-    "schema_version":  1,
-    "ts":  "2026-03-05T21:53:18Z",
-    "duration_s":  0,
-    "success":  "NA",
-    "exit_code":  "NA",
-    "role":  "win116424h2hwref",
-    "git_repo":  "https://github.com/mozilla-platform-ops/ronin_puppet.git",
-    "git_branch":  "master",
-    "git_sha":  "deadbeef",
-    "git_dirty":  "NA",
-    "vault_path":  "NA",
-    "vault_sha":  "NA",
-    "override_path":  "NA",
-    "override_sha":  "NA",
-    "bootstrap_stage":  "complete",
-    "bootstrap_complete":  true
-}
+uv run fleetroll gather host t-nuc12-005.wintest2.releng.mdc1.mozilla.com \
+  --ssh-option "-i ~/.ssh/id_rsa.win_audit_2021_02-17" \
+  --ssh-option "-o IdentitiesOnly=yes"
 ```
 
-### Windows Hosts / Hostnames
+`IdentitiesOnly=yes` prevents attempts with other agent keys from exhausting the
+server's authentication limit. Check key selection and permissions if collection
+reports `Permission denied (publickey)`.
 
-All of the host names can be pulled from here: https://github.com/mozilla-platform-ops/worker-images/blob/main/provisioners/windows/MDC1Windows/pools.yml
+## Inventory
 
-pools.yml:
-
-```yaml
-pools:
-  - name: "win11-64-24h2-hw-ref"
-    openvox_version: "8.19.2"
-    puppet_version: "8.10.0"
-```
-
-### Windows Host SSH Access
-
-Windows hosts (`*.wintest2.releng.mdc1.mozilla.com`) reject your normal user SSH
-key. They require a shared audit key:
-
-- **Key name:** `id_rsa.win_audit_2021_02-17`
-- **Location:** Team 1Password / password safe (search "win_audit")
-- **Remote user:** `administrator` (handled automatically by
-  `windows_ssh_host()` in `fleetroll/ssh.py`)
-- **Remote shell:** PowerShell (Windows OpenSSH default; no wrapper needed)
-
-#### Setup
-
-1. Download the private key from the team password safe.
-2. Save it to `~/.ssh/id_rsa.win_audit_2021_02-17` and chmod it `0600`.
-3. Either point ssh at it for wintest hosts via `~/.ssh/config`:
-
-   ```
-   Host *.wintest2.releng.mdc1.mozilla.com
-       User administrator
-       IdentityFile ~/.ssh/id_rsa.win_audit_2021_02-17
-       IdentitiesOnly yes
-   ```
-
-   …or pass it per-invocation via fleetroll's `--ssh-option`:
-
-   ```bash
-   uv run fleetroll host-audit <wintest-host> \
-     --ssh-option "-i ~/.ssh/id_rsa.win_audit_2021_02-17" \
-     --ssh-option "-o IdentitiesOnly=yes"
-   ```
-
-   `IdentitiesOnly=yes` matters: without it, ssh may try every key in your
-   agent first and get rate-limited / locked out before reaching the audit
-   key.
-
-#### Verify the connection
-
-```bash
-ssh -o BatchMode=yes -o ConnectTimeout=10 \
-    -i ~/.ssh/id_rsa.win_audit_2021_02-17 -o IdentitiesOnly=yes \
-    administrator@t-nuc12-005.wintest2.releng.mdc1.mozilla.com 'whoami'
-```
-
-Should print `wintest2\administrator` (or similar). If it hangs or returns
-`Permission denied (publickey)`, the key is wrong / missing / not chmod'd
-correctly.
-
-
-### Windows HW Pupppet Flow
-
-Hosts netboot/PXE boot and then install their OS. After that, on first boot they do a puppet apply / converge.
-
-They regularly check if the pool hash value is changed here: https://github.com/mozilla-platform-ops/worker-images/blob/main/provisioners/windows/MDC1Windows/pools.yml If it does the workers will reimage themselves.
-
-## Host List
-
-The host list is stored at `configs/host-lists/windows/all.list` and generated from `pools.yml`. To regenerate from the latest pools:
+`configs/host-lists/windows/all.list` is generated from the worker-images
+repository's `provisioners/windows/MDC1Windows/pools.yml`. Regenerate it with:
 
 ```bash
 uv run tools/generate_windows_host_list.py
 ```
 
-The script fetches `pools.yml` via `gh api`, extracts nodes and domain suffixes per pool, and writes the file with pool grouping comments. Known-BAD hosts are included with annotating comments. The file uses the `# fqdn:` directive so `parse_host_list()` auto-expands short names to FQDNs.
+The generator uses `gh api`, preserves pool grouping and known-BAD annotations,
+and emits a `# fqdn:` directive for short-name expansion.
 
-## Implementation Details
+## Metadata collection
 
-### Audit Command Flow
+The remote script `C:\management_scripts\fleetroll_mvp_collect.ps1` writes
+`C:\management_scripts\ronin_puppet_run.json`. Fleetroll runs it if that JSON
+file is absent, then reads the file. Its `ts` records metadata-script execution,
+not the time the host converged; an existing file is not regenerated on every
+scan.
 
-Host detection happens in `fleetroll/ssh.py:is_windows_host()`: it strips any `user@` prefix and checks for the `"wintest"` substring, which covers all current Windows hosts (`*.wintest2.releng.mdc1.mozilla.com`).
+The metadata contains schema version, timestamp, role, repository/branch/revision,
+and bootstrap stage/completion. Fields unavailable on Windows, such as Puppet
+success/exit status and override/vault details, may contain `"NA"`; the parser
+normalizes those values to null. Bootstrap completion is not a Puppet run-success
+signal.
 
-In `fleetroll/commands/audit.py` (around line 286), each host branches before the SSH call:
+`fleetroll/ssh.py` detects Windows by the `wintest` hostname substring after
+removing any `user@` prefix. It sends a UTF-16LE/base64 PowerShell body using
+`-EncodedCommand`. That body returns the JSON as UTF-8/base64 `PP_STATE_JSON`
+alongside `OS_TYPE=Windows`, role, and absent override/vault flags. The shared
+`fleetroll/audit.py` parser handles the result.
 
-```python
-if is_windows_host(host):
-    remote_cmd = remote_windows_audit_script()
-    ssh_host = windows_ssh_host(host)
-else:
-    remote_cmd = remote_audit_script(include_content=include_content)
-    ssh_host = host
-```
+## Monitor behavior
 
-`windows_ssh_host()` prepends `administrator@` if no user is already specified. Both paths feed into the same `run_ssh()` + `process_audit_result()` pipeline.
+Windows rows show `OS=W` and suppress `PP_LAST`. Where recorded Windows pool
+metadata resolves the role, `PP_EXP` shows the pool hash and `PP_MATCH` compares
+it with the reported revision. Explicit Puppet failure prevents a match; missing
+success does not, because Windows normally does not report it. Without pool data,
+the comparison remains unavailable. `HEALTHY` combines that match with TC activity
+under one hour, as described in [rollout verification](rollout-health-verification.md).
 
-### SSH Approach
-
-The PowerShell script body (`windows_audit_script_body()`) is encoded as UTF-16LE, then base64-encoded, and invoked via:
-
-```
-powershell -EncodedCommand <base64-blob>
-```
-
-This avoids all SSH/shell quoting issues. Windows OpenSSH defaults to PowerShell as the shell, so no wrapper is needed. See `fleetroll/ssh.py:remote_windows_audit_script()`.
-
-### Data Collected
-
-The collect script at `C:\management_scripts\fleetroll_mvp_collect.ps1` generates `C:\management_scripts\ronin_puppet_run.json` (path constants in `fleetroll/constants.py`: `WIN_COLLECT_SCRIPT_PATH`, `WIN_METADATA_JSON_PATH`).
-
-The remote audit script (`windows_audit_script_body()`) in `fleetroll/ssh.py`:
-
-1. Runs the collect script if `ronin_puppet_run.json` does not yet exist.
-2. Reads the JSON file, base64-encodes it (UTF-8), and emits key=value lines:
-
-```
-OS_TYPE=Windows
-ROLE_PRESENT=1
-ROLE=<role from JSON>
-VLT_PRESENT=0
-OVERRIDE_PRESENT=0
-PP_STATE_JSON=<base64-encoded JSON content>
-```
-
-Vault and override detection are always `0` for Windows hosts — these concepts don't apply.
-
-### Output Normalization
-
-`_normalize_na()` in `fleetroll/audit.py` converts Windows JSON `"NA"` string values (used for fields like `success`, `exit_code`, `git_dirty`, etc.) to Python `None` for standard null handling downstream:
-
-```python
-def _normalize_na(value: Any) -> Any:
-    if value == "NA":
-        return None
-    return value
-```
-
-This is called for every field extracted from `PP_STATE_JSON` in `process_audit_result()`.
-
-### Monitor Display
-
-In `fleetroll/commands/monitor/data.py:build_ok_row_values()`:
-
-- OS type `"Windows"` maps to the single-character abbreviation `"W"`.
-- Puppet columns (`pp_last`, `pp_exp`, `pp_match`, `healthy`) are suppressed with `"-"` for Windows hosts (Windows does not run Puppet the same way):
-
-```python
-if os_type == "W":
-    pp_last = "-"
-    pp_exp = "-"
-    pp_match = "-"
-    healthy = "-"
-```
-
-In `fleetroll/commands/monitor/types.py`:
-
-- `cycle_os_filter()` cycles: `None → "L" → "M" → "W" → None`
-- `os_filter_label()` maps `"W"` → `"Windows"` for the status bar label
+This is a pool-image comparison, not proof of a recent Puppet run. Linux/macOS
+[worker identity collection](reference/worker-identity.md) does not replace Windows's
+legacy pool discovery.

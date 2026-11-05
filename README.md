@@ -13,6 +13,9 @@ Fleetroll MVP streamlines host state visibility and configuration management. It
 
 Fleetroll MVP spec: [`specs/README_FleetRoll_MVP.md`](specs/README_FleetRoll_MVP.md)
 
+See the [documentation index](docs/README.md) for operational guides, reference
+contracts, designs, and historical material.
+
 Fleetroll MVP aims to solve the problems mentioned in `Problem Statement` section of the Fleetroll (non MVP) spec ([`specs/FleetRoll_Product_Spec_v5.md`](specs/FleetRoll_Product_Spec_v5.md)).
 
 ## Functionality
@@ -59,11 +62,11 @@ Fleetroll uses a puppet state metadata file for ground-truth tracking of what pu
 - Written automatically by the puppet wrapper script after each run
 - Contains git SHA, override SHA, vault SHA, success status, and timestamps
 - Read by `fleetroll gather host` via SSH to populate monitor data
-- Enables reliable APPLIED status checking through SHA comparison
+- Supports checksum-based convergence checks and expected-revision comparisons
 
 **Integration**:
 - Reference implementations available in `references/` directory
-- See [`docs/puppet-state-tracking.md`](docs/puppet-state-tracking.md) for complete details
+- See [`docs/reference/puppet-state-tracking.md`](docs/reference/puppet-state-tracking.md) for complete details
 - See [`references/README.md`](references/README.md) for deployment guide
 
 
@@ -179,12 +182,12 @@ saved, and failed hosts retain their previous TC observation timestamps.
 The latest completed lookup attempt is stored separately for each requested host,
 including failures. Monitor JSON exposes that result and its queried identity
 without refreshing the retained successful observation's timestamp. See the
-[monitor JSON contract](docs/monitor-json.md) for lookup statuses and migration.
+[monitor JSON contract](docs/reference/monitor-json.md) for lookup statuses and migration.
 Quiet mode prints status, collected/requested counts, and elapsed time in at most
 80 characters. Use
 `uv run fleetroll gather tc -v <host-list>` for per-host diagnostics.
 
-See [worker identity collection](docs/worker-identity.md) for configuration
+See [worker identity collection](docs/reference/worker-identity.md) for configuration
 sources and supported launch configurations.
 
 For SSH-unreachable hosts, monitor JSON also exposes a durable historical worker
@@ -192,7 +195,7 @@ identity with its original timestamp and contradiction signals. An explicit
 `uv run fleetroll gather tc --use-historical-identity HOST_OR_FILE` queries that
 exact identity without changing normal lookup behavior. Historical lookup success
 does not clear contradictions or authorize recovery. See the
-[version 3 historical identity contract](docs/historical-worker-identity.md).
+[version 3 historical identity contract](docs/reference/historical-worker-identity.md).
 
 #### Reviewing rollout jobs on master and overrides
 
@@ -229,7 +232,7 @@ for time-window, evidence-threshold, and per-host detail options.
 SQLite retains ten full observations per host and a compact 30-day configuration
 timeline. Stable scans extend existing spans; transitions, failures, and writes
 preserve uncertainty boundaries. Reports expose the retention cutoff, provenance,
-and unknown ranges. See [compact configuration history](docs/configuration-history.md)
+and unknown ranges. See [compact configuration history](docs/reference/configuration-history.md)
 for the evidence contract and measured storage costs. Use repeatable
 `--observations-file saved-gather.json` options to supply saved gather-host or
 host-monitor JSON when older convergence evidence or finer observation anchors are needed. The report
@@ -390,10 +393,10 @@ os=M|L
 
 Monitor JSON preserves raw host audit fields and adds configured worker pool,
 host-collected identity, and Taskcluster evidence with timestamps and statuses.
-See the [versioned monitor JSON contract](docs/monitor-json.md) for examples,
+See the [versioned monitor JSON contract](docs/reference/monitor-json.md) for examples,
 follow-mode semantics, and automation migration guidance.
 
-See [tool integrations](docs/tool-integrations.md) for consumers, supported
+See [tool integrations](docs/reference/tool-integrations.md) for consumers, supported
 interfaces, ownership, and compatibility coordination when changing these contracts.
 
 ```bash
@@ -460,7 +463,7 @@ type or a nonempty hyphenated suffix is accepted. Unknown roles and mismatches
 block the entire deployment; use `--allow-worker-type-mismatch` for intentional
 exceptions. Previews show the role observation timestamp so operators can decide
 whether to refresh with `gather host`. There is no freshness cutoff or automatic
-refresh. See [worker type safety](docs/override-worker-type-safety.md) for details.
+refresh. See [worker type safety](docs/reference/override-worker-type-safety.md) for details.
 
 Summarize override coverage for a recorded Puppet role or Taskcluster pool:
 

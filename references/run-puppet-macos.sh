@@ -198,7 +198,7 @@ echo "Using Branch: $GIT_BRANCH"
 # after each puppet run, enabling ground-truth tracking of applied configuration.
 # The metadata includes git SHA, success status, duration, and file checksums.
 #
-# See: docs/puppet-state-tracking.md for details
+# See: docs/reference/puppet-state-tracking.md for details
 if [ -f "/etc/puppet/lib/puppet_state_functions.sh" ]; then
     # shellcheck disable=SC1091
     source "/etc/puppet/lib/puppet_state_functions.sh"

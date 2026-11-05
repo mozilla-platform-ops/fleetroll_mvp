@@ -1,205 +1,54 @@
-# Rollout Health Verification
+# Verify a rollout
 
-## Problem
+Check three separate facts: the intended files reached the host, Puppet applied
+the intended configuration successfully, and the worker is processing work.
+A successful override write establishes only the first.
 
-Users need to verify that a rollout (setting or unsetting an override) has taken effect. The verification chain is:
+## Refresh and inspect
 
-```
-Override Set/Unset → Puppet Ran (after change) → Puppet Succeeded → TC_ACT Updated (agent healthy)
-```
+After deploying or removing an override, refresh host, Taskcluster, and GitHub
+evidence for the affected population:
 
-## Current Gaps
-
-- No Puppet last run timestamp
-- No Puppet success/failure status
-- No way to correlate override change time with puppet run time with TC activity
-
-## Solution
-
-### 1. Puppet State Metadata File
-
-The puppet wrapper script writes ground-truth state after each run:
-
-**Location**: `/etc/puppet/last_run_metadata.json` (Linux), `/opt/puppet_environments/last_run_metadata.json` (macOS)
-
-**Format**: JSON with these key fields:
-- `ts` - ISO 8601 timestamp when puppet completed
-- `success` - Boolean (true if exit codes 0 or 2)
-- `exit_code` - Actual puppet exit code
-- `git_sha` - Full commit SHA that was applied
-- `git_branch` - Branch name
-- `git_repo` - Repository URL
-- `override_sha` - SHA256 of override file applied (null if none)
-- `vault_sha` - SHA256 of vault file used
-- `role` - Puppet role applied
-- `duration_s` - Run duration in seconds
-
-See [`docs/puppet-state-tracking.md`](puppet-state-tracking.md) for complete specification.
-
-### 2. Audit Data Model
-
-The SSH audit script reads the state file and extracts fields into `observed`:
-
-```python
-"puppet_state_ts": str,                    # ISO timestamp from state file
-"puppet_success": bool,                    # success field from state file
-"puppet_git_sha": str,                     # git SHA puppet applied
-"puppet_override_sha_applied": str,        # SHA256 of override puppet applied (null if none)
-"puppet_vault_sha_applied": str,           # SHA256 of vault puppet used
-"puppet_role": str,                        # role puppet applied
-"puppet_exit_code": int,                   # puppet exit code
-"puppet_duration_s": int,                  # run duration
-# ... plus git_repo, git_branch, git_dirty
+```bash
+uv run fleetroll gather all configs/host-lists/linux/2404.list
+uv run fleetroll host monitor configs/host-lists/linux/2404.list --once
+uv run fleetroll rollout report --role gecko_t_linux_2404_talos
 ```
 
-Backward compatibility: Falls back to legacy YAML parsing if JSON file not present.
+Puppet execution follows the [worker lifecycle](puppet-execution-mechanisms.md),
+not a universal 30-minute timer. Refresh again after Puppet runs. Compare the
+observation timestamps with the change before relying on recorded state.
 
-### 3. Monitor Columns
+## Read the monitor
 
-#### PP_SHA - Git SHA Applied
+| Column | Meaning |
+| --- | --- |
+| `DATA` | Host-audit age / Taskcluster observation age |
+| `PP_LAST` | Time from the recorded host audit to the last Puppet run; `FAIL` marks a reported failure |
+| `PP_EXP` | Expected revision from the recorded GitHub branch reference (override branch or master) |
+| `PP_SHA` | Revision reported by Puppet |
+| `PP_MATCH` | `Y` when the full expected/applied revisions match and Puppet succeeded; `N` for mismatch/failure; `-` when comparison data is unavailable |
+| `HEALTHY` | `Y` when `PP_MATCH=Y` and recorded TC activity is less than one hour old; `N` otherwise when comparison is available; `-` when unavailable |
 
-Shows the 7-character git SHA that puppet applied (truncated from full SHA).
+These checks apply to Linux/macOS hosts with or without overrides. Private
+branches need local GitHub read access for `gather gh`; missing expected revisions
+make `PP_EXP`, `PP_MATCH`, and `HEALTHY` unavailable. Windows uses a separate
+[pool-hash comparison](windows-support.md).
 
-| Value | Meaning |
-|-------|---------|
-| `abc1234` | Puppet applied git commit abc1234 |
-| `--` | No puppet state data available |
+`HEALTHY` is a compact revision/activity signal. It does not check all deployed
+checksums, prove that the latest TC lookup succeeded, or assess task outcomes.
+For automation, use [monitor JSON](reference/monitor-json.md) to check source freshness,
+lookup status, full identity, provenance, and override application explicitly.
 
-Color coding: Gray (informational)
+## Confirm application and outcomes
 
-#### PP_LAST - Time Since Last Puppet Run
+[Puppet metadata](reference/puppet-state-tracking.md) records the applied revision and
+override/vault checksums. Override convergence requires matching deployed/applied
+override checksums and a successful run; removal requires the reported override
+to be absent. A matching Git revision alone does not prove file convergence.
 
-Shows **time since last puppet run** (regardless of success/failure).
-
-| Value | Meaning |
-|-------|---------|
-| `2m` | Last run was 2 minutes ago |
-| `6h` | Last run was 6 hours ago |
-| `--` | No puppet run data available |
-| `FAIL` | Last run failed (time still shown, e.g. `2m FAIL`) |
-
-Uses `puppet_state_ts` from state file (falls back to legacy `puppet_last_run_epoch` if unavailable).
-
-Color coding:
-- Green: < 1 hour and succeeded
-- Yellow: < 6 hours and succeeded
-- Red: >= 6 hours OR failed
-
-#### APPLIED - Override Applied Successfully
-
-Shows whether the current override has been applied by puppet using **SHA comparison** (ground truth).
-
-| Value | Meaning |
-|-------|---------|
-| `Y` | Override SHA matches what puppet applied AND succeeded |
-| `N` | Override present but not applied by puppet, or puppet failed |
-| `-` | No override present |
-
-Logic (primary method using state file):
-```
-APPLIED = puppet_override_sha_applied == current_override_sha256
-          AND puppet_success
-```
-
-Fallback (legacy timestamp heuristic if state file unavailable):
-```
-APPLIED = override_present
-          AND puppet_last_run_epoch > override_mtime_epoch
-          AND puppet_success
-```
-
-Color coding:
-- Green: `Y`
-- Yellow: `N` (waiting for puppet)
-- Gray: `-` (no override)
-
-#### HEALTHY - Rollout Health Status
-
-Shows overall health: override applied AND worker is active.
-
-| Value | Meaning |
-|-------|---------|
-| `Y` | Applied AND TC_ACT < 1 hour |
-| `N` | Not applied OR TC_ACT stale |
-| `-` | No override present |
-
-Logic:
-```
-HEALTHY = APPLIED AND tc_act_age < 1 hour
-```
-
-Color coding:
-- Green: `Y`
-- Red: `N`
-- Gray: `-`
-
-### 4. Health Assessment Summary
-
-The verification chain for a successful rollout:
-
-```
-Override Set → Puppet Ran (after mtime) → Puppet Succeeded → TC Active
-     │                  │                        │              │
-     └──────────────────┴────────────────────────┘              │
-                        APPLIED = Y                             │
-                        └───────────────────────────────────────┘
-                                    HEALTHY = Y
-```
-
-Key data used:
-- `override_sha256` - SHA256 of current override file on host
-- `puppet_override_sha_applied` - SHA256 of override puppet applied (from state file)
-- `puppet_state_ts` - when puppet last ran (from state file)
-- `tc_act_date_active` - when TC worker was last active
-
-### 5. Implementation
-
-The puppet state tracking feature has been implemented. See epic mvp-3kp for details.
-
-**Components**:
-
-1. **State writing function** (`references/puppet_state_functions.sh`)
-   - Reusable bash function for writing state metadata
-   - OS detection for SHA commands (Linux/macOS)
-   - Atomic writes with error handling
-
-2. **Reference puppet scripts** (`references/run-puppet-*.sh`)
-   - Linux (ERB template) and macOS implementations
-   - Integration with state writing function
-
-3. **SSH audit script** (`fleetroll/ssh.py`)
-   - Reads `/etc/puppet/last_run_metadata.json` via SSH
-   - Parses JSON fields into PP_* key-value pairs
-   - Falls back to legacy YAML if JSON unavailable
-
-4. **Audit parser** (`fleetroll/audit.py`)
-   - Processes PP_* fields into observed dict
-   - Backward compatibility with old field names
-
-5. **Monitor display** (`fleetroll/commands/monitor/`)
-   - PP_SHA column (7-char git SHA)
-   - PP_LAST column (time since last run)
-   - APPLIED logic (SHA comparison with timestamp fallback)
-   - HEALTHY column (applied + TC active)
-
-**Deployment**: See [`references/README.md`](../references/README.md) for deployment guide.
-
-### 6. Verification Workflow
-
-For a user checking rollout health:
-
-1. **Set/unset override** - timestamp recorded in audit log
-2. **Wait for puppet interval** (typically 30 min)
-3. **Run audit** to refresh host state
-4. **Check monitor columns**:
-   - `PP_LAST` - puppet ran recently (green = good)
-   - `APPLIED` - shows `Y` (puppet applied the override)
-   - `HEALTHY` - shows `Y` (override applied AND worker active)
-
-The `HEALTHY` column is the single indicator for rollout success.
-
-## Future Enhancements
-
-- Rollout progress summary showing % of hosts where HEALTHY=Y
-- Configurable thresholds for "healthy" TC_ACT age (currently hardcoded to 1 hour)
-- Automated alerts when rollout is stuck (APPLIED=N for extended period)
+The [rollout report](rollout-report.md) requires stronger configuration evidence
+and attributes tasks only to verified intervals. It assesses master and overrides
+independently and compares them when the samples permit. Inspect exclusions,
+coverage, and task failures alongside the result; neither `HEALTHY=Y` nor report
+exit 0 authorizes advancing a rollout.

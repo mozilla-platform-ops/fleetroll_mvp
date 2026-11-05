@@ -14,7 +14,7 @@ https://github.com/mozilla-platform-ops/fleetroll_mvp
   - https://github.com/mozilla-platform-ops/fleetroll_mvp/blob/main/specs/FleetRoll_Product_Spec_v5.md
   - goal: 'inventory and maintenance of the hw fleet'
   - MVP focuses on a subset of features in fleetroll
-    - focused on linux and mac hw maintenance (pupppet-based, vault yamls and override files)
+    - focused on linux and mac hw maintenance (Puppet-based, vault yamls and override files)
       - solved a need I had... gets confusing managing various rollouts of branches.
 
 ---
@@ -35,8 +35,8 @@ https://github.com/mozilla-platform-ops/fleetroll_mvp
   - additional data
     - github (`fleetroll gather gh`): expected puppet git SHA for mac and linux (master or override) and win (worker_images file)
     - taskcluster (`fleetroll gather tc`): last time in touch with TC, job status (including pass/fail, duration)
-      - worker_type is determined via lookup tables/patterns based on role
-  - `watch -n 600 tools/gather-generic.sh config/host-lists/BLAH`
+      - Linux/macOS worker identity comes from host configuration; older data uses role/override mapping
+  - `watch -n 600 tools/gather-generic.sh configs/host-lists/BLAH`
     - handles collection of all three (`gather-tc` calls `gather-gh`)
     - allows more frequent collection of interesting hosts (3m for canaries, 15m for rest)
 

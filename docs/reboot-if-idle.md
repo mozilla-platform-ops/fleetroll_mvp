@@ -1,9 +1,9 @@
 # Operator-triggered reboot when gwhc reports idle
 
-## Initial version
+## Current behavior
 
-Add a one-host-at-a-time `host-reboot-if-idle` operation for Linux
-generic-worker hosts. This is a best-effort operator convenience that follows
+`host reboot-if-idle` operates on one Linux generic-worker host and requires
+`--confirm`. This is a best-effort operator convenience that follows
 the existing manual workflow: run `gwhc`, inspect its task state, and reboot
 when it reports `IDLE`.
 
@@ -31,7 +31,7 @@ For each invocation:
 The command must clearly state that `IDLE` is the report from the current
 best-effort `gwhc` implementation and does not close the task-claim race.
 
-## Acceptance cases for the initial version
+## Verification cases
 
 - One Linux host with `gwhc` reporting top-level `state: IDLE` receives one
   reboot request and the output says “reboot requested.”

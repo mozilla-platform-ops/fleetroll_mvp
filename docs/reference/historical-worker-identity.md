@@ -1,4 +1,4 @@
-# Historical worker identity (mvp-7xfx)
+# Historical worker identity
 
 Monitor JSON version 3 supplies historical evidence for investigating an
 SSH-unreachable worker. It does not authorize resetting a host. Medic owns

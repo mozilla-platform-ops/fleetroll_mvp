@@ -1,213 +1,105 @@
-# Monitor Filter & Sort
+# Filter and sort hosts
 
-## Problem
-
-The host-monitor TUI shows all hosts with fixed sort options (`s` key cycles
-host/role/sha). There's no way to filter by column values or sort by arbitrary
-columns, making it hard to surface problematic hosts (e.g. puppet runs older
-than 20h, unhealthy hosts sorted by TC activity).
-
-## Design Goals
-
-- Fast to type in a TUI context
-- Composable: filter + sort in one expression
-- Works in both interactive TUI and `--once` (CLI arg) mode
-- Coexists with existing quick-keys (`o`, `O`, `s`) without replacing them
-
----
-
-## Query Language
-
-Terse filter-bar syntax: space-separated conditions, `sort:` sigil for ordering.
-
-### Filter conditions
-
-```
-COLUMN OP VALUE
-```
-
-No spaces required around the operator. Multiple conditions are implicit AND.
-
-| Operator | Meaning |
-|----------|---------|
-| `>`      | greater than |
-| `<`      | less than |
-| `>=`     | greater than or equal |
-| `<=`     | less than or equal |
-| `=`      | exact match (case-insensitive) |
-| `!=`     | not equal |
-| `~`      | substring / contains (case-insensitive) |
-
-### Values
-
-- **Time**: `20h`, `5m`, `1d`, `30s`, `1h30m` — parsed to seconds for comparison
-  against time columns (PP_LAST, TC_ACT, UPTIME, TC_T_DUR)
-- **String**: unquoted for simple values (`web`, `n`, `yes`)
-- **Case-insensitive** throughout
-
-### Empty / missing values
-
-Use `col=` (no value) to match hosts where a column has no data, and `col!=` to
-match hosts where a column is set.
-
-```
-note=           # hosts with no note
-note!=          # hosts with a note
-pp_sha=         # puppet SHA not yet reported
-pp_sha!=        # puppet SHA present
-```
-
-The display sentinel `-` is purely cosmetic. Filtering operates on the underlying
-empty value, so `col=-` is **not** the way to test for missing data (it matches
-nothing).
-
-`?` is distinct from empty — it means "unknown / host not yet heard from" and is
-matchable literally: `pp_sha=?`.
-
-### Sort
-
-```
-sort:COLUMN
-sort:COLUMN:asc
-sort:COLUMN:desc
-sort:COL1:desc,COL2,COL3:asc
-```
-
-- Direction defaults to **ascending** if omitted
-- Time columns: ascending = shortest duration first (most recently active)
-- Multiple columns: left-to-right priority (primary, secondary, ...)
-- `sort:` can appear anywhere in the expression
-
-### Examples
-
-```
-pp_last>20h
-healthy=n sort:tc_act:desc
-role~web sort:pp_last:desc,host
-host~win sort:role,host
-tc_quar=yes
-pp_match=n sort:pp_last:desc
-pp_last>20h tc_act<2h sort:tc_act:desc,host
-note= sort:host
-pp_sha!= role~web
-```
-
-### DATA column
-
-DATA is a composite field showing `audit_age/tc_age`. Filtering uses the
-**max** of the two ages (same logic as its color coding):
-
-```
-data>30m       # either side is older than 30m
-```
-
-Sub-field access (if needed in future): `data.a` (audit), `data.t` (tc).
-
----
-
-## TUI Interaction
-
-### Filter bar
-
-Opened with `/` at the bottom of the screen:
-
-```
-Filter: pp_last>20h sort:tc_act:desc█
-```
-
-| Key | Action |
-|-----|--------|
-| `/` | Open filter bar (pre-filled with current query if any) |
-| `Enter` | Apply query, return to monitor |
-| `Esc` | Cancel edit, restore previous query |
-| `Ctrl+U` | Clear input line while editing |
-| `\` | Clear active `/` query entirely (no editing mode needed) |
-
-### Status line
-
-The hard status line at the top always reflects active state:
-
-```
-fleetroll | 42 hosts | pp_last>20h sort:tc_act:desc | ? help
-```
-
-When no query is active:
-
-```
-fleetroll | 42 hosts | ? help
-```
-
-The full query string is shown (not just "filter active") so the user can see
-what's applied at a glance before pressing `/` to edit.
-
----
-
-## Coexistence with Existing Quick-Keys
-
-`o`, `O`, and `s` remain unchanged. They operate as independent filter/sort
-state that is **ANDed** with the `/` query. They are not merged into the query
-string.
-
-| Key | Behavior |
-|-----|---------|
-| `o` | Toggle override-only filter (unchanged) |
-| `O` | Cycle OS filter: None → L → M → W → None (unchanged) |
-| `s` | Cycle sort: host → role → sha (unchanged, **unless** the active `/` query contains a `sort:` clause, in which case `s` is a no-op) |
-| `/` | Open full query bar |
-| `\` | Clear `/` query only; `o`/`O` state is unaffected |
-
-The three filter systems are independent:
-
-```
-[o: override] AND [O: Linux] AND [/: pp_last>20h sort:tc_act:desc]
-```
-
----
-
-## CLI (`--once` mode)
+Use the same query language in the monitor's `/` bar, CLI `--filter`, named
+filters, and the [web host grid](web-interface.md).
 
 ```bash
-fleetroll host monitor hosts.txt --once --filter "pp_last>20h sort:tc_act:desc"
+uv run fleetroll host monitor hosts.list --once \
+  --filter "pp_last>20h sort:tc_act:desc,host"
+uv run fleetroll host monitor hosts.list --once --hostname-only \
+  --filter-file configs/filters/moonshots-hung.yaml
 ```
 
-The `--filter` arg accepts the same query syntax. Results are filtered/sorted
-before rendering the single output.
+## Query syntax
 
----
+Conditions have the form `column<operator>value`, with no internal spaces.
+Separate conditions with spaces; all must match. Names and string comparisons
+are case-insensitive. Values cannot contain whitespace.
 
-## Implementation Notes
+| Operator | Meaning |
+| --- | --- |
+| `=`, `!=` | Equal / not equal |
+| `~` | Contains |
+| `>`, `<`, `>=`, `<=` | Ordered comparison |
 
-### Parsing
+Duration columns (`pp_last`, `tc_act`, `uptime`, `tc_t_dur`) accept values such as
+`20h`, `5m`, `1d`, and `1h30m`. Other values compare as strings. `os=L|M` matches
+either OS; `os!=L|M` excludes both. Pipe alternatives apply only to `=` and `!=`.
 
-A simple hand-rolled tokenizer is sufficient:
+Use `col=` for missing data and `col!=` for present data. Display sentinels `-`
+and `--` count as empty; `?` remains a literal unknown value (`pp_sha=?`).
+For `data`, presence means at least one parseable host or TC age; `?/-` and `-/-`
+are empty. Duration comparisons use the larger available age, so `data>30m`
+means at least one observed age exceeds 30 minutes. Separate `data.a`/`data.t`
+queries are not supported.
 
-1. Split on whitespace
-2. Each token is either a `sort:...` clause or a `COL OP VALUE` condition
-3. For conditions, detect the operator by scanning for `>`, `<`, `=`, `~`, `!=`
-4. Column names are case-insensitive; normalize to lowercase for lookup
+Sort with `sort:column[:asc|desc][,column...]` anywhere in the query. Ascending
+is the default; columns take priority left to right. Duration sorting uses
+seconds, string sorting ignores case, and missing/unknown values sort last in
+both directions.
 
-### Time comparison
+```text
+healthy=n sort:tc_act:desc
+os=L pp_last>20h sort:pp_last:desc,host
+ovr_bch~resolverd wt_ovr=y
+note= sort:host
+```
 
-All time columns store humanized strings (e.g. `"1d 2h"`, `"<5m"`). To
-compare against a filter value:
+Supported fields: `host`, `os`, `role`, `vlt_sha`, `ovr_bch`, `uptime`, `pp_last`,
+`pp_sha`, `pp_exp`, `pp_match`, `tc_act`, `tc_t_dur`, `tc_quar`, `data`, `healthy`,
+`pool`, `wt_ovr`, and `note`. Aliases are `sha`/`ovr_sha` for `ovr_bch`,
+`tc_j_sf` for `tc_t_dur`, and `health` for `healthy`. Override branch values may
+include checksum and worker-type annotations; use `~` for a branch substring.
 
-1. Parse filter value (`20h` → 72000 seconds)
-2. Parse column string back to seconds using an inverse of `humanize_duration`
-3. Handle `<Xm` prefix (treat as `X - 1` seconds for `<` comparisons, or `0`
-   for `>` comparisons)
+## Interactive monitor
 
-The existing `humanize_duration` function should be accompanied by a
-`parse_duration(s) -> int | None` inverse.
+| Key | Action |
+| --- | --- |
+| `/` | Edit the current query |
+| `Enter`, `Esc` | Apply / cancel an edit |
+| `Ctrl-U` | Clear the input line |
+| `↑`, `↓` while editing | Browse query history |
+| `\` | Clear the active query |
+| `f` | Open the saved/recent filter picker |
 
-### Sort
+The header shows the active query. Quick filters remain independent: `o` toggles
+overrides only, and `O` cycles OS selection; both combine with the query using
+AND. `s` cycles the built-in sort unless the query supplies `sort:`. Clearing the
+query leaves quick filters intact. Recent queries persist in
+`~/.fleetroll/filter_history`.
 
-`build_row_values()` returns `dict[str, str]`. For sorting:
+## Saved filters and picker
 
-- Time columns: convert to seconds before comparing (same parse_duration logic)
-- String columns: case-insensitive lexicographic
-- Missing/unknown values (`"-"`, `"?"`, `""`): sort last regardless of direction
+Store one filter per `configs/filters/*.yaml` file, relative to the working
+directory. Its filename stem is its display name; entries sort alphabetically.
 
-### Column name aliases (optional, future)
+```yaml
+query: os=L role~talos
+description: Linux Talos hosts
+```
 
-Short aliases could be supported: `pp` → `pp_last`, `act` → `tc_act`,
-`health` → `healthy`. Not required for initial implementation.
+`query` is required and nonempty; `description` is optional (not displayed by the
+TUI picker). The loader creates a missing directory and skips malformed files
+with warnings. The picker reloads saved filters each time it opens.
+
+The Saved and Recent tabs show names/queries and newest-first history. Opening
+selects the active query when found, preferring Saved; otherwise it starts at
+Saved's first row. A dot marks the active query.
+
+| Picker key | Action |
+| --- | --- |
+| `←`, `→` | Select Saved / Recent |
+| `↑`, `↓`, `k`, `j` | Move within the active tab |
+| `PgUp`, `PgDn` | Move ten rows |
+| `Home`, `G` | First / last row |
+| Printable characters, Backspace, Ctrl-U | Edit the substring search across names and queries |
+| `Enter` | Apply selection, promote it in history, and close; empty matches flash a message |
+| `Esc`, `f` | Close |
+
+Search resets both cursors; tab switches preserve them while open. Search and
+cursor positions are not saved across opens. The footer counts matching/total
+rows. Small terminals show a resize prompt. Edit YAML files directly to create,
+rename, or remove saved filters; the picker is read-only.
+
+Parsing/sorting live in `fleetroll/commands/monitor/query.py`; named filters and
+the picker live alongside it in `named_filters.py` and `filters_popup.py`.

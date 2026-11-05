@@ -1,5 +1,9 @@
 # Beads Review — 2026-04-27
 
+Historical planning snapshot. Priorities and completion claims reflect the date
+above; use Beads for current status and the [docs index](../README.md) for current
+guidance.
+
 55 open beads reviewed. Summary of distinct work streams and next-step prioritization.
 
 ---
