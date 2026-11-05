@@ -155,9 +155,21 @@ def record_write(conn: sqlite3.Connection, *, record: dict) -> None:
             "override_present": record["action"] == "host.set_override",
             "override_sha256": (record.get("parameters") or {}).get("sha256"),
         }
-        if _stamp(event) > _stamp(state.get("override_write")):
+        previous = state.get("override_write")
+        if _stamp(event) > _stamp(previous):
             state["override_write"] = event
             _save(conn, host=target, state=state)
+        elif (
+            previous
+            and _stamp(event) == _stamp(previous)
+            and event["source"] == previous.get("source")
+        ):
+            # Older summaries retained only source and timestamp. Recover fields
+            # from the matching audit event without replacing known target evidence.
+            recovered = {**event, **previous}
+            if recovered != previous:
+                state["override_write"] = recovered
+                _save(conn, host=target, state=state)
 
 
 def initialize(conn: sqlite3.Connection, *, audit_log: Path) -> None:
@@ -286,7 +298,8 @@ def render_history(state: dict | None, *, sha_cache: ShaInfoCache, now: datetime
         and (
             not boundary
             or (
-                baseline["observed"].get("override_present") == boundary["override_present"]
+                isinstance(boundary.get("override_present"), bool)
+                and baseline["observed"].get("override_present") == boundary["override_present"]
                 and (
                     not boundary.get("override_sha256")
                     or context["override_sha256"] == boundary["override_sha256"]

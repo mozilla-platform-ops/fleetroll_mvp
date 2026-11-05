@@ -21,6 +21,13 @@ the default `audit.jsonl` beside the database unless the caller passes
 `audit_log`; only `gather host` does, so a custom `--audit-log` used elsewhere is
 not replayed by those commands.
 
+Legacy summaries may contain override boundaries with only a source and timestamp.
+Replay fills missing write fields from an audit event with the same source and
+timestamp, preserving known fields and the original evidence age. A boundary
+without a boolean target presence remains `override_change_unverified`; rendering
+it does not crash or assume the change was verified. A later successful audit
+alone cannot verify a boundary whose target is still unknown.
+
 Only a successful audit with collection status `ok` and four nonempty string
 identity fields qualifies. A newer complete collection replaces the baseline,
 including when its identity is unchanged. Baselines have no automatic expiry.

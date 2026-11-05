@@ -22,6 +22,11 @@ lookup path. See the [historical identity contract](historical-worker-identity.m
 for its full shape, retention, override rules, examples, and consumer migration.
 Historical evidence never resolves or refreshes current-evidence fields below.
 
+Before changing this schema or its evidence semantics, review the
+[tool integration inventory](tool-integrations.md) for affected consumers,
+support decisions, and migration coordination. Consumers also depend on source
+timestamps, lookup provenance, and failure behavior, not only field names.
+
 ## Configured worker type
 
 `configured_worker_type` describes intent recorded by the latest host audit:

@@ -1,5 +1,6 @@
 """Durable recovery baselines, contradiction boundaries, and JSON provenance."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -387,3 +388,85 @@ def test_recorded_target_must_be_observed_before_override_block_clears(db_conn, 
     assert render(db_conn, cache)["contradiction_status"] == "contradicted"
     insert_host_observation(db_conn, audit(3, override=True, pool=POOL))
     assert render(db_conn, cache)["contradiction_status"] == "none_known"
+
+
+@pytest.mark.parametrize("boundary_key", ["override_write", "override_change"])
+@pytest.mark.parametrize("presence", ["missing", None, "false", 0, 1])
+def test_persisted_incomplete_boundary_blocks_without_crashing(
+    db_conn, cache, boundary_key, presence
+):
+    insert_host_observation(db_conn, audit(2))
+    state = load_history(db_conn, hosts=[HOST])[HOST]
+    boundary = {
+        "ts": stamp(1),
+        "source": "host.unset_override"
+        if boundary_key == "override_write"
+        else "observed_override_change",
+    }
+    if presence != "missing":
+        boundary["override_present"] = presence
+    state[boundary_key] = boundary
+    db_conn.execute(
+        "UPDATE worker_identity_history SET data=? WHERE host=?", (json.dumps(state), HOST)
+    )
+    loaded = load_history(db_conn, hosts=[HOST])[HOST]
+    output = build_monitor_json_record(
+        HOST, record=audit(2), tc_record=None, sha_cache=cache, historical_state=loaded
+    )
+    historical = output["historical_worker_identity"]
+    assert historical["observation_ts"] == stamp(2)
+    assert historical["contradiction_status"] == "contradicted"
+    assert historical["reasons"] == [
+        {"code": "override_change_unverified", "status": "contradicted", "evidence_ts": stamp(1)}
+    ]
+
+
+@pytest.mark.parametrize("action", ["host.set_override", "host.unset_override"])
+def test_audit_replay_enriches_legacy_write_without_refreshing_it(db_conn, cache, tmp_path, action):
+    override = action == "host.set_override"
+    insert_host_observation(db_conn, audit(2, override=override, pool=POOL if override else BASE))
+    state = load_history(db_conn, hosts=[HOST])[HOST]
+    state["override_write"] = {"ts": stamp(1), "source": action}
+    db_conn.execute(
+        "UPDATE worker_identity_history SET data=? WHERE host=?", (json.dumps(state), HOST)
+    )
+    log = tmp_path / "audit.jsonl"
+    log.write_text(
+        json.dumps(
+            {
+                "host": HOST,
+                "ts": stamp(1),
+                "action": action,
+                "parameters": {"sha256": "test_override_sha"} if override else {},
+            }
+        )
+        + "\n"
+    )
+    initialize(db_conn, audit_log=log)
+    recovered = load_history(db_conn, hosts=[HOST])[HOST]["override_write"]
+    assert recovered == {
+        "ts": stamp(1),
+        "source": action,
+        "override_present": override,
+        "override_sha256": "test_override_sha" if override else None,
+    }
+    assert render(db_conn, cache)["contradiction_status"] == "none_known"
+    assert render(db_conn, cache)["observation_ts"] == stamp(2)
+    initialize(db_conn, audit_log=log)
+    assert load_history(db_conn, hosts=[HOST])[HOST]["override_write"] == recovered
+
+
+def test_same_timestamp_replay_does_not_erase_known_write_target(db_conn):
+    insert_host_observation(db_conn, audit())
+    event = {
+        "host": HOST,
+        "ts": stamp(1),
+        "action": "host.set_override",
+        "parameters": {"sha256": "test_override_sha"},
+    }
+    record_write(db_conn, record=event)
+    record_write(db_conn, record={**event, "parameters": {}})
+    assert (
+        load_history(db_conn, hosts=[HOST])[HOST]["override_write"]["override_sha256"]
+        == "test_override_sha"
+    )

@@ -106,6 +106,71 @@ def test_conflicting_running_configs_are_ambiguous(tmp_path):
     ) == {"status": "ambiguous"}
 
 
+@pytest.mark.parametrize("wrapper_state", ["missing", "invalid", "conflicting"])
+@pytest.mark.parametrize("wrapper_first", [False, True])
+def test_active_worker_takes_precedence_over_wrapper_config(tmp_path, wrapper_state, wrapper_first):
+    config = tmp_path / "generic-worker.config"
+    config.write_text(json.dumps(IDENTITY))
+    wrapper_config = tmp_path / "start-worker.yml"
+    if wrapper_state == "invalid":
+        wrapper_config.write_text("{bad: [fake-sensitive-token")
+    elif wrapper_state == "conflicting":
+        wrapper_config.write_text(json.dumps({**IDENTITY, "workerType": "old-pool"}))
+    commands = [
+        f"/usr/local/bin/generic-worker run --config {config}",
+        f"bash /usr/local/bin/run-start-worker.sh {wrapper_config}",
+    ]
+    if wrapper_first:
+        commands.reverse()
+    assert collect(commands) == {"status": "ok", "identity": IDENTITY}
+
+
+@pytest.mark.parametrize(
+    "launcher", ["run-start-worker.sh", "run-generic-worker.sh", "worker-runner.sh"]
+)
+def test_wrapper_configuration_is_used_without_active_executable(tmp_path, launcher):
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps(IDENTITY))
+    assert collect([f"bash /usr/local/bin/{launcher} --config {config}"]) == {
+        "status": "ok",
+        "identity": IDENTITY,
+    }
+
+
+@pytest.mark.parametrize("executable", ["generic-worker", "start-worker"])
+def test_missing_active_configuration_cannot_fall_back_to_wrapper(tmp_path, executable):
+    config = tmp_path / "wrapper.json"
+    config.write_text(json.dumps(IDENTITY))
+    assert collect(
+        [
+            f"/usr/local/bin/{executable} --config {tmp_path}/missing.json",
+            f"bash /usr/local/bin/run-generic-worker.sh --config {config}",
+        ]
+    ) == {"status": "missing"}
+
+
+def test_missing_active_runner_configuration_blocks_valid_worker_config(tmp_path):
+    config = tmp_path / "worker.json"
+    config.write_text(json.dumps(IDENTITY))
+    assert collect(
+        [
+            f"/usr/local/bin/generic-worker run --config {config}",
+            f"/usr/local/bin/start-worker {tmp_path}/missing.yml",
+        ]
+    ) == {"status": "missing"}
+
+
+def test_relative_active_configuration_cannot_fall_back_to_wrapper(tmp_path):
+    config = tmp_path / "wrapper.json"
+    config.write_text(json.dumps(IDENTITY))
+    assert collect(
+        [
+            "/usr/local/bin/generic-worker run --config relative.json",
+            f"bash /usr/local/bin/run-generic-worker.sh --config {config}",
+        ]
+    ) == {"status": "unsupported_launch_config"}
+
+
 @pytest.mark.parametrize(
     "content", ["{bad: [fake-sensitive-token", "[]", '{"workerId": "partial"}']
 )

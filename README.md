@@ -393,6 +393,9 @@ host-collected identity, and Taskcluster evidence with timestamps and statuses.
 See the [versioned monitor JSON contract](docs/monitor-json.md) for examples,
 follow-mode semantics, and automation migration guidance.
 
+See [tool integrations](docs/tool-integrations.md) for consumers, supported
+interfaces, ownership, and compatibility coordination when changing these contracts.
+
 ```bash
 # emit one JSON object per host instead of a table
 uv run fleetroll host monitor configs/host-lists/1804.list --once --json

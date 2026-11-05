@@ -51,22 +51,30 @@ module FleetrollWorkerIdentity
 
   def self.collect(os:, commands:, plist_paths: nil)
     unsupported = false
-    paths = commands.filter_map do |command|
+    active_paths = []
+    wrapper_paths = []
+    commands.each do |command|
       begin
         args = Shellwords.split(command)
-        path = config_from_args(args)
-        # A running worker with an unresolvable config must not fall back to
-        # a possibly stale conventional path.
         index = worker_index(args)
-        if !path && index && File.basename(args[index]).match?(/\A(?:generic-worker(?:-simple|-multiuser)?|start-worker)\z/)
-          unsupported = true
-        end
-        path
+        next unless index
+
+        path = config_from_args(args)
+        active = File.basename(args[index]).match?(/\A(?:generic-worker(?:-simple|-multiuser)?|start-worker)\z/)
+        # A running worker with an unresolvable config must not fall back to
+        # a possibly stale wrapper or conventional path.
+        unsupported = true if active && !path
+        (active ? active_paths : wrapper_paths) << path if path
       rescue ArgumentError
         nil
       end
-    end.uniq
+    end
     return { 'status' => 'unsupported_launch_config' } if unsupported
+
+    # A shell wrapper can still reference a retired runner config while its
+    # child generic-worker runs directly. Only use wrapper hints when no actual
+    # worker executable supplies a configuration; active runners still agree.
+    paths = (active_paths.empty? ? wrapper_paths : active_paths).uniq
 
     if paths.empty? && os == 'Darwin'
       plists = plist_paths || ([
