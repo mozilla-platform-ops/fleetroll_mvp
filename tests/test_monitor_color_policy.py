@@ -41,9 +41,35 @@ def test_unknown_task_state_is_neutral(colors, value):
     assert colors.tc_j_sf_attr(value) == 0
 
 
+@pytest.mark.parametrize(
+    ("method", "value", "expected"),
+    [
+        ("pp_match_attr", "Y", 400),
+        ("pp_match_attr", "N", 500),
+        ("pp_match_attr", "-", 0),
+        ("pp_match_attr", "unexpected", 0),
+        ("ro_health_attr", "Y", 400),
+        ("ro_health_attr", "N", 600),
+        ("ro_health_attr", "-", 0),
+        ("ro_health_attr", "unexpected", 0),
+        ("tc_quar_attr", "YES", 600),
+        ("tc_quar_attr", "-", 0),
+        ("tc_quar_attr", "unexpected", 0),
+        ("tc_j_sf_attr", "completed", 400),
+        ("tc_j_sf_attr", "exception", 500),
+        ("tc_j_sf_attr", "failed", 600),
+    ],
+)
+def test_state_color_policy(colors, method, value, expected):
+    assert getattr(colors, method)(value) == expected
+
+
 def test_disabled_colors_are_neutral(colors):
     colors.color_enabled = False
     assert colors.uptime_attr(21600) == 0
     assert colors.pp_last_attr(None, failed=True) == 0
     assert colors.tc_j_sf_attr("FAILED") == 0
     assert colors.ro_health_attr("N") == 0
+    assert colors.pp_match_attr("Y") == 0
+    assert colors.tc_quar_attr("YES") == 0
+    assert colors.red_attr() == 0
