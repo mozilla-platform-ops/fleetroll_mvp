@@ -12,6 +12,8 @@ import sys
 from copy import copy
 from typing import TypedDict
 
+import click
+
 from . import rollout_report as report
 from .rollout_progress import RolloutProgress
 from .task_name_cache import load_names, save_names
@@ -446,11 +448,49 @@ def print_assessment(result, *, output):
                 )
 
 
-def print_comparison(result, *, details=False, verbose=False):
+def style_comparison_line(value, *, original, assessment):
+    """Use color for hierarchy and evidence severity, without implying rollout approval."""
+    line = original.lstrip()
+    if line.startswith("MATCHED VERIFIED COMPARISON:"):
+        if assessment["status"] != "comparable":
+            foreground = "yellow"
+        elif assessment["observed_result"].startswith("higher candidate"):
+            foreground = "red"
+        else:
+            foreground = "cyan"
+        return click.style(value, fg=foreground, bold=True)
+    if line.startswith(("◈", "CANDIDATE:", "BASELINE:", "WORKLOAD COMPARISONS")):
+        return click.style(value, fg="cyan", bold=True)
+    if line.startswith("Error:"):
+        return click.style(value, fg="red", bold=True)
+    if line.startswith("Blocker:") or (
+        line.startswith("Warning:") and "configuration attribution" in line
+    ):
+        return click.style(value, fg="yellow", bold=True)
+    if line.startswith(("Window:", "Use --", "Observed results only;")):
+        return click.style(value, dim=True)
+    # Preserve neutral zero counts. Match explicit outcome labels, never SHAs,
+    # host IDs, percentages, or unlabelled numbers in diagnostic text.
+    if line.startswith(
+        ("Candidate:", "Baseline:", "All observed:", "Observed:", "Attributed:", "Unattributed:")
+    ):
+        value = re.sub(
+            r"\b[1-9]\d* (?:failed|exception|unknown)\b",
+            lambda match: click.style(
+                match[0], fg="yellow" if match[0].endswith("unknown") else "red", bold=True
+            ),
+            value,
+        )
+    return value
+
+
+def print_comparison(result, *, details=False, verbose=False, color=None, width=None):
     # Use the report renderer's wrapping and TTY newline handling.
     from io import StringIO
 
     output = StringIO()
+    if color is None:
+        color = report.report_color_enabled()
     print("◈ FLEETROLL / ROLLOUT COMPARE", file=output)
     print_assessment(result, output=output)
     pair = result["comparison"]
@@ -550,13 +590,16 @@ def print_comparison(result, *, details=False, verbose=False):
     report.write_report_text(
         output.getvalue(),
         stream=sys.stdout,
-        width=max(20, min(shutil.get_terminal_size(fallback=(100, 24)).columns, 120)),
-        color=False,
+        width=max(20, width or min(shutil.get_terminal_size(fallback=(100, 24)).columns, 120)),
+        color=color,
         population_headings=set(),
+        line_style=lambda value, *, original: style_comparison_line(
+            value, original=original, assessment=pair
+        ),
     )
     if verbose:
         for side in result["reports"].values():
-            report.print_report(side, verbose=True)
+            report.print_report(side, verbose=True, color=color, width=width)
 
 
 def main(argv=None, *, prog=None):

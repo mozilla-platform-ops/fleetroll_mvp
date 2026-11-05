@@ -2,6 +2,7 @@
 
 import json
 
+import click
 import pytest
 from click.testing import CliRunner
 from fleetroll import rollout_compare as compare
@@ -475,3 +476,76 @@ def test_grouping_keeps_distinct_worker_errors_and_nonworker_errors_separate():
     assert errors[0] == "candidate: 1 worker(s): observation failed (a)"
     assert errors[-1] == "baseline: task query unavailable"
     assert compare.comparison_errors(result, verbose=True) == result["errors"]
+
+
+@pytest.mark.parametrize("width", [40, 80, 120])
+def test_color_preserves_text_wrapping_and_highlights_evidence_limits(env, capsys, width):
+    pools(env)
+    task(env, "control")
+    task(env, "canary", pool="candidate")
+    _, result = invoke(env, capsys, "--min-finished", "20")
+    compare.print_comparison(result, color=False, width=width)
+    plain = capsys.readouterr().out
+    compare.print_comparison(result, color=True, width=width)
+    colored = capsys.readouterr().out
+    assert click.unstyle(colored) == plain
+    assert all(len(line) <= width for line in click.unstyle(colored).splitlines())
+    assert click.style("◈ FLEETROLL / ROLLOUT COMPARE", fg="cyan", bold=True) in colored
+    status_lines = [line for line in colored.splitlines() if "MATCHED VERIFIED" in line]
+    assert status_lines
+    assert all(line.startswith("\x1b[33m\x1b[1m") for line in status_lines)
+    assert "\x1b[32m" not in colored  # Equal observed rates never imply approval.
+    assert "\x1b[31m" not in colored  # Zero failures remain neutral.
+
+
+@pytest.mark.parametrize("mode", ["pipe", "no_color", "dumb", "terminal"])
+def test_comparison_auto_color_respects_output_environment(env, capsys, monkeypatch, mode):
+    pools(env)
+    task(env, "control")
+    task(env, "canary", pool="candidate")
+    _, result = invoke(env, capsys)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "dumb" if mode == "dumb" else "xterm")
+    if mode == "no_color":
+        monkeypatch.setenv("NO_COLOR", "")
+    monkeypatch.setattr(compare.sys.stdout, "isatty", lambda: mode != "pipe")
+    compare.print_comparison(result)
+    text = capsys.readouterr().out
+    assert ("\x1b[" in text) == (mode == "terminal")
+
+
+@pytest.mark.parametrize(
+    ("status", "observed", "foreground"),
+    [
+        ("unavailable", "comparison unavailable", "yellow"),
+        ("comparable", "higher candidate failure rate observed", "red"),
+        ("comparable", "higher candidate exception rate observed", "red"),
+        ("comparable", "same observed failure and exception rates", "cyan"),
+        ("comparable", "lower candidate failure or exception rate observed", "cyan"),
+    ],
+)
+def test_verdict_color_distinguishes_unavailability_from_observed_regression(
+    status, observed, foreground
+):
+    line = f"  MATCHED VERIFIED COMPARISON: {observed}"
+    assert compare.style_comparison_line(
+        line, original=line, assessment={"status": status, "observed_result": observed}
+    ) == click.style(line, fg=foreground, bold=True)
+
+
+def test_color_targets_nonzero_outcomes_and_errors_without_coloring_routine_caveats():
+    def style(line):
+        return compare.style_comparison_line(line, original=line, assessment={})
+
+    line = "    Observed: 23 completed, 2 failed, 0 exception, 1 unknown, 0 pending"
+    colored = style(line)
+    assert click.style("2 failed", fg="red", bold=True) in colored
+    assert click.style("1 unknown", fg="yellow", bold=True) in colored
+    assert "0 exception" in colored
+    assert click.unstyle(colored) == line
+    error = "  Error: baseline: 3 worker(s): latest host observation failed"
+    assert style(error) == click.style(error, fg="red", bold=True)
+    caution = "  Warning: candidate: configuration attribution 50.0% below 80%"
+    assert style(caution) == click.style(caution, fg="yellow", bold=True)
+    caveat = "  Warning: Task names and roles match; task parameters may differ."
+    assert style(caveat) == caveat

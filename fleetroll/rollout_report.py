@@ -1576,7 +1576,7 @@ def print_indented(render, *, indent, **kwargs):
     print(textwrap.indent(output.getvalue(), " " * indent), end="")
 
 
-def write_report_text(value, *, stream, width, color, population_headings=()):
+def write_report_text(value, *, stream, width, color, population_headings=(), line_style=None):
     """Wrap before styling; explicit CRLF works even when a TTY has OPOST/ONLCR off."""
     lines = []
     for line in value.splitlines():
@@ -1596,7 +1596,9 @@ def write_report_text(value, *, stream, width, color, population_headings=()):
         )
         for physical in wrapped:
             if color:
-                if "✕ ERROR" in line:
+                if line_style is not None:
+                    physical = line_style(physical, original=line)
+                elif "✕ ERROR" in line:
                     physical = click.style(physical, fg="red", bold=True)
                 elif "⚠" in line:
                     physical = click.style(physical, fg="yellow")

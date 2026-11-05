@@ -32,6 +32,15 @@ Repeated worker errors are grouped per side with up to three example hosts.
 `--details` lists every worker with concise errors; `--verbose` and `--json`
 preserve full SDK diagnostics. Other query errors remain individually visible.
 
+Interactive text uses cyan headings, amber unavailable comparisons/blockers and
+unknown outcomes, and red errors/nonzero failures or exceptions. A higher
+candidate failure/exception rate uses a red verdict; equal or lower observed
+rates use neutral cyan rather than a green approval signal. Zero outcomes and
+routine caveats remain uncolored. Color supplements the text labels and is
+disabled for redirected stdout, `NO_COLOR` (including an empty value), and
+`TERM=dumb`. JSON never includes terminal styling. Styling follows wrapping so
+colored and plain reports retain the same layout.
+
 Task names are cached separately from host evidence in a SQLite sidecar beside
 the selected `--db` (normally `~/.fleetroll/fleetroll.task-names.sqlite3`). The
 cache stores only task ID, service root URL, name, and fetch timestamp. Entries
