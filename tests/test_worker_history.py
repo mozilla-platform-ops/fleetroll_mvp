@@ -208,6 +208,24 @@ def test_dropped_write_boundary_is_logged_and_replayed(
     assert load_history(db_conn, hosts=[HOST])[HOST]["override_write"]["ts"] == stamp(3)
 
 
+def test_unchanged_history_is_not_rewritten(db_conn):
+    saves = []
+    db_conn.set_trace_callback(
+        lambda sql: saves.append(sql)
+        if sql.startswith("INSERT INTO worker_identity_history")
+        else None
+    )
+    insert_host_observation(db_conn, audit())
+    assert len(saves) == 1
+    # Replaying the same observation and a later failed audit leave state unchanged.
+    insert_host_observation(db_conn, audit())
+    insert_host_observation(db_conn, {"host": HOST, "ts": stamp(5), "ok": False})
+    assert len(saves) == 1
+    # A newer successful observation changes state and is saved.
+    insert_host_observation(db_conn, audit(6))
+    assert len(saves) == 2
+
+
 def test_migration_recovers_history_and_replays_writes_once(db_conn, cache, tmp_path):
     insert_host_observation(db_conn, audit())
     insert_host_observation(db_conn, audit(2, status="invalid"))

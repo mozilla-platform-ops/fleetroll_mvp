@@ -72,6 +72,7 @@ def record_observation(conn: sqlite3.Connection, *, record: dict) -> None:
     if parse_timestamp(record.get("ts")) is None:
         return
     state = load_history(conn, hosts=[host]).get(host, {})
+    before = json.dumps(state, sort_keys=True)
     if "." in host:
         short_state = load_history(conn, hosts=[host.split(".")[0]]).get(host.split(".")[0], {})
         if _stamp(short_state.get("override_write")) > _stamp(state.get("override_write")):
@@ -118,7 +119,8 @@ def record_observation(conn: sqlite3.Connection, *, record: dict) -> None:
             state["missing_configuration"] = {"ts": compact["ts"]}
     if collected_identity(compact) and _stamp(compact) >= _stamp(state.get("baseline")):
         state["baseline"] = compact
-    _save(conn, host=host, state=state)
+    if state and json.dumps(state, sort_keys=True) != before:
+        _save(conn, host=host, state=state)
 
 
 def record_write(conn: sqlite3.Connection, *, record: dict) -> None:
