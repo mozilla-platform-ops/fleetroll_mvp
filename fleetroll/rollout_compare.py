@@ -467,7 +467,7 @@ def style_comparison_line(value, *, original, assessment):
         line.startswith("Warning:") and "configuration attribution" in line
     ):
         return click.style(value, fg="yellow", bold=True)
-    if line.startswith(("Window:", "Use --", "Observed results only;")):
+    if line.startswith(("Warning:", "Window:", "Use --", "Observed results only;")):
         return click.style(value, dim=True)
     # Preserve neutral zero counts. Match explicit outcome labels, never SHAs,
     # host IDs, percentages, or unlabelled numbers in diagnostic text.
@@ -491,9 +491,10 @@ def print_comparison(result, *, details=False, verbose=False, color=None, width=
     output = StringIO()
     if color is None:
         color = report.report_color_enabled()
-    print("◈ FLEETROLL / ROLLOUT COMPARE", file=output)
+    print("◈ FLEETROLL / ROLLOUT COMPARE\n", file=output)
     print_assessment(result, output=output)
     pair = result["comparison"]
+    print(file=output)
     print(f"  Window: {result['window']['since']} → {result['window']['until']}", file=output)
     if result["task_matching"]["strip_prefix"]:
         print(
@@ -580,13 +581,17 @@ def print_comparison(result, *, details=False, verbose=False, color=None, width=
                     f"{counts['failed']} failed; {counts['exception']} exceptions",
                     file=output,
                 )
+    if result["warnings"]:
+        print(file=output)
     for message in result["warnings"]:
         print(f"  Warning: {message}", file=output)
+    if result["errors"]:
+        print(file=output)
     for message in comparison_errors(result, verbose=verbose):
         print(f"  Error: {message}", file=output)
     if result["errors"] and not verbose:
         print("  Use --details for every worker; --verbose or --json for full errors.", file=output)
-    print("  Observed results only; not automatic rollout approval.", file=output)
+    print("\n  Observed results only; not automatic rollout approval.", file=output)
     report.write_report_text(
         output.getvalue(),
         stream=sys.stdout,

@@ -89,3 +89,5 @@ class RolloutProgress:
                 if exc_type is not None:
                     self._label += " (stopped)"
                 self._write(final=True)
+                self.stream.write("\r\n")
+                self.stream.flush()

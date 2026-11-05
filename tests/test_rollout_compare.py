@@ -417,6 +417,10 @@ def test_text_leads_with_assessment_blockers_and_sample_counts(env, capsys, mini
         assert "failure rate difference pp (candidate - baseline): +0.00" in text
     assert "Observed: 1 completed" in text
     assert "0 pending" not in text
+    assert "ROLLOUT COMPARE\n\n  MATCHED VERIFIED" in text
+    assert "\n\n  Window:" in text
+    assert "\n\n  Warning:" in text
+    assert "\n\n  Observed results only;" in text
 
 
 def test_worker_errors_group_by_side_without_losing_full_diagnostics(env, capsys):
@@ -447,6 +451,7 @@ def test_worker_errors_group_by_side_without_losing_full_diagnostics(env, capsys
     assert "--verbose or --json for full errors" in text
     compare.print_comparison(result, details=True)
     text = capsys.readouterr().out
+    assert "\n\n  Error:" in text
     assert "control-3:" in text
     assert "* method:" not in text
     compare.print_comparison(result, verbose=True)
@@ -533,7 +538,7 @@ def test_verdict_color_distinguishes_unavailability_from_observed_regression(
     ) == click.style(line, fg=foreground, bold=True)
 
 
-def test_color_targets_nonzero_outcomes_and_errors_without_coloring_routine_caveats():
+def test_color_highlights_problems_and_dims_routine_caveats():
     def style(line):
         return compare.style_comparison_line(line, original=line, assessment={})
 
@@ -548,4 +553,4 @@ def test_color_targets_nonzero_outcomes_and_errors_without_coloring_routine_cave
     caution = "  Warning: candidate: configuration attribution 50.0% below 80%"
     assert style(caution) == click.style(caution, fg="yellow", bold=True)
     caveat = "  Warning: Task names and roles match; task parameters may differ."
-    assert style(caveat) == caveat
+    assert style(caveat) == click.style(caveat, dim=True)

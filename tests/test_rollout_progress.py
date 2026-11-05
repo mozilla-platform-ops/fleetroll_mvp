@@ -33,7 +33,7 @@ def test_spinner_animates_while_work_is_blocked_and_cleans_up(monkeypatch):
         progress.update("Fetching task names", completed=1, total=2)
         progress.update("Fetching task names", completed=2, total=2)
     assert "Fetching task names 2/2" in terminal.getvalue()
-    assert terminal.getvalue().endswith("\r\n")
+    assert terminal.getvalue().endswith("\r\n\r\n")
     assert set(threading.enumerate()) <= threads
 
 
