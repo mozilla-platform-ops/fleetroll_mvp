@@ -31,12 +31,18 @@ counts and repeated success percentages; `--details` retains the full breakdown.
 Repeated worker errors are grouped per side with up to three example hosts.
 `--details` lists every worker with concise errors; `--verbose` and `--json`
 preserve full SDK diagnostics. Other query errors remain individually visible.
+Known methodological caveats and truncated task windows appear as dim `Note:`
+lines. Compact configuration history, saved-observation provenance, and repeated
+exclusion/name-matching explanations appear only with `--verbose`; `--details`
+keeps the concise notices. Attribution warnings, missing evidence, cache/query
+warnings, and errors remain visible by default. JSON retains every original
+warning, and these presentation choices do not change assessments or exit codes.
 
 Interactive text uses cyan headings, amber unavailable comparisons/blockers and
 unknown outcomes, and red errors/nonzero failures or exceptions. A higher
 candidate failure/exception rate uses a red verdict; equal or lower observed
-rates use neutral cyan rather than a green approval signal. Zero outcomes and
-routine caveats remain uncolored. Color supplements the text labels and is
+rates use neutral cyan rather than a green approval signal. Routine notes are
+dimmed; zero outcomes remain uncolored. Color supplements the text labels and is
 disabled for redirected stdout, `NO_COLOR` (including an empty value), and
 `TERM=dumb`. JSON never includes terminal styling. Styling follows wrapping so
 colored and plain reports retain the same layout.

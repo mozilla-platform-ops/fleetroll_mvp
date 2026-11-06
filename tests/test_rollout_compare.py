@@ -419,8 +419,57 @@ def test_text_leads_with_assessment_blockers_and_sample_counts(env, capsys, mini
     assert "0 pending" not in text
     assert "ROLLOUT COMPARE\n\n  MATCHED VERIFIED" in text
     assert "\n\n  Window:" in text
-    assert "\n\n  Warning:" in text
+    assert "\n\n  Note:" in text
     assert "\n\n  Observed results only;" in text
+
+
+@pytest.mark.parametrize("mode", ["default", "details", "verbose"])
+def test_notices_quiet_provenance_but_preserve_actionable_warnings(env, capsys, mode):
+    pools(env)
+    task(env, "control")
+    task(env, "canary", pool="candidate")
+    _, result = invoke(env, capsys)
+    result["warnings"] = [
+        "Recorded host population only; up to 20 recent runs per worker, not a complete pool history.",
+        "Task names and roles match; task parameters may differ.",
+        "Observed outcome rates do not establish causation.",
+        "candidate: Compact configuration history: 42 spans; retention cutoff test-cutoff.",
+        "candidate: Additional historical observations loaded from saved.json.",
+        "candidate: Excluded jobs are unknown configuration evidence, not successful work.",
+        "candidate: 1 host(s) have a full 20-task window; earlier jobs may be omitted.",
+        "candidate: configuration attribution 65.0% below 80%",
+        "baseline: Audit log unavailable; configuration history may have additional gaps.",
+        "Task-name cache read unavailable: test error",
+        "A new warning requiring attention",
+        "Replay: prefix fallback used for 13 task-name pair(s); original names retained.",
+        "Matching removes the literal task-name prefix 'Test: ' once.",
+    ]
+    before = json.dumps(result, sort_keys=True)
+    compare.print_comparison(
+        result, details=mode == "details", verbose=mode == "verbose", width=120, color=True
+    )
+    colored = capsys.readouterr().out
+    text = click.unstyle(colored)
+    for message in (
+        "candidate: configuration attribution 65.0% below 80%",
+        "baseline: Audit log unavailable; configuration history may have additional gaps.",
+        "Task-name cache read unavailable: test error",
+        "A new warning requiring attention",
+    ):
+        assert f"Warning: {message}" in text
+    for message in result["warnings"][:3]:
+        assert click.style(f"  Note: {message}", dim=True) in colored
+    assert "Note: candidate: 1 host(s) have a full 20-task window;" in text
+    for message in (
+        "Compact configuration history: 42 spans",
+        "Additional historical observations loaded from saved.json.",
+        "Excluded jobs are unknown configuration evidence,",
+        "Replay: prefix fallback used for 13 task-name pair(s);",
+        "Matching removes the literal task-name prefix",
+    ):
+        assert (message in text) == (mode == "verbose")
+    assert ("Use --verbose for configuration provenance" in text) == (mode != "verbose")
+    assert json.dumps(result, sort_keys=True) == before
 
 
 def test_worker_errors_group_by_side_without_losing_full_diagnostics(env, capsys):
@@ -552,5 +601,7 @@ def test_color_highlights_problems_and_dims_routine_caveats():
     assert style(error) == click.style(error, fg="red", bold=True)
     caution = "  Warning: candidate: configuration attribution 50.0% below 80%"
     assert style(caution) == click.style(caution, fg="yellow", bold=True)
-    caveat = "  Warning: Task names and roles match; task parameters may differ."
+    caveat = "  Note: Task names and roles match; task parameters may differ."
     assert style(caveat) == click.style(caveat, dim=True)
+    note = "  Note: Recorded host population only; recent runs per worker."
+    assert style(note) == click.style(note, dim=True)

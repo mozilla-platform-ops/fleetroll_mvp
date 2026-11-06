@@ -448,6 +448,42 @@ def print_assessment(result, *, output):
                 )
 
 
+def comparison_notices(messages, *, verbose=False):
+    """Quiet known boilerplate in text; preserve unfamiliar warnings by default."""
+    warnings, notes = [], []
+    hidden = False
+    for message in messages:
+        body = message.removeprefix("candidate: ").removeprefix("baseline: ")
+        if body.startswith(
+            (
+                "Compact configuration history:",
+                "Additional historical observations loaded from ",
+                "Excluded jobs are unknown configuration evidence,",
+                "Replay: prefix fallback used for ",
+                "Matching removes the literal task-name prefix ",
+            )
+        ):
+            if verbose:
+                notes.append(message)
+            else:
+                hidden = True
+        elif body.startswith(
+            (
+                "Recorded host population only;",
+                "Task names and roles match;",
+                "Observed outcome rates do not establish ",
+            )
+        ) or re.match(r"\d+ host\(s\) have a full 20-task window;", body):
+            notes.append(message)
+        else:
+            warnings.append(message)
+    notices = [("Warning", message) for message in warnings]
+    notices.extend(("Note", message) for message in notes)
+    if hidden:
+        notices.append(("Note", "Use --verbose for configuration provenance and full caveats."))
+    return notices
+
+
 def style_comparison_line(value, *, original, assessment):
     """Use color for hierarchy and evidence severity, without implying rollout approval."""
     line = original.lstrip()
@@ -463,11 +499,9 @@ def style_comparison_line(value, *, original, assessment):
         return click.style(value, fg="cyan", bold=True)
     if line.startswith("Error:"):
         return click.style(value, fg="red", bold=True)
-    if line.startswith("Blocker:") or (
-        line.startswith("Warning:") and "configuration attribution" in line
-    ):
+    if line.startswith(("Blocker:", "Warning:")):
         return click.style(value, fg="yellow", bold=True)
-    if line.startswith(("Warning:", "Window:", "Use --", "Observed results only;")):
+    if line.startswith(("Note:", "Window:", "Use --", "Observed results only;")):
         return click.style(value, dim=True)
     # Preserve neutral zero counts. Match explicit outcome labels, never SHAs,
     # host IDs, percentages, or unlabelled numbers in diagnostic text.
@@ -581,10 +615,15 @@ def print_comparison(result, *, details=False, verbose=False, color=None, width=
                     f"{counts['failed']} failed; {counts['exception']} exceptions",
                     file=output,
                 )
-    if result["warnings"]:
+    notices = comparison_notices(result["warnings"], verbose=verbose)
+    if notices:
         print(file=output)
-    for message in result["warnings"]:
-        print(f"  Warning: {message}", file=output)
+    previous_label = None
+    for label, message in notices:
+        if previous_label is not None and label != previous_label:
+            print(file=output)
+        print(f"  {label}: {message}", file=output)
+        previous_label = label
     if result["errors"]:
         print(file=output)
     for message in comparison_errors(result, verbose=verbose):
