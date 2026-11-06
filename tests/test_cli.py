@@ -50,7 +50,10 @@ class TestCliHelp:
         """Main --help shows tool description."""
         result = runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
-        assert "FleetRoll" in result.output
+        assert (
+            "Fleetroll: inspect fleet health, manage host configuration, and compare rollouts."
+            in " ".join(result.output.split())
+        )
 
     def test_audit_help(self, runner: CliRunner):
         """gather-host --help shows command options."""

@@ -128,7 +128,7 @@ def common_options(_func=None, *, timeout_default: int = 10):
 )
 @click.pass_context
 def cli(ctx: click.Context, debug: bool):
-    """FleetRoll MVP: audit/set/unset override files on hosts via SSH."""
+    """Fleetroll: inspect fleet health, manage host configuration, and compare rollouts."""
     ctx.ensure_object(dict)
     ctx.obj["debug"] = debug
     setup_logging(debug=debug)
