@@ -8,6 +8,23 @@ evidence instead of `null`. Existing audit fields are unchanged when present.
 All timestamps are the original source timestamps; generating a report does not
 refresh observations or query Taskcluster.
 
+The outer object uses full hostnames as keys, even for a single-host request;
+it is not an array. For a saved `--once --json` snapshot:
+
+```bash
+# Select one host, quoting the key because hostnames contain punctuation.
+jq '.["ms017.example.test"] | {ts, observed}' snapshot.json
+
+# Iterate over host values (works on the hostname-keyed object).
+jq -r '.[] | .observed.role // empty' snapshot.json
+
+# Convert host values to an array before using numeric indexing.
+jq '[.[]] | .[0]' snapshot.json
+```
+
+Array order does not identify a particular host; select by hostname when the
+host's identity matters.
+
 Without `--once`, JSON emits the same initial host-keyed object, followed by
 one complete per-host object per update (including its `host` field), as before.
 The objects now have the same evidence contract in snapshots and updates.

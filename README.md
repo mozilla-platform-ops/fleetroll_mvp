@@ -409,8 +409,13 @@ os=M|L
 
 ##### JSON output
 
-Monitor JSON preserves raw host audit fields and adds configured worker pool,
+With `--once --json`, monitor emits one JSON object keyed by full hostname,
+even when selecting a single host. Each value preserves raw host audit fields
+and adds configured worker pool,
 host-collected identity, and Taskcluster evidence with timestamps and statuses.
+Use `.["hostname"]` to select a host or `.[]` to iterate over host values;
+numeric indexing such as `.[0]` requires an array. Convert the values to an
+array with `[.[]]` if needed.
 See the [versioned monitor JSON contract](docs/reference/monitor-json.md) for examples,
 follow-mode semantics, and automation migration guidance.
 
@@ -418,8 +423,12 @@ See [tool integrations](docs/reference/tool-integrations.md) for consumers, supp
 interfaces, ownership, and compatibility coordination when changing these contracts.
 
 ```bash
-# emit one JSON object per host instead of a table
+# emit one snapshot object keyed by full hostname instead of a table
 uv run fleetroll host monitor configs/host-lists/1804.list --once --json
+
+# select one host's observation timestamp and raw audit fields
+uv run fleetroll host monitor t-linux64-ms-226.test.releng.mdc1.mozilla.com --once --json \
+  | jq '.["t-linux64-ms-226.test.releng.mdc1.mozilla.com"] | {ts, observed}'
 
 # extract unique roles across all hosts
 uv run fleetroll host monitor configs/host-lists/all.list --once --json \
