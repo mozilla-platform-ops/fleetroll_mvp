@@ -392,7 +392,7 @@ def fleet_status(
 )
 @click.pass_context
 def rollout_report(ctx: click.Context):
-    """Compare recent Taskcluster outcomes across rollout configurations."""
+    """Report master and override health within a host population."""
     from .rollout_report import main
 
     ctx.exit(main(ctx.args, prog=ctx.command_path))
@@ -1357,13 +1357,13 @@ for _operation in ("show", "set", "clear"):
 
 
 @click.command(
-    "compare",
+    "compare-pools",
     context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
     add_help_option=False,
 )
 @click.pass_context
 def rollout_compare(ctx: click.Context):
-    """Compare candidate and baseline worker pools."""
+    """Compare matching workloads between candidate and baseline worker pools."""
     from .rollout_compare import main
 
     ctx.exit(main(ctx.args, prog=ctx.command_path))
@@ -1372,6 +1372,15 @@ def rollout_compare(ctx: click.Context):
 _groups = install_hierarchy(cli)
 _groups["host"].add_command(host_hold)
 _groups["rollout"].add_command(rollout_compare)
+_groups["rollout"].add_command(
+    click.Command(
+        "compare",
+        callback=rollout_compare.callback,
+        context_settings=rollout_compare.context_settings,
+        add_help_option=False,
+        hidden=True,
+    )
+)
 
 
 def main():

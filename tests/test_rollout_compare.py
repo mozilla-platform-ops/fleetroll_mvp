@@ -202,15 +202,16 @@ def test_missing_pool_membership_is_input_error(env, capsys):
     assert "no matching recorded hosts" in capsys.readouterr().err
 
 
-def test_canonical_cli_and_readable_details(env):
+@pytest.mark.parametrize("action", ["compare-pools", "compare"])
+def test_canonical_cli_and_readable_details(env, action):
     pools(env)
     task(env, "control")
     task(env, "canary", pool="candidate")
     runner = CliRunner()
-    help_result = runner.invoke(cli, ["rollout", "compare", "--help"])
+    help_result = runner.invoke(cli, ["rollout", action, "--help"])
     assert help_result.exit_code == 0
     assert "--candidate-pool" in help_result.output
-    result = runner.invoke(cli, ["rollout", "compare", *arguments(env, "--details")])
+    result = runner.invoke(cli, ["rollout", action, *arguments(env, "--details")])
     assert result.exit_code == 0, result.output
     assert "CANDIDATE" in result.output
     assert "BASELINE" in result.output

@@ -21,7 +21,7 @@ check exit status. Tables and diagnostic text are not stable parsing interfaces.
 
 | Machine interface | Contract | Preserve |
 | --- | --- | --- |
-| Explicit pool comparison | Comparison v1: [rollout compare](../rollout-compare.md) | Candidate/baseline identity, shared window, observed versus attributed outcomes, exact role/name matching, query failures, source times and per-worker evidence. |
+| Explicit pool comparison | Comparison v1: [rollout compare-pools](../rollout-compare.md) | Candidate/baseline identity, shared window, observed versus attributed outcomes, exact role/name matching, query failures, source times and per-worker evidence. |
 | Live worker diagnosis | Diagnosis v1: [host diagnose JSON](host-diagnose.md) | Collection success separate from health, valid exit 1 reports, full structured checks, upstream schema status and source times. Legacy evidence does not qualify for automatic zombie recovery. Medic integration is pending. |
 | Host snapshot and worker evidence | Worker evidence v3: [monitor JSON](monitor-json.md), [historical identity](historical-worker-identity.md) | Host-keyed snapshots, full identity, source timestamps, current/historical distinction, lookup outcomes, pinned provenance. Follow mode uses different framing and is not a durable event stream. |
 | Collection freshness | Freshness v2: [usage](../../README.md#data-freshness), [producer](../../fleetroll/commands/data_freshness.py) | Separate host/TC sources, required sources, coverage, overall status, failures. Without `--require-fresh`, successful reporting does not imply fresh data. |

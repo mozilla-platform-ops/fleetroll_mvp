@@ -290,7 +290,7 @@ history model, limitations, and versioned JSON schema.
 #### Comparing a candidate pool with a baseline
 
 ```bash
-uv run fleetroll rollout compare \
+uv run fleetroll rollout compare-pools \
   --candidate-pool releng-hardware/gecko-t-linux-talos-2404-tc-v115 \
   --baseline-pool releng-hardware/gecko-t-linux-talos-2404
 ```

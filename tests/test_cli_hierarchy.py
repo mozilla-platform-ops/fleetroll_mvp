@@ -137,6 +137,23 @@ def test_rollout_report_passes_through_help():
     assert old.output.replace("rollout-report", "rollout report") == new.output
 
 
+def test_compare_pools_discovery_and_compatibility_alias():
+    runner = CliRunner()
+    actions = runner.invoke(cli, ["rollout", "--help"])
+    assert "  compare-pools " in actions.output
+    assert "  compare " not in actions.output
+    old = runner.invoke(cli, ["rollout", "compare", "--help"])
+    new = runner.invoke(cli, ["rollout", "compare-pools", "--help"])
+    assert old.exit_code == new.exit_code == 0
+    assert (
+        old.output.replace("rollout compare", "rollout compare-pools").split() == new.output.split()
+    )
+    for action in ("report", "compare-pools"):
+        help_result = runner.invoke(cli, ["rollout", action, "--help"])
+        assert "Runs once." in " ".join(help_result.output.split())
+        assert "fr gather all" in help_result.output
+
+
 @pytest.mark.parametrize("prefix", [["host-set-override"], ["override", "set"]])
 def test_parse_errors_keep_exit_code(prefix):
     result = CliRunner().invoke(cli, [*prefix, "test.example.com", "--workers", "invalid"])

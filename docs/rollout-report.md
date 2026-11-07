@@ -4,6 +4,13 @@ Compare master and overrides within a role using verified configuration history
 and recent Taskcluster outcomes. The report reads evidence and queries TC; it
 does not gather host state, change overrides, advance a rollout, or write history.
 
+Use `rollout compare-pools` to compare matching workloads between an explicit
+candidate and baseline worker pool. Both commands run once; regular gathers
+supply their configuration evidence. By default, a host observation over one
+hour old prevents that worker's live job query entirely. Refresh with
+`fr gather all HOST_OR_FILE` using the same database before running either report.
+Taskcluster-only gathers do not refresh host configuration.
+
 ## Run a report
 
 Refresh relevant hosts and references first, then select by role, worker pool,

@@ -1,9 +1,20 @@
 # Compare rollout pools
 
-`fleetroll rollout compare` compares a candidate pool with an explicit baseline:
+Use `rollout report` for master and override health within a host population;
+use `rollout compare-pools` for matching workloads across two worker pools.
+The former `rollout compare` spelling remains a compatibility alias.
+
+Both commands run once. Keep regular gathers running and invoke reports on
+demand. They read recorded host configuration and fetch recent Taskcluster jobs
+live; they do not refresh host observations. Refresh the relevant hosts with
+`fr gather all HOST_OR_FILE` first, using the same database as the report.
+By default, a host observation over one hour old prevents that worker's job
+query entirely. Taskcluster-only gathers do not refresh host configuration.
+
+`fleetroll rollout compare-pools` compares a candidate pool with an explicit baseline:
 
 ```bash
-uv run fleetroll rollout compare \
+uv run fleetroll rollout compare-pools \
   --candidate-pool releng-hardware/gecko-t-linux-talos-2404-tc-v115 \
   --baseline-pool releng-hardware/gecko-t-linux-talos-2404
 ```

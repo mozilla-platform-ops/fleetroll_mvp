@@ -1,4 +1,10 @@
-"""Explicit, read-only comparison of candidate and baseline worker pools."""
+"""Compare matching workloads between candidate and baseline worker pools.
+
+Runs once. Uses recorded host configuration and fetches recent Taskcluster jobs
+live. Refresh host observations with `fr gather all` before running. Host
+observations older than --max-observation-gap (default one hour) prevent worker
+job queries; this command does not refresh host observations.
+"""
 
 from __future__ import annotations
 

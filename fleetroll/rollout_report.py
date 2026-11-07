@@ -1,4 +1,10 @@
-"""Compare recent Taskcluster outcomes on master and each override within a role."""
+"""Report master and override health within a host population.
+
+Runs once. Uses recorded host configuration and fetches recent Taskcluster jobs
+live. Refresh host observations with `fr gather all` before running. Host
+observations older than --max-observation-gap (default one hour) prevent worker
+job queries; this command does not refresh host observations.
+"""
 
 from __future__ import annotations
 
