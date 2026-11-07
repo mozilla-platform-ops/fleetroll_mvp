@@ -28,6 +28,9 @@ either OS; `os!=L|M` excludes both. Pipe alternatives apply only to `=` and `!=`
 
 Use `col=` for missing data and `col!=` for present data. Display sentinels `-`
 and `--` count as empty; `?` remains a literal unknown value (`pp_sha=?`).
+An empty pipe alternative also matches missing data: `role=|?|missing` includes
+empty roles, unknown roles, and the literal `missing` used when no role file exists.
+`role!=|?|missing` excludes all three states.
 For `data`, presence means at least one parseable host or TC age; `?/-` and `-/-`
 are empty. Duration comparisons use the larger available age, so `data>30m`
 means at least one observed age exceeds 30 minutes. Separate `data.a`/`data.t`
@@ -50,6 +53,15 @@ Supported fields: `host`, `os`, `role`, `vlt_sha`, `ovr_bch`, `uptime`, `pp_last
 `pool`, `wt_ovr`, and `note`. Aliases are `sha`/`ovr_sha` for `ovr_bch`,
 `tc_j_sf` for `tc_t_dur`, and `health` for `healthy`. Override branch values may
 include checksum and worker-type annotations; use `~` for a branch substring.
+The `os` field identifies OS family (`L` Linux, `M` macOS, `W` Windows), not
+Ubuntu release. Fleetroll does not currently collect an OS-version field.
+The saved `linux-1804` and `linux-2404` filters infer assignment from the last
+observed role, which can be retained after a failed gather. They do not verify
+the installed Ubuntu version or evidence freshness. Run these views against
+`configs/host-lists/linux/all_moonshots.list` and inspect evidence age; the
+`linux-unobserved` view includes hosts with no recorded role, but does not include
+hosts that retain a historical role. Future baseline coverage reporting will
+account separately for stale evidence and roles outside the saved views.
 
 ## Interactive monitor
 

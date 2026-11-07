@@ -223,7 +223,8 @@ def _match_data_column(row: dict[str, str], cond: FilterCondition) -> bool:
 
 def _match_pipe_values(row: dict[str, str], cond: FilterCondition) -> bool:
     """Handle | separated value list for = and != (e.g. os=M|L)."""
-    parts = [p for p in cond.value.split("|") if p]
+    # An empty alternative uses the same missing-value semantics as col=.
+    parts = cond.value.split("|")
     if cond.op == "=":
         return any(row_matches_condition(row, FilterCondition(cond.column, "=", p)) for p in parts)
     return all(row_matches_condition(row, FilterCondition(cond.column, "!=", p)) for p in parts)

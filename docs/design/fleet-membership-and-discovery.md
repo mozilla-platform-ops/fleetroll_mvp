@@ -106,24 +106,46 @@ views.
 
 ## Incremental delivery
 
-### 1. Detect gaps using existing lists
+### 1. Single Moonshot baseline and recorded-assignment views
 
-Define an explicit expected hardware population independent of OS and reconcile
-the current OS lists against it. Report missing hosts, unexpected hosts, and
-conflicting OS assignments. Preserve legitimate overlap in canary and batch
-lists; only mutually exclusive assignment lists should be treated as conflicts.
-Include source provenance and state the limits of the selected baseline.
+Phase 1 is limited to Linux/Moonshots; Mac and Windows inventories are out of
+scope. Use `configs/host-lists/linux/all_moonshots.list` as the single explicit
+hardware baseline, independent of observed OS, role, pool, or reachability.
+Report its provenance and unverified completeness, duplicate names, and gaps in
+the ms-NNN range. Gaps are candidates for investigation, not proof of membership.
 
-Compare listed OS/pool assignments against recorded host and Taskcluster
-observations as well. A host present in exactly one list can still be assigned
-to the wrong list after a migration. Preserve host-configured worker identity
-and Taskcluster registration as separate evidence; neither alone establishes a
-running worker. Show evidence timestamps and distinguish a fresh mismatch from
-stale, missing, or contradictory evidence. This report should use recorded data
-and explain when a Fleetroll collection refresh is needed.
+Replace the per-OS lists (1804/2404 and their assignment variants) with saved
+filters where useful, updating active scripts and documentation. Preserve
+canary/batch overlays and validate them as normalized subsets of the baseline;
+legitimate overlap is allowed. Preserve historical rollout documents.
 
-This milestone provides value before introducing a full inventory service. It
-does not prove that a manually supplied baseline is complete.
+Reuse existing monitor filters and recorded evidence for assignment views.
+The `os` filter currently distinguishes OS family only, not Ubuntu release.
+The saved 1804/2404 views infer assignment from the last observed role; they do
+not verify installed OS version or freshness. OS-version collection is tracked
+in `mvp-xs2c.8`: store separate string fields for OS ID and version alongside
+`os_type`, using Linux `/etc/os-release` (`ID` and `VERSION_ID`) rather than role
+names. Missing values remain unknown. Version filtering requires collection and
+filter-field support before these views can use it.
+
+Add a CLI/JSON baseline coverage report with counts by recorded OS/pool/role,
+evidence timestamps/age, and an explicit unobserved bucket. Distinguish fresh
+observations, stale-only historical identity, and no observations. A missing
+role can appear as empty, unknown (`?`), or `missing`; the saved unobserved view
+must include these states. Hosts retaining a historical role may still match an
+assignment view, so coverage must expose stale evidence separately. Detect hosts
+matched by zero or multiple assignment/unobserved filters, including new roles.
+Unreachable, unobserved, and expected-dark hosts stay in the denominator without
+counting as fresh or healthy. Configured identity and TC registration remain
+separate evidence; neither proves a worker is running.
+
+Explain when to refresh collection and reuse existing freshness thresholds.
+Persistence, intended-assignment tracking, lifecycle changes, network discovery,
+TUI/web changes, and health/freshness redesign are outside this milestone.
+Removing old OS lists replaces list-versus-observation reconciliation as the
+Phase 1 delivery; that obsolete reconciliation is not an acceptance requirement.
+The baseline report can ship before an inventory service and does not establish
+that the manually supplied baseline is complete.
 
 ### 2a. Decide authority, identity, and lifecycle rules
 
@@ -169,21 +191,25 @@ health/freshness design work rather than redesigning health within this task.
 
 ### 5. Migrate operational workflows
 
-Replace manually maintained OS lists with generated views or saved selectors
-where practical. Document the migration workflow and the role of the hardware
-baseline. Roll out the previously validated behavior to operational workflows;
-this milestone is adoption and documentation, not the first integration test.
+Adopt the inventory-backed selectors and coverage assertions after Phase 1 has
+already replaced the Moonshot per-OS lists with saved filters. Document source
+ownership, intended versus observed assignment, candidate reconciliation,
+retirement, and the migration workflow. Roll out the previously validated
+behavior to operational workflows; this milestone is adoption and documentation,
+not the first integration test.
 
 ## Validate migrations throughout delivery
 
-Start with a repeatable scenario in the first milestone: a known host is listed
-under 18.04, its intended assignment changes to 24.04, it rebuilds and becomes
-temporarily unreachable, and it returns with a changed worker identity while an
-old Taskcluster registration may remain. Membership stays constant throughout.
-Unknown or stale evidence remains visible until observations catch up.
+Start with a repeatable scenario in the first milestone: a baseline host has a
+recorded 18.04 role, rebuilds and becomes temporarily unreachable, and returns
+with a 24.04 role and changed worker identity while an old Taskcluster registration
+may remain. Also exercise a baseline host with no observation. Membership stays
+constant throughout. Unknown or stale evidence remains visible until observations
+catch up. Extend this scenario with intended-assignment changes when persistence
+is implemented.
 
-Each implementation task must extend this scenario at its boundary: list versus
-observation reconciliation, persistence/import, discovery reconciliation,
+Each implementation task must extend this scenario at its boundary: baseline
+coverage and saved views, persistence/import, discovery reconciliation,
 selection, and reporting/assertions. Validate retirement and hostname reuse as
 separate transitions. Use fixtures and meaningful integration checks without
 requiring production host changes. The final adoption task verifies the

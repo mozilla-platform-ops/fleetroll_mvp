@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fleetroll.commands.monitor.data import parse_duration
 from fleetroll.commands.monitor.query import (
     FilterCondition,
@@ -626,6 +627,14 @@ def test_normalize_for_filter_empty_sentinels():
 
 def test_normalize_for_filter_question_mark_preserved():
     assert normalize_for_filter("?") == "?"
+
+
+@pytest.mark.parametrize("role", ["", "-", "--", "?", "missing", "gecko_t_linux_talos"])
+def test_pipe_empty_alternative_matches_missing_and_unknown(role):
+    row = {"role": role}
+    expected = role != "gecko_t_linux_talos"
+    assert bool(apply_query([row], parse_query("role=|?|missing"))) == expected
+    assert bool(apply_query([row], parse_query("role!=|?|missing"))) != expected
 
 
 def test_normalize_for_filter_real_values_unchanged():
