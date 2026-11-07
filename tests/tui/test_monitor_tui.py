@@ -42,10 +42,46 @@ class TestMonitorLayout:
         assert rows
         assert all(line[start:end].strip() == "-" for line in rows)
 
+    def test_long_override_keeps_checksum_and_pool_marker(self, tmux_monitor_env) -> None:
+        override_dir = tmux_monitor_env["home"] / ".fleetroll" / "overrides"
+        override_dir.mkdir(parents=True, exist_ok=True)
+        (override_dir / "000000000000").write_text(
+            "PUPPET_BRANCH='feature-very-long-name-distinct'\nWORKER_TYPE_OVERRIDE='test-pool'\n"
+        )
+        cmd = f"{_UV_PATH} run fleetroll host-monitor {tmux_monitor_env['hosts_file']}"
+        with TmuxSession(
+            cmd=cmd,
+            cols=300,
+            rows=40,
+            env=_session_env(tmux_monitor_env["home"]),
+        ) as sess:
+            expected = "feature-very-long-name-distinct 0000 *wt"
+            assert sess.wait_for(expected, timeout=15.0), sess.capture()
+            header = next(line for line in sess.capture().splitlines() if "OVR_BCH" in line)
+            assert header.index("UPTIME") - header.index("OVR_BCH") == len(expected) + 3
+
     def test_header_visible(self, tmux_session: TmuxSession) -> None:
         """The top header line is present."""
         screen = tmux_session.capture()
         assert "HOST" in screen
+
+    def test_compact_vault_checksum_and_symlink(self, tmux_monitor_env) -> None:
+        vault_dir = tmux_monitor_env["home"] / ".fleetroll" / "vault_yamls"
+        vault_dir.mkdir(parents=True, exist_ok=True)
+        checksum = "0" * 31 + "1"
+        (vault_dir / checksum).write_text("fake vault\n")
+        (vault_dir / "linux_prod").symlink_to(checksum)
+        cmd = f"{_UV_PATH} run fleetroll host-monitor {tmux_monitor_env['hosts_file']}"
+        with TmuxSession(
+            cmd=cmd,
+            cols=300,
+            rows=40,
+            env=_session_env(tmux_monitor_env["home"]),
+        ) as sess:
+            expected = "0000 ack-alabama ↪ linux_prod"
+            assert sess.wait_for(expected, timeout=15.0), sess.capture()
+            header = next(line for line in sess.capture().splitlines() if "VLT_SHA" in line)
+            assert header.index("OVR_BCH") - header.index("VLT_SHA") == len(expected) + 3
 
     def test_column_headers_present(self, tmux_session: TmuxSession) -> None:
         """Key column labels appear in the rendered header."""

@@ -47,6 +47,43 @@ reveals the divergence without hunting across the row.
    `formatting.py` sheds columns when the terminal is narrow, removing the
    least diagnostic ones first (`NOTE`, `VLT_SHA`, `SHA`, `ROLE`, …).
 
+## Compact override identity
+
+In terminal and text tables, OVR_BCH grows to fit complete branch names. It shows
+`branch checksum *wt`, omitting the old checksum parentheses. The `*wt` suffix
+appears only when the override sets a Taskcluster worker pool and stays red.
+The branch name, checksum abbreviation, and worker-pool marker remain visible. For example:
+
+```text
+feature-very-long-name-distinct 0000 *wt
+```
+
+Short values use only the width they need. Without branch metadata, the cell
+shows the checksum and optional pool marker. Categorical colors remain keyed
+to the complete override value; when a branch is present it gets that color
+and the checksum stays plain. Filtering, sorting, JSON, and browser values
+retain the complete original branch/checksum representation.
+
+Checksum abbreviations start at four characters and expand to distinguish
+known collisions, including collisions beyond the old eight-character prefix.
+The comparison includes local override files and the loaded host observations
+before filtering. Stored filename prefixes and full checksums for the same
+override count as one identity. Known checksums remain registered for the
+session, so filtering cannot shorten a prefix. Newly discovered collisions can
+lengthen it. Uniqueness is relative to this known inventory.
+
+## Compact vault identity
+
+VLT_SHA shows `checksum mnemonic ↪ symlink-name`, omitting parentheses and the
+symlink portion when unavailable. Checksum prefixes start at four characters
+and expand for known collisions in the vault inventory, independently of
+override checksums. Local vault filenames, symlink targets, and unfiltered
+loaded observations participate; known identities remain registered across
+filter changes. Complete mnemonic and symlink names stay visible, and the
+mnemonic retains its categorical color. The `↪` marker distinguishes the
+symlink name from the mnemonic. Text and TUI widths use the compact
+representation. Original filter/sort/JSON/browser values remain unchanged.
+
 ## Compact uptime
 
 The terminal monitor and text table show uptime in seven characters: a

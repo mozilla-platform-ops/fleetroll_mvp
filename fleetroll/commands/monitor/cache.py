@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
+from os.path import commonprefix
 from pathlib import Path
 from typing import cast
 
@@ -97,6 +99,18 @@ def find_vault_symlink(sha256: str, vault_dir: Path) -> str | None:
     return None
 
 
+def abbreviate_checksum(checksum: str, *, known: Iterable[str]) -> str:
+    """Find a unique prefix starting at four characters; ignore filename aliases."""
+    length = 4
+    for other in known:
+        if other[:length] != checksum[:length]:
+            continue
+        if checksum.startswith(other) or other.startswith(checksum):
+            continue
+        length = max(length, len(commonprefix((checksum, other))) + 1)
+    return checksum[:length]
+
+
 class ShaInfoCache:
     """Cache for SHA256 to human-readable info mappings."""
 
@@ -110,7 +124,9 @@ class ShaInfoCache:
         self.overrides_dir = overrides_dir
         self.vault_dir = vault_dir
         self.override_cache: dict[str, dict[str, str | None]] = {}
+        self.override_checksums: set[str] = set()
         self.vault_cache: dict[str, str] = {}
+        self.vault_checksums: set[str] = set()
 
     def load_all(self) -> None:
         """Pre-populate caches by scanning directories."""
@@ -120,6 +136,8 @@ class ShaInfoCache:
                 for item in self.overrides_dir.iterdir():
                     if item.is_file():
                         sha = item.name
+                        if not item.is_symlink():
+                            self.override_checksums.add(sha)
                         info = parse_override_file(item)
                         if info:
                             self.override_cache[sha] = info
@@ -130,10 +148,13 @@ class ShaInfoCache:
         if self.vault_dir.exists():
             try:
                 for item in self.vault_dir.iterdir():
+                    if item.is_file() and not item.is_symlink():
+                        self.vault_checksums.add(item.name)
                     if item.is_symlink():
                         try:
                             target = item.readlink()
                             target_name = target.name if hasattr(target, "name") else str(target)
+                            self.vault_checksums.add(target_name)
                             # Store by full SHA name and 12-char prefix
                             self.vault_cache[target_name] = item.name
                             if len(target_name) >= 12:
@@ -142,6 +163,30 @@ class ShaInfoCache:
                             continue
             except OSError:
                 pass
+
+    def register_override_checksums(self, checksums: Iterable[str]) -> None:
+        """Remember observed checksums independently of filtering or cached metadata."""
+        self.override_checksums.update(checksum for checksum in checksums if checksum)
+
+    def abbreviate_override(self, checksum: str) -> str:
+        """Use at least four characters, extending against the known inventory.
+
+        Stored 12-character filenames and full observed checksums can name the
+        same override; prefix aliases do not count as a second identity.
+        """
+        self.override_checksums.add(checksum)
+        return abbreviate_checksum(
+            checksum, known=self.override_checksums | self.override_cache.keys()
+        )
+
+    def register_vault_checksums(self, checksums: Iterable[str]) -> None:
+        """Remember vault identities independently of view filtering."""
+        self.vault_checksums.update(checksum for checksum in checksums if checksum)
+
+    def abbreviate_vault(self, checksum: str) -> str:
+        """Abbreviate against vault identities independently of override identities."""
+        self.vault_checksums.add(checksum)
+        return abbreviate_checksum(checksum, known=self.vault_checksums | self.vault_cache.keys())
 
     def get_override_info(self, sha256: str) -> str:
         """Get human-readable override info for a SHA.

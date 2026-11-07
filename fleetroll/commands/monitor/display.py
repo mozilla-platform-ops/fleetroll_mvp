@@ -38,7 +38,12 @@ from .filters_popup import (
     filter_rows,
     find_active_row_index,
 )
-from .formatting import format_data_cell
+from .formatting import (
+    format_data_cell,
+    format_override_cell,
+    format_vault_cell,
+    register_checksum_observations,
+)
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
 from .named_filters import load_named_filters
@@ -748,6 +753,7 @@ class MonitorDisplay:
 
         widths = {col: len(labels[col]) for col in all_columns}
         widths["uptime"] = max(widths["uptime"], 7)
+        register_checksum_observations(self.sha_cache, latest=self.latest, latest_ok=self.latest_ok)
         for host in sorted_hosts:
             short_host = strip_fqdn(host)
             tc_worker_data = self.tc_data.get(short_host)
@@ -766,10 +772,24 @@ class MonitorDisplay:
                 if col == "uptime":
                     continue
                 value = format_data_cell(values[col]) if col == "data" else values[col]
+                if col == "sha":
+                    checksum = (
+                        self.sha_cache.abbreviate_override(values["ovr_sha_full"])
+                        if self.sha_cache is not None and values.get("ovr_sha_full")
+                        else None
+                    )
+                    value = format_override_cell(value, checksum=checksum)
+                if col == "vlt_sha":
+                    checksum = (
+                        self.sha_cache.abbreviate_vault(values["vlt_sha_full"])
+                        if self.sha_cache is not None and values.get("vlt_sha_full")
+                        else None
+                    )
+                    value = format_vault_cell(value, checksum=checksum)
                 widths[col] = max(widths[col], len(value))
 
-        # Add padding for role/sha columns
-        for col in ("role", "sha", "vlt_sha"):
+        # Add padding for role markers.
+        for col in ("role",):
             if col in widths:
                 widths[col] += 2
 

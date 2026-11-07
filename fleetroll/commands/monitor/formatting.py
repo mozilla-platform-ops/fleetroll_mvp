@@ -22,6 +22,61 @@ def clip_cell(value: str, width: int) -> str:
     return f"{value[: width - 3]}..."
 
 
+def register_checksum_observations(
+    sha_cache: ShaInfoCache | None,
+    *,
+    latest: dict[str, dict[str, Any]],
+    latest_ok: dict[str, dict[str, Any]],
+) -> None:
+    """Include the unfiltered observation population in checksum uniqueness checks."""
+    if sha_cache is not None:
+        sha_cache.register_override_checksums(
+            record.get("observed", {}).get("override_sha256", "") or ""
+            for records in (latest, latest_ok)
+            for record in records.values()
+        )
+        sha_cache.register_vault_checksums(
+            record.get("observed", {}).get("vault_sha256", "") or ""
+            for records in (latest, latest_ok)
+            for record in records.values()
+        )
+
+
+def override_cell_parts(value: str, *, checksum: str | None = None) -> tuple[str, str, str]:
+    """Return the complete branch, abbreviated checksum, and optional pool marker."""
+    marker = "*wt" if value.endswith(" *wt") else ""
+    core = value.removesuffix(" *wt")
+    branch, separator, raw_checksum = core.rpartition(" (")
+    if not separator or not raw_checksum.endswith(")"):
+        return "", checksum if checksum is not None else core[:4], marker
+    checksum = checksum if checksum is not None else raw_checksum[:-1][:4]
+    return branch, checksum, marker
+
+
+def format_override_cell(value: str, *, checksum: str | None = None) -> str:
+    """Drop checksum parentheses while retaining the complete branch name."""
+    return " ".join(part for part in override_cell_parts(value, checksum=checksum) if part)
+
+
+def vault_cell_parts(value: str, *, checksum: str | None = None) -> tuple[str, str, str]:
+    """Return abbreviated checksum and full mnemonic/symlink names."""
+    raw_checksum, _, rest = value.partition(" ")
+    mnemonic, separator, symlink = rest.partition(" (")
+    return (
+        checksum if checksum is not None else raw_checksum[:4],
+        mnemonic,
+        symlink[:-1] if separator and symlink.endswith(")") else "",
+    )
+
+
+def format_vault_cell(value: str, *, checksum: str | None = None) -> str:
+    """Remove vault-name parentheses and shorten only the checksum."""
+    checksum, mnemonic, symlink = vault_cell_parts(value, checksum=checksum)
+    return " ".join(
+        part for part in (checksum, mnemonic, f"↪ {symlink}" if symlink else "") if part
+    )
+
+
 def format_data_cell(value: str) -> str:
     """Compact audit/TC ages for display while preserving missing source positions."""
     parts = [
@@ -33,12 +88,24 @@ def format_data_cell(value: str) -> str:
     return "/".join(parts)
 
 
-def render_cell_text(col_name: str, value: str, width: int, *, include_marker: bool = True) -> str:
+def render_cell_text(
+    col_name: str,
+    value: str,
+    width: int,
+    *,
+    include_marker: bool = True,
+    override_checksum: str | None = None,
+    vault_checksum: str | None = None,
+) -> str:
     """Render a padded cell for a column."""
     if col_name == "uptime" and include_marker:
         return clip_cell(format_uptime(parse_duration(value)), width)
     if col_name == "data" and include_marker:
         return clip_cell(format_data_cell(value), width)
+    if col_name == "sha" and include_marker:
+        return clip_cell(format_override_cell(value, checksum=override_checksum), width)
+    if col_name == "vlt_sha" and include_marker:
+        return clip_cell(format_vault_cell(value, checksum=vault_checksum), width)
     if include_marker and col_name == "role" and width >= 2:
         return clip_cell(f"# {value}", width)
     return clip_cell(value, width)
@@ -50,10 +117,19 @@ def render_row_cells(
     columns: list[str],
     widths: dict[str, int],
     include_marker: bool = True,
+    override_checksum: str | None = None,
+    vault_checksum: str | None = None,
 ) -> list[str]:
     """Render padded cell strings for a row."""
     return [
-        render_cell_text(col, values[col], widths[col], include_marker=include_marker)
+        render_cell_text(
+            col,
+            values[col],
+            widths[col],
+            include_marker=include_marker,
+            override_checksum=override_checksum,
+            vault_checksum=vault_checksum,
+        )
         for col in columns
     ]
 
@@ -115,7 +191,6 @@ def compute_columns_and_widths(
         "uptime": 7,
         "role": 40,
         "os": 1,
-        "sha": 30,
         "vlt_sha": 40,
         "note": 20,
         "tc_quar": 8,
@@ -134,6 +209,7 @@ def compute_columns_and_widths(
     widths = {col: len(labels[col]) for col in columns}
     widths["uptime"] = 7
     tc_data = tc_data or {}
+    register_checksum_observations(sha_cache, latest=latest, latest_ok=latest_ok or {})
     for host in hosts:
         short_host = strip_fqdn(host)
         values = build_row_values(
@@ -151,9 +227,25 @@ def compute_columns_and_widths(
             if col == "uptime":
                 continue
             value = format_data_cell(values[col]) if col == "data" else values[col]
+            if col == "sha":
+                checksum = (
+                    sha_cache.abbreviate_override(values["ovr_sha_full"])
+                    if sha_cache is not None and values.get("ovr_sha_full")
+                    else None
+                )
+                value = format_override_cell(value, checksum=checksum)
+            if col == "vlt_sha":
+                checksum = (
+                    sha_cache.abbreviate_vault(values["vlt_sha_full"])
+                    if sha_cache is not None and values.get("vlt_sha_full")
+                    else None
+                )
+                value = format_vault_cell(value, checksum=checksum)
             widths[col] = max(widths[col], len(value))
     if cap_widths:
         for col in columns:
+            if col in ("sha", "vlt_sha"):
+                continue
             widths[col] = min(widths[col], caps[col])
 
     if max_width <= 0:
@@ -223,8 +315,25 @@ def format_monitor_row(
         windows_pools=windows_pools,
         notes_data=notes_data,
     )
+    override_checksum = (
+        sha_cache.abbreviate_override(values["ovr_sha_full"])
+        if sha_cache is not None and values.get("ovr_sha_full")
+        else None
+    )
+    vault_checksum = (
+        sha_cache.abbreviate_vault(values["vlt_sha_full"])
+        if sha_cache is not None and values.get("vlt_sha_full")
+        else None
+    )
     parts = [
-        render_cell_text(col, values[col], widths[col], include_marker=(col in ("uptime", "data")))
+        render_cell_text(
+            col,
+            values[col],
+            widths[col],
+            include_marker=(col in ("uptime", "data", "sha", "vlt_sha")),
+            override_checksum=override_checksum,
+            vault_checksum=vault_checksum,
+        )
         for col in columns
     ]
     return col_sep.join(parts)

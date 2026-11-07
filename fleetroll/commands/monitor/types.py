@@ -113,8 +113,12 @@ Columns:
 HOST      Hostname (FQDN suffix stripped if common)
 ROLE      Puppet role assigned to host
 OS        Host operating system (M=macOS/Darwin, L=Linux, W=Windows)
-VLT_SHA   Vault file SHA256 hash (symlink name in parentheses)
-OVR_BCH   Override branch name (SHA in parentheses)
+VLT_SHA   Abbreviated vault checksum + full mnemonic and optional symlink name
+          ↪ marks the symlink name
+          Checksum starts at 4 characters, expanding for known vault collisions
+OVR_BCH   Complete override branch + abbreviated checksum
+          *wt = override sets a Taskcluster worker pool
+          Checksum starts at 4 characters, expanding for known prefix collisions
 NOTE      Most recent operator note for the host (count prefix when multiple)
 UPTIME    Uptime: three-character whole-unit label + three-cell magnitude bar
           Blue shades show magnitude, not health (cyan on basic terminals)

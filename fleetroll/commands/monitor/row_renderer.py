@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from .curses_colors import CursesColors
 
 from .data import age_seconds, build_row_values, parse_duration, resolve_last_ok_ts, strip_fqdn
-from .formatting import render_row_cells
+from .formatting import override_cell_parts, render_row_cells, vault_cell_parts
 
 
 class RowRenderer:
@@ -36,30 +36,6 @@ class RowRenderer:
         """
         self.safe_addstr = safe_addstr
         self.colors = colors
-
-    def _addstr_wt_marked(self, row: int, col: int, text: str, base_attr: int) -> int:
-        """Draw text with base_attr, rendering a literal "*wt" marker in red.
-
-        The "*wt" suffix flags an override that sets a Taskcluster worker pool.
-        Returns the new column position.
-        """
-        marker = "*wt"
-        idx = text.find(marker)
-        if idx < 0:
-            self.safe_addstr(row, col, text, base_attr)
-            return col + len(text)
-
-        before = text[:idx]
-        after = text[idx + len(marker) :]
-        if before:
-            self.safe_addstr(row, col, before, base_attr)
-            col += len(before)
-        self.safe_addstr(row, col, marker, self.colors.red_attr())
-        col += len(marker)
-        if after:
-            self.safe_addstr(row, col, after, base_attr)
-            col += len(after)
-        return col
 
     def compute_row_render_data(
         self,
@@ -148,6 +124,16 @@ class RowRenderer:
         return {
             "host": host,
             "values": values,
+            "override_checksum": (
+                sha_cache.abbreviate_override(values["ovr_sha_full"])
+                if sha_cache is not None and values.get("ovr_sha_full")
+                else None
+            ),
+            "vault_checksum": (
+                sha_cache.abbreviate_vault(values["vlt_sha_full"])
+                if sha_cache is not None and values.get("vlt_sha_full")
+                else None
+            ),
             "ts_value": ts_value,
             "tc_ts_value": tc_ts_value,
             "tc_worker_data": tc_worker_data,
@@ -187,7 +173,13 @@ class RowRenderer:
         vlt_sha_colors = color_maps["vlt_sha"]
         role_colors = color_maps["role"]
 
-        row_cells = render_row_cells(values, columns=columns, widths=widths)
+        row_cells = render_row_cells(
+            values,
+            columns=columns,
+            widths=widths,
+            override_checksum=render_data.get("override_checksum"),
+            vault_checksum=render_data.get("vault_checksum"),
+        )
         col = 0
         for col_name, cell in zip(columns, row_cells):
             if col_name != columns[0]:
@@ -273,78 +265,56 @@ class RowRenderer:
                     self.safe_addstr(row, col, padding, 0)
                     col += len(padding)
             elif col_name == "sha":
-                # OVR_BCH: Color branch name (before " ("), sha in parens stays plain.
-                # Falls back to coloring 8-char sha prefix when no branch info.
                 full_value = values.get("sha", "")
                 if full_value not in ("-", "?"):
                     marker_attr = sha_colors.get(full_value, 0)
-                    paren_idx = cell.find(" (")
-                    if paren_idx > 0:
-                        branch_part = cell[:paren_idx]
-                        rest = cell[paren_idx:]
-                        self.safe_addstr(row, col, branch_part, marker_attr)
-                        col += len(branch_part)
-                        # rest holds the "(sha)" plus an optional " *wt" marker.
-                        col = self._addstr_wt_marked(row, col, rest, 0)
-                    elif len(full_value) >= 8:
-                        sha_prefix = cell[:8]
-                        rest = cell[8:]
-                        self.safe_addstr(row, col, sha_prefix, marker_attr)
-                        col += len(sha_prefix)
-                        if rest:
-                            col = self._addstr_wt_marked(row, col, rest, 0)
-                    else:
-                        col = self._addstr_wt_marked(row, col, cell, attr)
+                    branch, checksum, marker = override_cell_parts(
+                        full_value, checksum=render_data.get("override_checksum")
+                    )
+                    parts = [(branch, marker_attr), (checksum, 0 if branch else marker_attr)]
+                    if marker:
+                        parts.append((marker, self.colors.red_attr()))
+                    offset = 0
+                    for text, part_attr in parts:
+                        if not text or offset >= len(cell):
+                            continue
+                        if offset:
+                            self.safe_addstr(row, col + offset, " ", 0)
+                            offset += 1
+                        visible = text[: max(len(cell) - offset, 0)]
+                        if visible:
+                            self.safe_addstr(row, col + offset, visible, part_attr)
+                            offset += len(visible)
+                    if offset < len(cell):
+                        self.safe_addstr(row, col + offset, " " * (len(cell) - offset), 0)
+                    col += len(cell)
                 else:
                     self.safe_addstr(row, col, cell, attr)
                     col += len(cell)
             elif col_name == "vlt_sha":
-                # VLT_SHA: Color the humanhash (unchanged)
                 full_value = values.get("vlt_sha", "")
-                width = widths.get("vlt_sha", 0)
-                if (
-                    full_value
-                    and full_value not in ("-", "?")
-                    and " " in full_value
-                    and len(full_value) <= width
-                ):
-                    marker_attr = vlt_sha_colors.get(values.get("vlt_sha", ""), 0)
-                    # Find the humanhash position (before the parenthesis if present)
-                    # Format: "SHA humanhash (info)" or "SHA humanhash"
-                    paren_idx = full_value.find(" (")
-                    if paren_idx != -1:
-                        # Has info in parentheses - find space before humanhash
-                        before_paren = full_value[:paren_idx]
-                        split_idx = before_paren.rfind(" ")
-                        prefix = full_value[: split_idx + 1]
-                        humanhash = before_paren[split_idx + 1 :]
-                        info_part = full_value[paren_idx:]
-                        padding = " " * (width - len(full_value))
-                        self.safe_addstr(row, col, prefix, 0)
-                        col += len(prefix)
-                        self.safe_addstr(row, col, humanhash, marker_attr)
-                        col += len(humanhash)
-                        self.safe_addstr(row, col, info_part, 0)
-                        col += len(info_part)
-                        if padding:
-                            self.safe_addstr(row, col, padding, 0)
-                            col += len(padding)
-                    else:
-                        # No info - use original logic
-                        split_idx = full_value.rfind(" ")
-                        prefix = full_value[: split_idx + 1]
-                        suffix = full_value[split_idx + 1 :]
-                        padding = " " * (width - len(full_value))
-                        self.safe_addstr(row, col, prefix, 0)
-                        col += len(prefix)
-                        self.safe_addstr(row, col, suffix, marker_attr)
-                        col += len(suffix)
-                        if padding:
-                            self.safe_addstr(row, col, padding, 0)
-                            col += len(padding)
-                else:
-                    self.safe_addstr(row, col, cell, attr)
-                    col += len(cell)
+                checksum, mnemonic, symlink = vault_cell_parts(
+                    full_value, checksum=render_data.get("vault_checksum")
+                )
+                parts = [
+                    (checksum, 0),
+                    (mnemonic, vlt_sha_colors.get(full_value, 0)),
+                    (f"↪ {symlink}" if symlink else "", 0),
+                ]
+                offset = 0
+                for text, part_attr in parts:
+                    if not text or offset >= len(cell):
+                        continue
+                    if offset:
+                        self.safe_addstr(row, col + offset, " ", 0)
+                        offset += 1
+                    visible = text[: max(len(cell) - offset, 0)]
+                    if visible:
+                        self.safe_addstr(row, col + offset, visible, part_attr)
+                        offset += len(visible)
+                if offset < len(cell):
+                    self.safe_addstr(row, col + offset, " " * (len(cell) - offset), 0)
+                col += len(cell)
             else:
                 self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
