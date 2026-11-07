@@ -63,7 +63,7 @@ Ubuntu release. Fleetroll does not currently collect an OS-version field.
 The saved `linux-1804` and `linux-2404` filters infer assignment from the last
 observed role, which can be retained after a failed gather. They do not verify
 the installed Ubuntu version or evidence freshness. Run these views against
-`configs/host-lists/linux/all_moonshots.list` and inspect evidence age; the
+`configs/host-lists/linux/all.list` and inspect evidence age; the
 `linux-unobserved` view includes hosts with no recorded role, but does not include
 hosts that retain a historical role. Future baseline coverage reporting will
 account separately for stale evidence and roles outside the saved views.
@@ -116,8 +116,7 @@ query leaves quick filters intact. Recent queries persist in
 
 ## Saved filters and picker
 
-For Moonshots, use `configs/host-lists/linux/all_moonshots.list` (maintained) or
-`configs/host-lists/linux/all.list` (generated from that baseline). The former OS,
+For Moonshots, use `configs/host-lists/linux/all.list`. The former OS,
 half, canary, and batch lists have been removed. Use saved filters or explicit
 host arguments for subsets. To reuse a selection with a command accepting a host
 list, export `host monitor --once --hostname-only` output to a temporary file and

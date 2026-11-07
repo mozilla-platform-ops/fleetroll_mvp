@@ -10,7 +10,7 @@ Refresh relevant hosts and references first, then select by role, worker pool,
 or explicit hostnames/file:
 
 ```bash
-uv run fleetroll gather all configs/host-lists/linux/all_moonshots.list
+uv run fleetroll gather all configs/host-lists/linux/all.list
 uv run fleetroll rollout report --role gecko_t_linux_2404_talos
 uv run fleetroll rollout report --worker-type gecko-t-linux-talos-2404 --json
 uv run fleetroll rollout report t-linux64-ms-016 t-linux64-ms-017

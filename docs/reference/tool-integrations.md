@@ -71,7 +71,7 @@ or depend on a central HTTP API.
 | `fleetroll gather tc HOST_OR_FILE --use-historical-identity` | Batch queries of exact retained identities, pinned provenance, successful observations and failed attempts. |
 | `fleetroll host monitor HOST_OR_FILE --once --hostname-only --filter QUERY` | Observed Linux fleet membership for reporting. |
 | `fleetroll gather host HOST` | Live audit for diagnostics; diagnostic text is not parsed. |
-| `configs/host-lists/linux/all.list` and `all_moonshots.list` | Expected inventory, candidate membership, fleet circuit-breaker denominator; requires a local checkout. |
+| `configs/host-lists/linux/all.list` | Expected inventory, candidate membership, fleet circuit-breaker denominator; requires a local checkout. |
 
 Automatic recovery currently requires:
 

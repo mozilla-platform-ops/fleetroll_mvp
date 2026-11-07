@@ -110,7 +110,7 @@ views.
 ### 1. Single Moonshot baseline and recorded-assignment views
 
 Phase 1 is limited to Linux/Moonshots; Mac and Windows inventories are out of
-scope. Use `configs/host-lists/linux/all_moonshots.list` as the single explicit
+scope. Use `configs/host-lists/linux/all.list` as the single explicit
 hardware baseline, independent of observed OS, role, pool, or reachability.
 Report its provenance and unverified completeness, duplicate names, and gaps in
 the ms-NNN range. Gaps are candidates for investigation, not proof of membership.
