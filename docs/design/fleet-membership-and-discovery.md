@@ -1,7 +1,8 @@
 # Fleet membership, discovery, and coverage
 
-Status: proposal. This document describes planned behavior, not an implemented
-command or API contract. Implementation tasks and completion status live in Beads.
+Status: proposal, with the Phase 1 host-list cleanup implemented. The inventory
+and coverage features below remain planned, not a command or API contract.
+Implementation tasks and completion status live in Beads.
 
 ## The problem
 
@@ -9,8 +10,8 @@ Fleetroll has a fleet discovery and membership problem: today, the host list
 supplied to a command defines its scope. Fresh observations can make that scope
 look trustworthy even when the list is incomplete.
 
-For example, an operator moving hosts between Ubuntu 18.04 and 24.04 pools might
-monitor `configs/host-lists/linux/1804.list` with an override branch filter, then
+Previously, an operator moving hosts between Ubuntu 18.04 and 24.04 pools might
+monitor an OS-specific list with an override branch filter, then
 run `data freshness` against the same file. Both commands can operate correctly
 while missing relevant hosts:
 
@@ -114,10 +115,12 @@ hardware baseline, independent of observed OS, role, pool, or reachability.
 Report its provenance and unverified completeness, duplicate names, and gaps in
 the ms-NNN range. Gaps are candidates for investigation, not proof of membership.
 
-Replace the per-OS lists (1804/2404 and their assignment variants) with saved
-filters where useful, updating active scripts and documentation. Preserve
-canary/batch overlays and validate them as normalized subsets of the baseline;
-legitimate overlap is allowed. Preserve historical rollout documents.
+Keep only `all_moonshots.list` and the generated `all.list` in the Linux list
+directory. Remove OS, half, canary, and batch lists; select subsets through
+Fleetroll filters or explicit host arguments. Update active scripts and
+documentation, and preserve historical rollout documents. There are no maintained
+canary/batch overlays to validate. The generator continues to derive `all.list`
+solely from `all_moonshots.list`.
 
 Reuse existing monitor filters and recorded evidence for assignment views.
 The `os` filter currently distinguishes OS family only, not Ubuntu release.
@@ -128,8 +131,10 @@ in `mvp-xs2c.8`: store separate string fields for OS ID and version alongside
 names. Missing values remain unknown. Version filtering requires collection and
 filter-field support before these views can use it.
 
-Add a CLI/JSON baseline coverage report with counts by recorded OS/pool/role,
-evidence timestamps/age, and an explicit unobserved bucket. Distinguish fresh
+The host-list cleanup ships first; the coverage command/interface is deferred for
+review. The remaining Phase 1 work is a CLI/JSON baseline coverage report with
+counts by recorded OS/pool/role, evidence timestamps/age, and an explicit
+unobserved bucket. Distinguish fresh
 observations, stale-only historical identity, and no observations. A missing
 role can appear as empty, unknown (`?`), or `missing`; the saved unobserved view
 must include these states. Hosts retaining a historical role may still match an
@@ -192,8 +197,8 @@ health/freshness design work rather than redesigning health within this task.
 ### 5. Migrate operational workflows
 
 Adopt the inventory-backed selectors and coverage assertions after Phase 1 has
-already replaced the Moonshot per-OS lists with saved filters. Document source
-ownership, intended versus observed assignment, candidate reconciliation,
+already replaced the Moonshot OS/canary/batch lists with Fleetroll selection.
+Document source ownership, intended versus observed assignment, candidate reconciliation,
 retirement, and the migration workflow. Roll out the previously validated
 behavior to operational workflows; this milestone is adoption and documentation,
 not the first integration test.

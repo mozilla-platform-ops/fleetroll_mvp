@@ -26,6 +26,7 @@ KNOWN_COLUMNS = frozenset(
         "host",
         "os",
         "role",
+        "override",  # present / absent / ? (unknown)
         "vlt_sha",
         "sha",
         "ovr_bch",  # alias for "sha" (display label "OVR_BCH")

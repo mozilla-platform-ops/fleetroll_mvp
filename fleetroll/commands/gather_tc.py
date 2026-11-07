@@ -516,8 +516,10 @@ def cmd_tc_fetch(args: TcFetchArgs) -> None:
     clients = create_tc_clients(credentials)
 
     # Parse host list
-    hosts = []
-    if is_host_file(args.host):
+    resolved_hosts = getattr(args, "hosts", None)
+    if resolved_hosts is not None:
+        hosts = list(resolved_hosts)
+    elif is_host_file(args.host):
         hosts = parse_host_list(Path(args.host))
     else:
         hosts = [args.host]

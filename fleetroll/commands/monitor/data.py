@@ -296,7 +296,9 @@ def build_ok_row_values(
     else:
         os_type = "-"
     override_present = observed.get("override_present")
-    override_state = "present" if override_present else "absent"
+    override_state = (
+        "present" if override_present is True else "absent" if override_present is False else "?"
+    )
     sha_full = observed.get("override_sha256") or ""
     vault_sha_full = observed.get("vault_sha256") or ""
     sha = sha_full[:8] if sha_full else "-"

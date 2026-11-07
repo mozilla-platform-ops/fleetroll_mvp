@@ -1,7 +1,7 @@
 # Filter and sort hosts
 
 Use the same query language in the monitor's `/` bar, CLI `--filter`, named
-filters, and the [web host grid](web-interface.md).
+filters, gather selectors, and the [web host grid](web-interface.md).
 
 ```bash
 uv run fleetroll host monitor hosts.list --once \
@@ -46,13 +46,18 @@ healthy=n sort:tc_act:desc
 os=L pp_last>20h sort:pp_last:desc,host
 ovr_bch~resolverd wt_ovr=y
 note= sort:host
+override=present
 ```
 
-Supported fields: `host`, `os`, `role`, `vlt_sha`, `ovr_bch`, `uptime`, `pp_last`,
+Supported fields: `host`, `os`, `role`, `override`, `vlt_sha`, `ovr_bch`, `uptime`, `pp_last`,
 `pp_sha`, `pp_exp`, `pp_match`, `tc_act`, `tc_t_dur`, `tc_quar`, `data`, `healthy`,
 `pool`, `wt_ovr`, and `note`. Aliases are `sha`/`ovr_sha` for `ovr_bch`,
 `tc_j_sf` for `tc_t_dur`, and `health` for `healthy`. Override branch values may
 include checksum and worker-type annotations; use `~` for a branch substring.
+Use `override=present` or `override=absent` to test recorded file presence
+independently of its checksum, branch, or worker-pool setting. Unknown or missing
+evidence matches neither. A failed audit can retain the last successful state;
+these filters do not impose a freshness requirement.
 The `os` field identifies OS family (`L` Linux, `M` macOS, `W` Windows), not
 Ubuntu release. Fleetroll does not currently collect an OS-version field.
 The saved `linux-1804` and `linux-2404` filters infer assignment from the last
@@ -62,6 +67,35 @@ the installed Ubuntu version or evidence freshness. Run these views against
 `linux-unobserved` view includes hosts with no recorded role, but does not include
 hosts that retain a historical role. Future baseline coverage reporting will
 account separately for stale evidence and roles outside the saved views.
+
+## Gather matching hosts
+
+`gather all`, `gather host`, and `gather tc` accept `--filter QUERY` or
+`--filter-file FILE.yaml` (mutually exclusive). The file contains a `query` string,
+as in the saved-filter example below. Without a positional host/file, candidates
+are the union of hosts in local host observations, TC observations, and retained
+worker identity history. A positional file/host restricts the candidate scope.
+
+```bash
+uv run fleetroll gather all --filter 'override=present' --quiet
+uv run fleetroll gather host configs/host-lists/linux/all.list \
+  --filter 'override=present'
+uv run fleetroll gather tc --filter-file configs/filters/linux-2404.yaml
+```
+
+Filters run against recorded monitor rows before collection, using the same
+last-success fallback, override cache, notes, and TC evidence. The selected set
+is frozen for combined host and TC collection; it is reevaluated on the next
+invocation. Counts and selection scope go to stderr, leaving collection stdout
+unchanged. Invalid/empty queries and conflicting filter flags exit 2. Zero matches
+exit 0 without host, TC, or GitHub collection; with `--json`, stdout contains
+`{"status": "no_matches", "results": []}`. Without `--json`, only the selection
+diagnostic is printed to stderr.
+
+Database selection is not complete inventory discovery. Continue periodic
+collection of the entire baseline to observe newly enrolled hosts, override
+changes, and migrations. The tmux launcher runs override-selected Linux
+collection every three minutes and the whole Linux baseline every ten minutes.
 
 ## Interactive monitor
 
@@ -81,6 +115,14 @@ query leaves quick filters intact. Recent queries persist in
 `~/.fleetroll/filter_history`.
 
 ## Saved filters and picker
+
+For Moonshots, use `configs/host-lists/linux/all_moonshots.list` (maintained) or
+`configs/host-lists/linux/all.list` (generated from that baseline). The former OS,
+half, canary, and batch lists have been removed. Use saved filters or explicit
+host arguments for subsets. To reuse a selection with a command accepting a host
+list, export `host monitor --once --hostname-only` output to a temporary file and
+review its contents first. Selection uses recorded evidence; check timestamps
+and refresh the baseline after migrations so stale assignments remain visible.
 
 Store one filter per `configs/filters/*.yaml` file, relative to the working
 directory. Its filename stem is its display name; entries sort alphabetically.

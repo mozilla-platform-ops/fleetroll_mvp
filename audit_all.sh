@@ -2,7 +2,4 @@
 
 set -e
 
-#uv run fleetroll gather-host 1804.list
-#uv run fleetroll gather-host 2404.list
-
-uv run fleetroll gather-host 1804-and-2404.list
+uv run fleetroll gather host configs/host-lists/linux/all_moonshots.list

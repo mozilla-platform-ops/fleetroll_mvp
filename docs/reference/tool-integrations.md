@@ -26,6 +26,7 @@ check exit status. Tables and diagnostic text are not stable parsing interfaces.
 | Host snapshot and worker evidence | Worker evidence v3: [monitor JSON](monitor-json.md), [historical identity](historical-worker-identity.md) | Host-keyed snapshots, full identity, source timestamps, current/historical distinction, lookup outcomes, pinned provenance. Follow mode uses different framing and is not a durable event stream. |
 | Collection freshness | Freshness v2: [usage](../../README.md#data-freshness), [producer](../../fleetroll/commands/data_freshness.py) | Separate host/TC sources, required sources, coverage, overall status, failures. Without `--require-fresh`, successful reporting does not imply fresh data. |
 | Hostname selection | Unversioned `host monitor --once --hostname-only` | One FQDN per line and documented filter semantics. Candidate selection does not authorize actions. |
+| Filtered collection | Unversioned `gather all/host/tc --filter QUERY` or `--filter-file FILE.yaml`: [selectors](../monitor-filter-sort.md#gather-matching-hosts) | Database default versus explicit scope, frozen combined targets, recorded-state fallback, stderr counts, and no-match success without collection. |
 
 Schema versions are independent of each other and the package version. Consumers
 must explicitly accept versions they implement, tolerate additive fields, and stop
@@ -105,6 +106,8 @@ when JSON shape is unchanged. Producer details remain in the contracts above.
 **Repository helpers and session launcher** — Fleetroll-maintained, best-effort
 wrappers over supported CLI. `tools/gather-*.sh` collect observations;
 `tools/monitor-*.sh` and `tools/start_fleetroll_tmux.py` launch views.
+The tmux launcher uses `gather all --filter 'override=present'` scoped to the
+Linux baseline for frequent collection, alongside whole-baseline collection.
 `tools/list_bad_linux_hosts.sh` and `tools/list_hosts_by_override_branch.sh`
 consume filtered hostname-only output. Check callers for alias, filter, host-list,
 exit-code, or output changes; some still use flat aliases. Their space-separated

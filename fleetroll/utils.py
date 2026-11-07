@@ -238,7 +238,9 @@ def ensure_host_or_file(host_arg: str) -> None:
         )
 
 
-def resolve_host_args(args: tuple[str, ...]) -> tuple[list[str], Path | None]:
+def resolve_host_args(
+    args: tuple[str, ...], *, announce_expansions: bool = True
+) -> tuple[list[str], Path | None]:
     """Resolve positional HOST_OR_FILE args to (expanded_hosts, host_file).
 
     Rules:
@@ -272,7 +274,7 @@ def resolve_host_args(args: tuple[str, ...]) -> tuple[list[str], Path | None]:
     for h in args:
         ensure_host_or_file(h)
         e = expand_hostname(h)
-        if e != h:
+        if e != h and announce_expansions:
             print(f"Expanding {h} → {e}")
         expanded.append(e)
     return expanded, None

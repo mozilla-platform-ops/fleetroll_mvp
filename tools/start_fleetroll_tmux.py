@@ -152,9 +152,11 @@ def main() -> None:
         default_shell="zsh",
         panes=[
             PaneSpec(
-                name="gather-canary",
+                name="gather-overrides",
                 commands=[
-                    "watchp -n 3m ./tools/gather-generic.sh configs/host-lists/linux/canary-all.list"
+                    "watchp -n 3m uv run fleetroll gather all "
+                    "configs/host-lists/linux/all.list --filter 'override=present' "
+                    "--quiet --workers 20 --skip-gh"
                 ],
             ),
             PaneSpec(

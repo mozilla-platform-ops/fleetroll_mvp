@@ -150,21 +150,63 @@ uv run fleetroll gather host t-linux64-ms-238.test.releng.mdc1.mozilla.com
 uv run fleetroll gather host t-linux64-ms-001 t-linux64-ms-173
 
 # audit a list of hosts
-uv run fleetroll gather host configs/host-lists/1804.list
+uv run fleetroll gather host configs/host-lists/linux/all_moonshots.list
 ```
 
 `gather host` accepts one or more hostnames, or a host-list file. When gathering
 multiple hosts, pass all hostnames in the same command; use a host-list file for
 larger sets.
 
+#### Linux host selection
+
+`configs/host-lists/linux/all_moonshots.list` is the maintained Moonshot baseline.
+`configs/host-lists/linux/all.list` is generated solely from it; regenerate with
+`uv run tools/generate_all_host_lists.py`. The old OS, half, canary, and batch
+lists have been removed. Mac and Windows host lists keep their existing sources.
+
+Use the baseline with monitor filters for current selections:
+
+```bash
+uv run fleetroll host monitor configs/host-lists/linux/all_moonshots.list \
+  --filter-file configs/filters/linux-2404.yaml
+uv run fleetroll host monitor configs/host-lists/linux/all_moonshots.list \
+  --once --filter-file configs/filters/linux-unobserved.yaml
+```
+
+The Ubuntu views infer assignment from the last observed role; they do not verify
+OS version or freshness. Failed gathers can retain an old role. Inspect the
+unfiltered baseline and evidence ages as well: a filtered view can omit hosts
+whose assignment is unknown. Refresh with `gather host` and `gather tc` after a
+rebuild or pool change. Baseline completeness is unverified; successful selection
+or fresh data does not establish complete fleet coverage. See
+[filtering and saved selections](docs/monitor-filter-sort.md).
+
+Gather also accepts `--filter QUERY` or `--filter-file FILE.yaml` directly:
+
+```bash
+# select from hosts already known to the local database
+uv run fleetroll gather all --filter 'override=present' --quiet
+
+# restrict the same selection to the Moonshot baseline
+uv run fleetroll gather all configs/host-lists/linux/all.list \
+  --filter 'override=present' --quiet
+```
+
+Without a host/file argument, a filter is required. Combined collection selects
+once for both host and TC steps; zero matches succeed without collection.
+Selection uses recorded evidence and can retain old state after failed gathers;
+it does not discover unobserved hosts or establish freshness. The tmux launcher
+collects override-selected Linux hosts every three minutes and the whole Linux
+baseline every ten minutes. See [gather selection](docs/monitor-filter-sort.md#gather-matching-hosts).
+
 #### TaskCluster data
 
 ```bash
 # fetch TaskCluster worker data for hosts (stores in ~/.fleetroll/fleetroll.db)
-uv run fleetroll gather tc configs/host-lists/1804.list
+uv run fleetroll gather tc configs/host-lists/linux/all_moonshots.list
 
 # verbose output (shows API calls)
-uv run fleetroll gather tc -v configs/host-lists/1804.list
+uv run fleetroll gather tc -v configs/host-lists/linux/all_moonshots.list
 ```
 
 For Linux and macOS, `gather host` records the configured Taskcluster worker
@@ -205,7 +247,7 @@ The same report works after overrides are removed: no special mode is needed.
 Refresh the relevant hosts and GitHub references first:
 
 ```bash
-uv run fleetroll gather all configs/host-lists/linux/2404.list
+uv run fleetroll gather all configs/host-lists/linux/all_moonshots.list
 uv run fleetroll rollout report --role gecko_t_linux_2404_talos
 
 # Pool selection keeps different roles/pools separate
@@ -271,14 +313,14 @@ missing; use `--require-fresh` when freshness is a prerequisite for automation.
 
 ```bash
 # Human-readable report for a host population
-uv run fleetroll data freshness configs/host-lists/1804.list
+uv run fleetroll data freshness configs/host-lists/linux/all_moonshots.list
 
 # Fail closed unless every host has fresh host and TC data
 uv run fleetroll data freshness \
   --min-fresh-pct 100 \
   --require-fresh \
   --json \
-  configs/host-lists/1804.list
+  configs/host-lists/linux/all_moonshots.list
 ```
 
 Taskcluster freshness uses the stored observation timestamp, not the worker's
@@ -308,7 +350,7 @@ Fleetroll uses a hybrid storage architecture optimized for different data access
 #### Once
 
 ```bash
-uv run fleetroll host monitor configs/host-lists/1804.list --once
+uv run fleetroll host monitor configs/host-lists/linux/all_moonshots.list --once
 ```
 
 ##### Filtering and hostname-only output
@@ -338,6 +380,7 @@ Filters are space-separated conditions (all must match). Each condition is `COLU
 | `host` | | string | hostname |
 | `os` | | string | operating system |
 | `role` | | string | Puppet role |
+| `override` | | string | Recorded file presence: `present` / `absent`; unknown evidence matches neither |
 | `sha` | `ovr_bch`, `ovr_sha` | string | override branch / SHA (TUI marks a `*wt` suffix when the override sets a worker pool) |
 | `wt_ovr` | | string | override sets a TC worker pool: `y`/`n`/`-` (filter-only †) |
 | `vlt_sha` | | string | vault SHA |
@@ -424,7 +467,7 @@ interfaces, ownership, and compatibility coordination when changing these contra
 
 ```bash
 # emit one snapshot object keyed by full hostname instead of a table
-uv run fleetroll host monitor configs/host-lists/1804.list --once --json
+uv run fleetroll host monitor configs/host-lists/linux/all_moonshots.list --once --json
 
 # select one host's observation timestamp and raw audit fields
 uv run fleetroll host monitor t-linux64-ms-226.test.releng.mdc1.mozilla.com --once --json \
@@ -441,7 +484,7 @@ uv run fleetroll host monitor configs/host-lists/all.list --once --json \
 
 #### Live-Updating Curses Interface
 ```bash
-uv run fleetroll host monitor configs/host-lists/1804.list
+uv run fleetroll host monitor configs/host-lists/linux/all_moonshots.list
 # keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
 ```
 
@@ -527,11 +570,15 @@ uv run fleetroll override show freddie-arkansas
 # set override (single host)
 uv run fleetroll override set --from-file ~/.fleetroll/overrides/0328af8c9d6f t-linux64-ms-229.test.releng.mdc1.mozilla.com
 
-# set override (host list)
-uv run fleetroll override set --from-file ~/.fleetroll/overrides/0328af8c9d6f configs/host-lists/1804.list
+# select a rollout population from recorded data; inspect it before deployment
+uv run fleetroll host monitor configs/host-lists/linux/all_moonshots.list \
+  --once --hostname-only --filter 'role=gecko_t_linux_2404_talos' \
+  > /tmp/rollout-targets.list
+cat /tmp/rollout-targets.list
 
-# unset override (host list)
-uv run fleetroll override unset configs/host-lists/1804.list
+# preview override deployment/removal for the reviewed selection
+uv run fleetroll override set --from-file ~/.fleetroll/overrides/0328af8c9d6f /tmp/rollout-targets.list
+uv run fleetroll override unset /tmp/rollout-targets.list
 ```
 
 ### Operator hold
@@ -628,8 +675,8 @@ uv run fleetroll vault show jupiter-lactose
 # set vault (single host) - defaults to /root/vault.yaml
 uv run fleetroll vault set --from-file vault.yaml t-linux64-ms-229.test.releng.mdc1.mozilla.com
 
-# set vault (host list)
-uv run fleetroll vault set --from-file vault.yaml configs/host-lists/1804.list
+# set vault (reviewed host selection, as in the override example above)
+uv run fleetroll vault set --from-file vault.yaml /tmp/rollout-targets.list
 ```
 
 ### Debugging

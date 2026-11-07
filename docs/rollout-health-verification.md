@@ -10,8 +10,9 @@ After deploying or removing an override, refresh host, Taskcluster, and GitHub
 evidence for the affected population:
 
 ```bash
-uv run fleetroll gather all configs/host-lists/linux/2404.list
-uv run fleetroll host monitor configs/host-lists/linux/2404.list --once
+uv run fleetroll gather all configs/host-lists/linux/all_moonshots.list
+uv run fleetroll host monitor configs/host-lists/linux/all_moonshots.list --once \
+  --filter-file configs/filters/linux-2404.yaml
 uv run fleetroll rollout report --role gecko_t_linux_2404_talos
 ```
 

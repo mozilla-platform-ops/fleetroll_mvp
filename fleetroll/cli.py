@@ -52,6 +52,7 @@ from .commands import (
     cmd_web,
 )
 from .exceptions import CommandFailureError, FleetRollError, UserError
+from .selection import prepare_selection
 from .ssh import audit_script_body, remote_windows_audit_script, windows_audit_script_body
 from .utils import parse_worker_type, resolve_host_args
 
@@ -166,8 +167,25 @@ def create_override(
     generate(source, output=output, output_dir=output_dir, worker_type=worker_type)
 
 
+def gather_filter_options(func):
+    """Use the same recorded-data selector on all host collection actions."""
+    func = click.option(
+        "--filter",
+        "filter_query",
+        default=None,
+        help="Monitor query selecting recorded hosts; without HOST_OR_FILE, use local DB hosts.",
+    )(func)
+    return click.option(
+        "--filter-file",
+        type=click.Path(exists=True, dir_okay=False),
+        default=None,
+        help="Load a monitor query from a saved filter YAML file (exclusive with --filter).",
+    )(func)
+
+
 @cli.command("gather-host")
-@click.argument("host", metavar="HOST_OR_FILE...", nargs=-1, required=True)
+@click.argument("host", metavar="[HOST_OR_FILE...]", nargs=-1)
+@gather_filter_options
 @common_options
 @click.option(
     "--no-content",
@@ -211,17 +229,28 @@ def gather_host(
     batch_timeout: int,
     verbose: bool,
     quiet: bool,
+    filter_query: str | None,
+    filter_file: str | None,
 ):
     """Audit one or more hosts (role + override presence + optionally contents).
 
     HOST_OR_FILE can be one or more hostnames, user@hostname values, or a file
     containing hosts (one per line for batch mode). A host file cannot be mixed
-    with bare hostnames.
+    with bare hostnames. With --filter or --filter-file, omit hosts to select
+    from the local database, or supply hosts to restrict the filter's scope.
     """
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
 
-    hosts, host_file = resolve_host_args(host)
+    selection = prepare_selection(
+        host, expression=filter_query, path=filter_file, json_output=json_output
+    )
+    if selection is not None:
+        if not selection.hosts:
+            return
+        hosts, host_file = list(selection.hosts), None
+    else:
+        hosts, host_file = resolve_host_args(host)
     args = HostAuditArgs(
         host=str(host_file) if host_file else hosts[0],
         ssh_option=list(ssh_option) if ssh_option else None,
@@ -904,7 +933,8 @@ def host_reboot_if_idle(
 
 
 @cli.command("gather-tc")
-@click.argument("host", metavar="HOST_OR_FILE")
+@click.argument("host", metavar="[HOST_OR_FILE]", required=False)
+@gather_filter_options
 @click.option(
     "--verbose",
     "-v",
@@ -922,13 +952,37 @@ def host_reboot_if_idle(
     is_flag=True,
     help="Query the exact retained historical identity; does not authorize recovery.",
 )
-def gather_tc(host: str, verbose: int, quiet: bool, use_historical_identity: bool):
-    """Fetch TaskCluster worker data for hosts."""
+def gather_tc(
+    host: str | None,
+    verbose: int,
+    quiet: bool,
+    use_historical_identity: bool,
+    filter_query: str | None,
+    filter_file: str | None,
+):
+    """Fetch TaskCluster worker data for hosts.
+
+    With --filter or --filter-file, omit HOST_OR_FILE to select from recorded
+    database hosts, or supply it to restrict the filter's scope.
+    """
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
 
+    selection = prepare_selection(
+        (host,) if host else (), expression=filter_query, path=filter_file
+    )
+    if selection is not None and not selection.hosts:
+        return
+    if selection is not None:
+        host = selection.hosts[0]
+    if host is None:
+        raise click.UsageError("Specify HOST_OR_FILE, --filter, or --filter-file")
     args = TcFetchArgs(
-        host=host, verbose=verbose, quiet=quiet, use_historical_identity=use_historical_identity
+        host=host,
+        verbose=verbose,
+        quiet=quiet,
+        use_historical_identity=use_historical_identity,
+        hosts=list(selection.hosts) if selection else None,
     )
     cmd_tc_fetch(args)
 
@@ -951,7 +1005,8 @@ def gather_gh(override_delay: bool, quiet: bool):
 
 
 @cli.command("gather")
-@click.argument("host", metavar="HOST_OR_FILE")
+@click.argument("host", metavar="[HOST_OR_FILE]", required=False)
+@gather_filter_options
 @common_options
 @click.option(
     "--workers",
@@ -995,7 +1050,7 @@ def gather_gh(override_delay: bool, quiet: bool):
     help="Skip gather gh (GitHub branch refs).",
 )
 def gather(
-    host: str,
+    host: str | None,
     ssh_option: tuple[str, ...],
     connect_timeout: int,
     timeout: int,
@@ -1008,15 +1063,28 @@ def gather(
     skip_host: bool,
     skip_tc: bool,
     skip_gh: bool,
+    filter_query: str | None,
+    filter_file: str | None,
 ):
     """Run gather host, gather tc, and gather gh in sequence.
 
     HOST_OR_FILE can be a hostname, user@hostname, or a file containing hosts
     (one per line). Passed to gather host and gather tc; gather gh does not
-    use it.
+    use it. With --filter or --filter-file, omit HOST_OR_FILE to select from
+    recorded database hosts. Selects once for both host and TC collection.
+    Empty selections succeed without running any collection steps.
 
     Use --skip-host / --skip-tc / --skip-gh to omit individual steps.
     """
+    selection = prepare_selection(
+        (host,) if host else (), expression=filter_query, path=filter_file, json_output=json_output
+    )
+    if selection is not None:
+        if not selection.hosts:
+            return
+        host = selection.hosts[0]
+    if host is None:
+        raise click.UsageError("Specify HOST_OR_FILE, --filter, or --filter-file")
     if not skip_host:
         host_args = HostAuditArgs(
             host=host,
@@ -1030,11 +1098,17 @@ def gather(
             batch_timeout=batch_timeout,
             verbose=verbose >= 1,
             quiet=quiet,
+            hosts=list(selection.hosts) if selection else None,
         )
         cmd_host_audit(host_args)
 
     if not skip_tc:
-        tc_args = TcFetchArgs(host=host, verbose=verbose, quiet=quiet)
+        tc_args = TcFetchArgs(
+            host=host,
+            verbose=verbose,
+            quiet=quiet,
+            hosts=list(selection.hosts) if selection else None,
+        )
         cmd_tc_fetch(tc_args)
 
     if not skip_gh:

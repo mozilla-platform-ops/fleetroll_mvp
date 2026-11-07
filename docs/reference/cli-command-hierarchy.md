@@ -48,6 +48,14 @@ can be disambiguated with `./host`, for example; a hostname can use its FQDN.
 new inherited group options: existing action flags follow the action name in
 canonical invocations. Existing global flags remain global.
 
+Host collection actions (`gather all`, `gather host`, `gather tc`) also accept
+`--filter QUERY` or `--filter-file FILE.yaml`, including through their legacy
+spellings. With a filter, the positional host/file is optional and defaults to
+recorded database hosts. Supplying a host/file restricts candidate scope. Bare
+`gather --filter QUERY` routes to `gather all`. See
+[gather selectors](../monitor-filter-sort.md#gather-matching-hosts) for frozen
+selection, no-match behavior, output, and evidence limits.
+
 ## Maintainer checks
 
 Keep compatibility routing at the CLI boundary. Update

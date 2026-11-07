@@ -25,8 +25,7 @@ BASE_DIR = Path("configs/host-lists")
 OS_DIRS = ["linux", "mac", "windows"]
 OUTPUT_PATH = BASE_DIR / "all.list"
 
-# Linux host lists are manually maintained per-group; only this file is used
-# as the authoritative source for linux/all.list generation.
+# Linux has one maintained baseline; generated linux/all.list uses only this file.
 LINUX_SOURCE_FILE = "all_moonshots.list"
 MISSING_SOURCE_REVISION = "not available in source file"
 

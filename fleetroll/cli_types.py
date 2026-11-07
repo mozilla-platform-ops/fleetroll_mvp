@@ -200,6 +200,7 @@ class TcFetchArgs:
     verbose: int
     quiet: bool
     use_historical_identity: bool = False
+    hosts: list[str] | None = None
 
 
 @dataclass
