@@ -1,0 +1,2 @@
+query: host~linux64-ms role=gecko_t_linux_talos|gecko_t_linux_netperf sort:role,host
+description: Linux moonshots on 18.04 (talos, netperf) by role

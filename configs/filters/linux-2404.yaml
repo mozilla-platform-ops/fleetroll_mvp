@@ -1,0 +1,2 @@
+query: host~linux64-ms role~2404 sort:role,host
+description: Linux moonshots on 24.04 (talos, netperf, wayland) by role

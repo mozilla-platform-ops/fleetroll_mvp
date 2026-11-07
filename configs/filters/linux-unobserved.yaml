@@ -1,0 +1,2 @@
+query: host~linux64-ms role= sort:host
+description: Linux moonshots with no observed role (dark, unreachable, or never gathered)
