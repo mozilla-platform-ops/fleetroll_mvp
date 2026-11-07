@@ -49,6 +49,7 @@ class RowRenderer:
         github_refs: dict[str, dict[str, Any]],
         windows_pools: dict[str, dict[str, Any]] | None = None,
         notes_data: dict[str, str] | None = None,
+        git_checksums: set[str] | None = None,
     ) -> dict[str, Any]:
         """Compute all data needed to render a single host row.
 
@@ -84,6 +85,13 @@ class RowRenderer:
             github_refs=github_refs,
             windows_pools=windows_pools,
             notes_data=notes_data,
+            git_checksums=(
+                git_checksums
+                if git_checksums is not None
+                else sha_cache.git_checksums
+                if sha_cache is not None
+                else set()
+            ),
         )
         ts_value = resolve_last_ok_ts(latest.get(host), last_ok=latest_ok.get(host))
         tc_ts_value = tc_worker_data.get("ts") if tc_worker_data else None

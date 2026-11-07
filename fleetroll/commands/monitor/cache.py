@@ -100,14 +100,14 @@ def find_vault_symlink(sha256: str, vault_dir: Path) -> str | None:
 
 
 def abbreviate_checksum(checksum: str, *, known: Iterable[str]) -> str:
-    """Find a unique prefix starting at four characters; ignore filename aliases."""
+    """Use four characters, eight on collision, then the shortest unique prefix."""
     length = 4
     for other in known:
         if other[:length] != checksum[:length]:
             continue
         if checksum.startswith(other) or other.startswith(checksum):
             continue
-        length = max(length, len(commonprefix((checksum, other))) + 1)
+        length = max(8, length, len(commonprefix((checksum, other))) + 1)
     return checksum[:length]
 
 
@@ -127,6 +127,7 @@ class ShaInfoCache:
         self.override_checksums: set[str] = set()
         self.vault_cache: dict[str, str] = {}
         self.vault_checksums: set[str] = set()
+        self.git_checksums: set[str] = set()
 
     def load_all(self) -> None:
         """Pre-populate caches by scanning directories."""

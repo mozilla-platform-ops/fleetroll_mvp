@@ -27,9 +27,18 @@ def register_checksum_observations(
     *,
     latest: dict[str, dict[str, Any]],
     latest_ok: dict[str, dict[str, Any]],
-) -> None:
+    github_refs: dict[str, dict[str, Any]] | None = None,
+) -> set[str]:
     """Include the unfiltered observation population in checksum uniqueness checks."""
+    git_checksums = {
+        record.get("observed", {}).get("puppet_git_sha")
+        for records in (latest, latest_ok)
+        for record in records.values()
+        if record.get("observed", {}).get("puppet_git_sha")
+    }
+    git_checksums.update(ref["sha"] for ref in (github_refs or {}).values() if ref.get("sha"))
     if sha_cache is not None:
+        sha_cache.git_checksums.update(git_checksums)
         sha_cache.register_override_checksums(
             record.get("observed", {}).get("override_sha256", "") or ""
             for records in (latest, latest_ok)
@@ -40,6 +49,8 @@ def register_checksum_observations(
             for records in (latest, latest_ok)
             for record in records.values()
         )
+        return sha_cache.git_checksums
+    return git_checksums
 
 
 def override_cell_parts(value: str, *, checksum: str | None = None) -> tuple[str, str, str]:
@@ -197,8 +208,6 @@ def compute_columns_and_widths(
         "tc_act": 12,
         "tc_j_sf": 20,
         "pp_last": 12,
-        "pp_exp": 7,
-        "pp_sha": 7,
         "pp_match": 8,
         "healthy": 7,
         "data": 7,
@@ -209,7 +218,9 @@ def compute_columns_and_widths(
     widths = {col: len(labels[col]) for col in columns}
     widths["uptime"] = 7
     tc_data = tc_data or {}
-    register_checksum_observations(sha_cache, latest=latest, latest_ok=latest_ok or {})
+    git_checksums = register_checksum_observations(
+        sha_cache, latest=latest, latest_ok=latest_ok or {}, github_refs=github_refs
+    )
     for host in hosts:
         short_host = strip_fqdn(host)
         values = build_row_values(
@@ -222,6 +233,7 @@ def compute_columns_and_widths(
             github_refs=github_refs,
             windows_pools=windows_pools,
             notes_data=notes_data,
+            git_checksums=git_checksums,
         )
         for col in columns:
             if col == "uptime":
@@ -244,7 +256,7 @@ def compute_columns_and_widths(
             widths[col] = max(widths[col], len(value))
     if cap_widths:
         for col in columns:
-            if col in ("sha", "vlt_sha"):
+            if col in ("sha", "vlt_sha", "pp_sha", "pp_exp"):
                 continue
             widths[col] = min(widths[col], caps[col])
 
@@ -302,6 +314,7 @@ def format_monitor_row(
     github_refs: dict[str, dict[str, Any]] | None = None,
     windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
+    git_checksums: set[str] | None = None,
 ) -> str:
     """Format a single table row for a host."""
     values = build_row_values(
@@ -314,6 +327,13 @@ def format_monitor_row(
         github_refs=github_refs,
         windows_pools=windows_pools,
         notes_data=notes_data,
+        git_checksums=(
+            git_checksums
+            if git_checksums is not None
+            else sha_cache.git_checksums
+            if sha_cache is not None
+            else set()
+        ),
     )
     override_checksum = (
         sha_cache.abbreviate_override(values["ovr_sha_full"])
@@ -358,6 +378,9 @@ def render_monitor_lines(
 ) -> tuple[str, list[str]]:
     """Render monitor header + lines in the provided host order."""
     tc_data = tc_data or {}
+    git_checksums = register_checksum_observations(
+        sha_cache, latest=latest, latest_ok=latest_ok or {}, github_refs=github_refs
+    )
     columns, widths = compute_columns_and_widths(
         hosts=hosts,
         latest=latest,
@@ -411,6 +434,7 @@ def render_monitor_lines(
             github_refs=github_refs,
             windows_pools=windows_pools,
             notes_data=notes_data,
+            git_checksums=git_checksums,
         )
         for host in host_slice
     ]

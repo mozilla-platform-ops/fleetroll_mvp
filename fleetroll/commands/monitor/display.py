@@ -170,6 +170,7 @@ class MonitorDisplay:
         self.provider = provider
         self.github_refs = github_refs
         self.sha_cache = sha_cache
+        self._git_checksums: set[str] = set()
         self.notes_data: dict[str, str] = notes_data or {}
         self._notes_path = notes_path
         self._tc_poll_time = 0.0
@@ -753,7 +754,14 @@ class MonitorDisplay:
 
         widths = {col: len(labels[col]) for col in all_columns}
         widths["uptime"] = max(widths["uptime"], 7)
-        register_checksum_observations(self.sha_cache, latest=self.latest, latest_ok=self.latest_ok)
+        self._git_checksums.update(
+            register_checksum_observations(
+                self.sha_cache,
+                latest=self.latest,
+                latest_ok=self.latest_ok,
+                github_refs=self.github_refs,
+            )
+        )
         for host in sorted_hosts:
             short_host = strip_fqdn(host)
             tc_worker_data = self.tc_data.get(short_host)
@@ -767,6 +775,7 @@ class MonitorDisplay:
                 github_refs=self.github_refs,
                 windows_pools=self.windows_pools,
                 notes_data=self.notes_data,
+                git_checksums=self._git_checksums,
             )
             for col in all_columns:
                 if col == "uptime":
@@ -989,6 +998,7 @@ class MonitorDisplay:
                 github_refs=self.github_refs,
                 windows_pools=self.windows_pools,
                 notes_data=self.notes_data,
+                git_checksums=self._git_checksums,
             )
             self.row_renderer.draw_host_row(
                 row, render_data=render_data, columns=columns, widths=widths, color_maps=color_maps

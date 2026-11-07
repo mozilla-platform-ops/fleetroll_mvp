@@ -64,8 +64,8 @@ to the complete override value; when a branch is present it gets that color
 and the checksum stays plain. Filtering, sorting, JSON, and browser values
 retain the complete original branch/checksum representation.
 
-Checksum abbreviations start at four characters and expand to distinguish
-known collisions, including collisions beyond the old eight-character prefix.
+Checksum abbreviations start at four characters, expand to eight for known
+collisions, then grow further as needed to distinguish longer shared prefixes.
 The comparison includes local override files and the loaded host observations
 before filtering. Stored filename prefixes and full checksums for the same
 override count as one identity. Known checksums remain registered for the
@@ -76,13 +76,28 @@ lengthen it. Uniqueness is relative to this known inventory.
 
 VLT_SHA shows `checksum mnemonic ↪ symlink-name`, omitting parentheses and the
 symlink portion when unavailable. Checksum prefixes start at four characters
-and expand for known collisions in the vault inventory, independently of
+and expand to eight (or longer as needed) for known vault collisions, independently of
 override checksums. Local vault filenames, symlink targets, and unfiltered
 loaded observations participate; known identities remain registered across
 filter changes. Complete mnemonic and symlink names stay visible, and the
 mnemonic retains its categorical color. The `↪` marker distinguishes the
 symlink name from the mnemonic. Text and TUI widths use the compact
 representation. Original filter/sort/JSON/browser values remain unchanged.
+
+## Compact Puppet revisions
+
+In terminal and text tables, PP_SHA and PP_EXP use four-character Git revision
+prefixes, expanding to eight on a known collision and longer when needed. Both
+columns share one inventory of full applied revisions from all loaded latest
+and last-successful observations and all loaded GitHub references. Hidden hosts
+and unused branches participate before filtering or pagination. Known identities
+remain registered throughout the TUI session, so filtering or refreshing cannot
+shorten an existing prefix; newly discovered collisions can lengthen it.
+
+Widths fit complete prefixes, including collisions beyond eight characters.
+Uniqueness is relative to the loaded inventory, not all commits in Git. Missing
+evidence retains its `-` or `?` marker. PP_MATCH and HEALTHY still compare full
+revisions; filter, sort, JSON, and browser values keep their original format.
 
 ## Compact uptime
 

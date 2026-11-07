@@ -115,10 +115,10 @@ ROLE      Puppet role assigned to host
 OS        Host operating system (M=macOS/Darwin, L=Linux, W=Windows)
 VLT_SHA   Abbreviated vault checksum + full mnemonic and optional symlink name
           ↪ marks the symlink name
-          Checksum starts at 4 characters, expanding for known vault collisions
+          Checksum uses 4 characters, 8 on collision, longer if needed
 OVR_BCH   Complete override branch + abbreviated checksum
           *wt = override sets a Taskcluster worker pool
-          Checksum starts at 4 characters, expanding for known prefix collisions
+          Checksum uses 4 characters, 8 on collision, longer if needed
 NOTE      Most recent operator note for the host (count prefix when multiple)
 UPTIME    Uptime: three-character whole-unit label + three-cell magnitude bar
           Blue shades show magnitude, not health (cyan on basic terminals)
@@ -127,6 +127,7 @@ UPTIME    Uptime: three-character whole-unit label + three-cell magnitude bar
 PP_LAST   Time since last puppet run (FAIL if failed)
 PP_EXP    Expected puppet SHA (branch HEAD or master HEAD)
 PP_SHA    Actual puppet SHA that was applied
+          PP_SHA/PP_EXP share prefixes: 4 characters, 8 on collision, longer if needed
 PP_MATCH  Puppet SHA matches expected (master or override branch)
           Y = puppet git SHA matches expected
           N = SHA mismatch or puppet failed

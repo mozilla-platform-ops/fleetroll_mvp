@@ -109,7 +109,7 @@ def test_vault_inventory_counts_unnamed_files_and_filename_aliases(tmp_path):
     (vault_dir / "production").symlink_to("same_first_file")
     cache = ShaInfoCache(overrides_dir=tmp_path / "missing", vault_dir=vault_dir)
     cache.load_all()
-    assert cache.abbreviate_vault("same_first_file") == "same_f"
-    assert cache.abbreviate_vault("same_second_file") == "same_s"
+    assert cache.abbreviate_vault("same_first_file") == "same_fir"
+    assert cache.abbreviate_vault("same_second_file") == "same_sec"
     cache.register_vault_checksums(["blue_first_o", "blue_first_override_value"])
     assert cache.abbreviate_vault("blue_first_override_value") == "blue"

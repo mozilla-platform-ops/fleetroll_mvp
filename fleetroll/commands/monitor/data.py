@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from ...constants import DEFAULT_GITHUB_REPO
 from ...humanhash import humanize
 from ...utils import natural_sort_key
+from .cache import abbreviate_checksum
 
 if TYPE_CHECKING:
     from .cache import ShaInfoCache
@@ -294,6 +295,7 @@ def build_ok_row_values(
     github_refs: dict[str, dict[str, Any]] | None = None,
     windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
+    git_checksums: set[str] | None = None,
 ) -> dict[str, str]:
     """Build string values for an OK monitor row."""
     # Strip common FQDN suffix if provided
@@ -366,7 +368,8 @@ def build_ok_row_values(
     puppet_state_ts = observed.get("puppet_state_ts")
     puppet_git_sha = observed.get("puppet_git_sha")
 
-    # PP_SHA: 7-char truncated git SHA
+    # Keep legacy values for filters/JSON/browser; terminal callers opt into
+    # collision-aware abbreviations using the shared expected/applied inventory.
     pp_sha = "-"
     if puppet_git_sha:
         pp_sha = puppet_git_sha[:7]
@@ -409,6 +412,7 @@ def build_ok_row_values(
     # PP_MATCH: SHA-based comparison against GitHub branch data
     pp_match = "-"
     pp_exp = "-"
+    github_sha = ""
     puppet_git_sha = observed.get("puppet_git_sha")
 
     if github_refs:
@@ -434,6 +438,14 @@ def build_ok_row_values(
                     else:
                         pp_match = "N"
             # else: branch not in github_refs, fall through to "-"
+
+    if git_checksums is not None:
+        known = git_checksums | {puppet_git_sha or ""}
+        known.update(ref.get("sha") or "" for ref in (github_refs or {}).values())
+        if puppet_git_sha:
+            pp_sha = abbreviate_checksum(puppet_git_sha, known=known)
+        if pp_exp != "-":
+            pp_exp = abbreviate_checksum(github_sha, known=known)
 
     # HEALTHY: pp_match AND TC_ACT < 1 hour
     healthy = "-"
@@ -614,6 +626,7 @@ def build_row_values(
     github_refs: dict[str, dict[str, Any]] | None = None,
     windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
+    git_checksums: set[str] | None = None,
 ) -> dict[str, str]:
     """Build string values for a monitor row."""
     # Strip common FQDN suffix if provided
@@ -673,6 +686,7 @@ def build_row_values(
                 github_refs=github_refs,
                 windows_pools=windows_pools,
                 notes_data=notes_data,
+                git_checksums=git_checksums,
             )
             values["status"] = "FAIL"
             values["err"] = err
@@ -724,6 +738,7 @@ def build_row_values(
         github_refs=github_refs,
         windows_pools=windows_pools,
         notes_data=notes_data,
+        git_checksums=git_checksums,
     )
 
 

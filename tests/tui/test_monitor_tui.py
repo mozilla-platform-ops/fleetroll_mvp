@@ -29,6 +29,60 @@ def _session_env(home_dir: Any) -> dict[str, str]:
 class TestMonitorLayout:
     """Verify header, columns and host rows render correctly."""
 
+    @pytest.mark.parametrize(
+        ("first", "second", "length"),
+        [
+            ("blue_revision", "blue_revision", 4),
+            ("same_first_revision", "same_second_revision", 8),
+            ("shared_prefix_first", "shared_prefix_second", 15),
+        ],
+    )
+    def test_compact_git_revisions(self, tmux_monitor_env, first, second, length) -> None:
+        from fleetroll.constants import DEFAULT_GITHUB_REPO
+        from fleetroll.db import get_connection, insert_github_ref, insert_host_observation
+
+        conn = get_connection(tmux_monitor_env["db_path"])
+        try:
+            insert_host_observation(
+                conn,
+                {
+                    "host": tmux_monitor_env["hosts"][0],
+                    "ts": "2026-11-07T00:00:00+00:00",
+                    "ok": True,
+                    "observed": {
+                        "override_present": False,
+                        "puppet_git_sha": first,
+                        "puppet_success": True,
+                    },
+                },
+            )
+            owner, repo = DEFAULT_GITHUB_REPO.split("/")
+            insert_github_ref(
+                conn,
+                {
+                    "owner": owner,
+                    "repo": repo,
+                    "branch": "master",
+                    "sha": second,
+                    "ts": "2026-11-07T00:00:00+00:00",
+                },
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        cmd = f"{_UV_PATH} run fleetroll host-monitor {tmux_monitor_env['hosts_file']}"
+        with TmuxSession(
+            cmd=cmd,
+            cols=300,
+            rows=40,
+            env=_session_env(tmux_monitor_env["home"]),
+        ) as sess:
+            expected = f"{first[:length]:<{max(6, length)}} | {second[:length]:<{max(6, length)}} |"
+            assert sess.wait_for(expected, timeout=15.0), sess.capture()
+            sess.send_keys("/", "host~ms-001", "Enter")
+            assert sess.wait_for("hosts=1/5", timeout=5.0), sess.capture()
+            assert sess.wait_for(expected, timeout=5.0), sess.capture()
+
     def test_compact_uptime_bar(self, tmux_session: TmuxSession) -> None:
         """Seeded one-hour uptimes retain their compact label and Unicode bar."""
         assert tmux_session.wait_for("1h █░░", timeout=3.0), tmux_session.capture()

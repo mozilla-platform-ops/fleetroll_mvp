@@ -182,8 +182,8 @@ def test_checksum_inventory_includes_files_without_branch_metadata(tmp_path):
         (tmp_path / name).write_text("# no branch metadata\n")
     cache = ShaInfoCache(overrides_dir=tmp_path, vault_dir=tmp_path / "missing")
     cache.load_all()
-    assert cache.abbreviate_override("same_first_file") == "same_f"
-    assert cache.abbreviate_override("same_second_file") == "same_s"
+    assert cache.abbreviate_override("same_first_file") == "same_fir"
+    assert cache.abbreviate_override("same_second_file") == "same_sec"
     assert cache.abbreviate_override("blue_unique_file") == "blue"
 
 
