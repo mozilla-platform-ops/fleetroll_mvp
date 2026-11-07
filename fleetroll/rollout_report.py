@@ -355,6 +355,20 @@ def attribute_job(
     return result
 
 
+def observation_status(record, *, until, max_gap, historical_cutoffs):
+    """Describe retained evidence age without treating compaction as an outage."""
+    stamp = parse_timestamp(record.get("ts"))
+    if stamp is None:
+        return "missing"
+    if not record.get("ok"):
+        return "failed"
+    if until - stamp <= max_gap:
+        return "fresh"
+    if historical_cutoffs:
+        return "historical_detail_unavailable"
+    return "stale"
+
+
 def collect_host(
     host: str,
     *,
@@ -366,9 +380,34 @@ def collect_host(
     max_gap: dt.timedelta,
     worker_group: str,
     clients: Any,
+    historical_cutoffs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     latest = latest_observation(records)
     stamp = parse_timestamp(latest.get("ts"))
+    historical_cutoffs = historical_cutoffs or []
+    status = observation_status(
+        latest, until=until, max_gap=max_gap, historical_cutoffs=historical_cutoffs
+    )
+    stale_reason = "latest host observation is stale or missing"
+    if status == "historical_detail_unavailable" and stamp is not None:
+        span = historical_cutoffs[-1]
+        span_status = (
+            "invalidated"
+            if span["invalidated"]
+            else "verified"
+            if span["verified"]
+            else "unverified"
+        )
+        stale_reason = (
+            "historical observation detail unavailable after compaction: "
+            f"cutoff {iso(until)}, retained observation {iso(stamp)}, "
+            f"span {span['span_start']} to {span['span_end']} "
+            f"({span_status}; maximum polling gap {span['max_observation_gap_s']:g}s, "
+            f"requested bound {max_gap.total_seconds():g}s). "
+            "This does not establish a collection outage. Supply saved observations "
+            "with --observations-file or run a current-window report; gathering again "
+            "cannot restore past observation timestamps."
+        )
     intervals = build_history(
         records,
         overrides_dir=overrides_dir,
@@ -380,7 +419,7 @@ def collect_host(
         latest, overrides_dir=overrides_dir, master_refs=master_refs, worker_group=worker_group
     )
     if stamp is None or until - stamp > max_gap:
-        current, reason = None, "latest host observation is stale or missing"
+        current, reason = None, stale_reason
     # A write event after the latest observation invalidates its current state.
     if any(
         entry.get("action") in WRITE_ACTIONS
@@ -402,6 +441,7 @@ def collect_host(
         "role": last_known_role(records),
         "observation_ts": latest.get("ts"),
         "observation_age_s": (until - stamp).total_seconds() if stamp else None,
+        "observation_status": status,
         "configuration": configuration_json(current) if current else None,
         "configuration_reason": reason,
         "intervals": [
@@ -432,12 +472,14 @@ def collect_host(
             if "_compact_unverified" in entry
         ],
         "configuration_gaps": history_gaps(intervals, since=since, until=until),
+        "historical_cutoffs": historical_cutoffs,
+        "max_observation_gap_s": max_gap.total_seconds(),
     }
     identity, identity_reason = worker_identity(
         latest, overrides_dir=overrides_dir, worker_group=worker_group
     )
     if identity is None or stamp is None or until - stamp > max_gap:
-        result["error"] = identity_reason or "latest host observation is stale or missing"
+        result["error"] = identity_reason or stale_reason
         return result
     result["scope"] = [result["role"], identity.provisioner, identity.pool, identity.worker_group]
     if identity.legacy:
@@ -1878,6 +1920,11 @@ def build_report(args, *, clients=None, progress=None) -> dict[str, Any]:
                 max_gap=dt.timedelta(seconds=args.max_observation_gap),
                 worker_group=args.worker_group,
                 clients=clients,
+                historical_cutoffs=[
+                    span
+                    for span in history_metadata.get("historical_cutoffs", [])
+                    if span["host"] == host
+                ],
             ): host
             for host in selected
         }

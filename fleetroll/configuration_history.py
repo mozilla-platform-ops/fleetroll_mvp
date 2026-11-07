@@ -356,6 +356,7 @@ def read_evidence(conn, *, until, now=None):
     cutoff = now - dt.timedelta(days=RETENTION_DAYS)
     records = []
     spans = 0
+    historical_cutoffs = []
     for row in conn.execute(
         """SELECT p.host,p.first_ts,p.last_ts,p.first_applied,p.last_applied,p.max_gap,p.invalidated,
                   s.data,s.proof,s.reason FROM configuration_spans p JOIN configuration_states s ON p.state_id=s.id
@@ -365,6 +366,19 @@ def read_evidence(conn, *, until, now=None):
         host, first, last, first_apply, last_apply, gap, invalidated, data, proof_json, reason = row
         spans += 1
         payload, proof = json.loads(data), json.loads(proof_json) if proof_json else None
+        if first < until.timestamp() < last:
+            historical_cutoffs.append(
+                {
+                    "host": host,
+                    "until": until.isoformat(),
+                    "span_start": dt.datetime.fromtimestamp(first, dt.UTC).isoformat(),
+                    "span_end": dt.datetime.fromtimestamp(last, dt.UTC).isoformat(),
+                    "max_observation_gap_s": gap,
+                    "invalidated": bool(invalidated),
+                    "verified": proof is not None and not invalidated,
+                    "provenance": proof.get("provenance") if proof else None,
+                }
+            )
         for timestamp, applied in ((first, first_apply), (last, last_apply)):
             if timestamp > until.timestamp():
                 continue
@@ -413,4 +427,5 @@ def read_evidence(conn, *, until, now=None):
         "cutoff": cutoff.isoformat(),
         "spans": spans,
         "source": "sqlite compact configuration history",
+        "historical_cutoffs": historical_cutoffs,
     }

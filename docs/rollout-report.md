@@ -10,6 +10,10 @@ supply their configuration evidence. By default, a host observation over one
 hour old prevents that worker's live job query entirely. Refresh with
 `fr gather all HOST_OR_FILE` using the same database before running either report.
 Taskcluster-only gathers do not refresh host configuration.
+Historical cutoffs inside compacted spans can instead produce
+`historical_detail_unavailable`, even with regular successful gathers. The error
+shows retained endpoints and the maximum polling gap; it does not establish an
+outage. See [historical evidence limits and recovery](reference/configuration-history.md).
 
 ## Run a report
 
@@ -169,7 +173,7 @@ Top-level fields are `schema_version`, `configuration_history`,
 | Cohort health | `health.status`, `sample_status`, `minimum_finished`, `basis: "verified tasks in report window"`, `warnings` |
 | Comparisons | `observed_result`, `sample_status`, `minimum_finished`, `attribution`, `unattributed_failures`; assessment/comparison `warnings` and `host_query_coverage` include queried/requested counts and observed/minimum fractions. |
 | Attribution | `status` (`limited` or `meets threshold`), `fraction`, `warning_threshold`, `warnings`; independent of comparison `status` |
-| History metadata | Availability, schema version, retention cutoff, compact span count |
+| History metadata | Availability, schema version, retention cutoff, compact span count, and `historical_cutoffs` with host, cutoff, span endpoints, maximum polling gap, verification/invalidation state, and proof provenance. Per-host results also expose their crossing spans, requested `max_observation_gap_s`, and `observation_status`: `fresh`, `stale`, `missing`, `failed`, or `historical_detail_unavailable`. |
 | Queue counts | `scope: whole_pool`, `approximate: true`, `pools`, `unresolved_hosts`, `legacy_mapped_hosts`. Each pool has `worker_pool`, nullable `pending_tasks`, `checked_at`, `error`. Also present in fleet-status JSON. |
 
 Unavailable comparisons use `observed_result: "comparison unavailable"` and

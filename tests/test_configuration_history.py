@@ -9,12 +9,13 @@ import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from fleetroll import configuration_history as compact
 from fleetroll import db
 from fleetroll.rollout_history import build_history, classify_run
-from fleetroll.rollout_report import load_evidence
+from fleetroll.rollout_report import collect_host, load_evidence
 
 BASE = dt.datetime(2026, 11, 3, 10, tzinfo=dt.UTC)
 NOW = BASE + dt.timedelta(days=1)
@@ -404,6 +405,82 @@ def test_saved_snapshots_restore_strict_query_without_writing_database(env):
 def test_historical_horizon_does_not_extrapolate_past_retained_endpoint(env):
     store(env, [observation(minute) for minute in range(0, 91, 3)])
     assert classified(intervals(env, until=BASE + dt.timedelta(minutes=45)), 44) is None
+
+
+@pytest.mark.parametrize(
+    "case", ["stable", "strict", "invalidated", "write", "gap", "transition", "saved", "failed"]
+)
+def test_historical_cutoff_diagnostics_preserve_evidence_limits(env, case):
+    horizon = BASE + dt.timedelta(minutes=120)
+    minutes = list(range(0, 301, 3))
+    if case == "gap":
+        minutes = [0, 180, 300]
+    records = [observation(minute) for minute in minutes]
+    if case == "transition":
+        for record in records:
+            if dt.datetime.fromisoformat(record["ts"]) >= horizon:
+                record["observed"]["puppet_git_sha"] = "test_changed_revision"
+    store(env, records)
+    if case in {"invalidated", "write"}:
+        compact.record_boundary(
+            env.conn,
+            {
+                "host": "host.example.com",
+                "ts": (BASE + dt.timedelta(minutes=30)).isoformat(),
+                "action": "history.conflict" if case == "invalidated" else "host.set_override",
+            },
+        )
+        env.conn.commit()
+    snapshots = []
+    if case in {"saved", "failed"}:
+        snapshot = env.path.parent / "saved.json"
+        snapshot.write_text(json.dumps({**observation(119), "ok": case != "failed"}))
+        snapshots.append(snapshot)
+    metadata = {}
+    evidence, refs, _ = load_evidence(
+        env.path,
+        audit_log=env.audit,
+        until=horizon,
+        observation_files=snapshots,
+        history_metadata=metadata,
+    )
+    clients = SimpleNamespace(worker_manager=Mock())
+    clients.worker_manager.getWorker.return_value = {"recentTasks": []}
+    result = collect_host(
+        "host.example.com",
+        records=evidence["host.example.com"],
+        master_refs=refs,
+        overrides_dir=env.overrides,
+        since=BASE,
+        until=horizon,
+        max_gap=dt.timedelta(seconds=60 if case == "strict" else 3600),
+        worker_group="test-group",
+        clients=clients,
+        historical_cutoffs=metadata["historical_cutoffs"],
+    )
+    if case in {"saved", "transition"}:
+        assert result["query_ok"]
+        assert result["observation_status"] == "fresh"
+    else:
+        assert not result["query_ok"]
+        clients.worker_manager.getWorker.assert_not_called()
+        assert result["jobs"] == []
+        expected = (
+            "failed"
+            if case == "failed"
+            else "stale"
+            if case == "gap"
+            else "historical_detail_unavailable"
+        )
+        assert result["observation_status"] == expected
+        if case not in {"gap", "failed"}:
+            assert result["historical_cutoffs"][0]["invalidated"] == (
+                case in {"invalidated", "write"}
+            )
+            assert "cannot restore past observation timestamps" in result["error"]
+    # Diagnostics must not extend attribution to the historical horizon.
+    if case not in {"saved", "transition"}:
+        assert all(dt.datetime.fromisoformat(item["end"]) < horizon for item in result["intervals"])
 
 
 def test_unknown_revision_is_not_relabelled_after_cache_expiry(env):

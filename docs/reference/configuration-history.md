@@ -63,6 +63,24 @@ last independently available endpoint at or before the horizon. Saved snapshots
 can restore this detail. These conservative limitations are intentional; reports
 never invent intermediate observation timestamps.
 
+When this prevents a worker query, reports distinguish
+`observation_status: historical_detail_unavailable` from `stale`, `missing`,
+and `failed`. Each host's `historical_cutoffs` lists crossing spans, their real
+endpoints, maximum polling gaps, verification/invalidation state, and proof
+provenance. `max_observation_gap_s` records the requested bound. These fields
+describe evidence limits; they do not grant identity freshness or task attribution.
+A short retained polling gap does not imply a collection outage merely because
+the earlier endpoint is old. Conversely, an invalidated span or a gap larger than
+the requested bound does not establish continuity.
+
+Gathering again cannot restore discarded historical timestamps. Supply actual
+saved observations using `--observations-file` to recover supported anchors, or
+omit historical `--until` to request a current-window report. A current report
+still requires fresh host evidence, and live Taskcluster recent-task lists may
+no longer include older runs. Supporting arbitrary interior cutoffs without saved
+snapshots would require additional retained anchors or an explicit revision of
+the evidence contract; reports continue to exclude unsupported configurations.
+
 Retention uses collection/maintenance UTC time, never future source timestamps.
 Future observations are excluded from compact storage. A future operation event
 is bounded to first receipt time, with its source timestamp retained as its

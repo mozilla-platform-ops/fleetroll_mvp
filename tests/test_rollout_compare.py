@@ -1,11 +1,13 @@
 """Explicit pool comparison preserves attribution, failures and workload differences."""
 
+import datetime as dt
 import json
 
 import click
 import pytest
 from click.testing import CliRunner
 from fleetroll import rollout_compare as compare
+from fleetroll import rollout_report as report
 from fleetroll.cli import cli
 
 from tests.test_rollout_progress import Terminal
@@ -78,6 +80,53 @@ def test_cross_pool_names_rates_window_and_worker_evidence(env, capsys):
     assert result["sides"]["candidate"]["workers"][0]["observed"]["outcomes"]["failed"] == 1
     assert result["sides"]["baseline"]["pool"] == "releng-hardware/talos-pool"
     assert len(result["comparison"]["tasks"]) == 1
+
+
+@pytest.mark.parametrize("command", ["report", "compare-pools"])
+def test_historical_compaction_is_not_reported_as_collection_outage(env, capsys, command):
+    # Keep collecting well past the cutoff so its raw snapshots are pruned.
+    for host, pool in (("control", "talos-pool"), ("canary", "candidate")):
+        for minute in range(30, 901, 3):
+            seed(
+                env,
+                host,
+                early=False,
+                stamp=SINCE + dt.timedelta(minutes=minute),
+                tc_worker_identity=identity(host, pool=pool),
+            )
+    args = (
+        arguments(env)
+        if command == "compare-pools"
+        else [
+            "--worker-type",
+            "candidate",
+            "--db",
+            str(env.db),
+            "--audit-log",
+            str(env.audit),
+            "--since",
+            SINCE.isoformat(),
+            "--until",
+            UNTIL.isoformat(),
+        ]
+    )
+    main = compare.main if command == "compare-pools" else report.main
+    assert main([*args, "--json"]) == 1
+    result = json.loads(capsys.readouterr().out)
+    candidate = result["reports"]["candidate"] if command == "compare-pools" else result
+    host = candidate["hosts"][0]
+    assert host["observation_status"] == "historical_detail_unavailable"
+    assert "historical observation detail unavailable after compaction" in host["error"]
+    assert "stale or missing" not in host["error"]
+    assert host["historical_cutoffs"][0]["max_observation_gap_s"] == 180
+    assert host["historical_cutoffs"][0]["until"] == UNTIL.isoformat()
+    assert host["query_ok"] is False
+    assert host["jobs"] == []
+    env.clients.worker_manager.getWorker.assert_not_called()
+    assert main(args) == 1
+    text = capsys.readouterr().out
+    assert "historical observation detail unavailable after compaction" in text
+    assert "gathering again cannot restore" in text
 
 
 def test_many_candidates_match_only_shared_names_and_expose_task_mix(env, capsys):

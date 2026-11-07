@@ -10,6 +10,11 @@ live; they do not refresh host observations. Refresh the relevant hosts with
 `fr gather all HOST_OR_FILE` first, using the same database as the report.
 By default, a host observation over one hour old prevents that worker's job
 query entirely. Taskcluster-only gathers do not refresh host configuration.
+For historical `--until` queries, compaction can leave insufficient detail at
+the cutoff even when gathers succeeded regularly. Reports identify this as
+`historical_detail_unavailable` and show the retained span and polling gap.
+Gathering again cannot repair past anchors. See
+[historical evidence limits and recovery](reference/configuration-history.md).
 
 `fleetroll rollout compare-pools` compares a candidate pool with an explicit baseline:
 
