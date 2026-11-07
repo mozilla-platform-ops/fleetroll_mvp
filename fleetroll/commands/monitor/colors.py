@@ -88,7 +88,7 @@ FG_BG_COMBOS = [
 ]
 
 # State-indicator fg/bg sets — combos using these are excluded from categorical palettes
-# to avoid confusion with threshold-colored columns (uptime, last_ok, etc.)
+# to avoid confusion with threshold-colored columns (last_ok, tc_act, etc.)
 STATE_INDICATOR_FG = {"red", "yellow", "green"}
 STATE_INDICATOR_BG = {"black", "white"}
 

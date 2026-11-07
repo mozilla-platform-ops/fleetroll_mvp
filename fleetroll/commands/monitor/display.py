@@ -746,6 +746,7 @@ class MonitorDisplay:
             labels[active_column] = labels[active_column] + sort_indicator
 
         widths = {col: len(labels[col]) for col in all_columns}
+        widths["uptime"] = max(widths["uptime"], 7)
         for host in sorted_hosts:
             short_host = strip_fqdn(host)
             tc_worker_data = self.tc_data.get(short_host)
@@ -761,6 +762,8 @@ class MonitorDisplay:
                 notes_data=self.notes_data,
             )
             for col in all_columns:
+                if col == "uptime":
+                    continue
                 widths[col] = max(widths[col], len(values[col]))
 
         # Add padding for role/sha columns

@@ -15,6 +15,7 @@ from .colors import (
     get_categorical_combos,
 )
 from .data import build_row_values, strip_fqdn
+from .uptime import UPTIME_BLUE_SHADES, UPTIME_COLOR_PAIR_START, uptime_band
 
 if TYPE_CHECKING:
     from .cache import ShaInfoCache
@@ -61,6 +62,7 @@ class CursesColors:
         self.curses_mod = None
         self.color_enabled = False
         self.extended_colors = False
+        self.uptime_extended_colors = False
         self.attrs = CursesAttrs(
             fleetroll_attr=0,
             header_data_attr=0,
@@ -128,6 +130,13 @@ class CursesColors:
                             bg = curses_color_map[bg_name]
                             curses.init_pair(i, fg_code, bg)
                 self.color_enabled = True
+                if (
+                    curses.COLORS >= 256
+                    and (UPTIME_COLOR_PAIR_START + len(UPTIME_BLUE_SHADES) - 1) < curses.COLOR_PAIRS
+                ):
+                    for band, shade in enumerate(UPTIME_BLUE_SHADES):
+                        curses.init_pair(UPTIME_COLOR_PAIR_START + band, shade, -1)
+                    self.uptime_extended_colors = True
                 # Detect 256-color support (for future use)
                 if curses.COLORS >= 256:
                     self.extended_colors = True
@@ -171,8 +180,18 @@ class CursesColors:
         return self.curses_mod.color_pair(6)  # RED
 
     def uptime_attr(self, seconds_value: int | None) -> int:
-        """Color uptime: green < 1h, yellow < 6h, red >= 6h."""
-        return self.threshold_color_attr(seconds_value, (60 * 60, 6 * 60 * 60))
+        """Use blue magnitude shades, with dim/normal/bold cyan as a fallback."""
+        if not self.color_enabled or seconds_value is None:
+            return 0
+        band = uptime_band(seconds_value)
+        if self.uptime_extended_colors:
+            return self.curses_mod.color_pair(UPTIME_COLOR_PAIR_START + band)
+        attr = self.curses_mod.color_pair(8)  # CYAN, independent of warning colors
+        if band == 0:
+            return attr | self.curses_mod.A_DIM
+        if band >= 3:
+            return attr | self.curses_mod.A_BOLD
+        return attr
 
     def last_ok_attr(self, seconds_value: int | None) -> int:
         """Color last_ok age: green < 5m, yellow < 30m, red >= 30m."""

@@ -29,6 +29,10 @@ def _session_env(home_dir: Any) -> dict[str, str]:
 class TestMonitorLayout:
     """Verify header, columns and host rows render correctly."""
 
+    def test_compact_uptime_bar(self, tmux_session: TmuxSession) -> None:
+        """Seeded one-hour uptimes retain their compact label and Unicode bar."""
+        assert tmux_session.wait_for("1h █░░", timeout=3.0), tmux_session.capture()
+
     def test_header_visible(self, tmux_session: TmuxSession) -> None:
         """The top header line is present."""
         screen = tmux_session.capture()

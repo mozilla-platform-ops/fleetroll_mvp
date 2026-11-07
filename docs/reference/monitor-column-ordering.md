@@ -46,3 +46,26 @@ reveals the divergence without hunting across the row.
 5. **Rarely-used / wide columns drop first** — the `drop_order` list in
    `formatting.py` sheds columns when the terminal is narrow, removing the
    least diagnostic ones first (`NOTE`, `VLT_SHA`, `SHA`, `ROLE`, …).
+
+## Compact uptime
+
+The terminal monitor and text table show uptime in seven characters: a
+three-character whole-unit label, a space, and a three-cell magnitude bar.
+For example, `15h █▌░` represents an uptime of at least 15 hours and under
+16 hours. Labels use seconds, minutes, hours, days, weeks (from 100 days),
+then years (from 100 weeks), and saturate at `99y`. Missing uptime shows `-`
+without a bar. Filtering, sorting, JSON, and browser values retain the original
+duration precision.
+
+| Uptime | Bar |
+| --- | --- |
+| Under 1 hour | `▎░░` |
+| 1 hour to under 6 hours | `█░░` |
+| 6 hours to under 1 day | `█▌░` |
+| 1 day to under 7 days | `██░` |
+| 7 days or more | `███` |
+
+These bands are fixed across views. Blue shades get lighter for longer
+uptimes on 256-color terminals; basic terminals use dim, normal, and bold
+cyan. With color disabled, the bar still communicates magnitude. Neither
+the bar nor its color indicates health or confirms that a worker is idle.

@@ -116,7 +116,10 @@ OS        Host operating system (M=macOS/Darwin, L=Linux, W=Windows)
 VLT_SHA   Vault file SHA256 hash (symlink name in parentheses)
 OVR_BCH   Override branch name (SHA in parentheses)
 NOTE      Most recent operator note for the host (count prefix when multiple)
-UPTIME    Host uptime since last boot
+UPTIME    Uptime: three-character whole-unit label + three-cell magnitude bar
+          Blue shades show magnitude, not health (cyan on basic terminals)
+          Bar bands: <1h, <6h, <1d, <7d, >=7d (fixed across views)
+          Labels use s/m/h/d/w/y; '-' means unknown
 PP_LAST   Time since last puppet run (FAIL if failed)
 PP_EXP    Expected puppet SHA (branch HEAD or master HEAD)
 PP_SHA    Actual puppet SHA that was applied

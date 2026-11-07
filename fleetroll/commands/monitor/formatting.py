@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .data import build_row_values, strip_fqdn
+from .data import build_row_values, parse_duration, strip_fqdn
+from .uptime import format_uptime
 
 if TYPE_CHECKING:
     from .cache import ShaInfoCache
@@ -23,6 +24,8 @@ def clip_cell(value: str, width: int) -> str:
 
 def render_cell_text(col_name: str, value: str, width: int, *, include_marker: bool = True) -> str:
     """Render a padded cell for a column."""
+    if col_name == "uptime" and include_marker:
+        return clip_cell(format_uptime(parse_duration(value)), width)
     if include_marker and col_name == "role" and width >= 2:
         return clip_cell(f"# {value}", width)
     return clip_cell(value, width)
@@ -96,7 +99,7 @@ def compute_columns_and_widths(
     }
     caps = {
         "host": 80,
-        "uptime": 16,
+        "uptime": 7,
         "role": 40,
         "os": 1,
         "sha": 30,
@@ -116,6 +119,7 @@ def compute_columns_and_widths(
         caps["host"] = min(caps["host"], max_width)
         caps["role"] = min(80, max_width)
     widths = {col: len(labels[col]) for col in columns}
+    widths["uptime"] = 7
     tc_data = tc_data or {}
     for host in hosts:
         short_host = strip_fqdn(host)
@@ -131,6 +135,8 @@ def compute_columns_and_widths(
             notes_data=notes_data,
         )
         for col in columns:
+            if col == "uptime":
+                continue
             widths[col] = max(widths[col], len(values[col]))
     if cap_widths:
         for col in columns:
@@ -203,7 +209,10 @@ def format_monitor_row(
         windows_pools=windows_pools,
         notes_data=notes_data,
     )
-    parts = [clip_cell(values[col], widths[col]) for col in columns]
+    parts = [
+        render_cell_text(col, values[col], widths[col], include_marker=(col == "uptime"))
+        for col in columns
+    ]
     return col_sep.join(parts)
 
 

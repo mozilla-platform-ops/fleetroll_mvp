@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .curses_colors import CursesColors
 
-from .data import age_seconds, build_row_values, resolve_last_ok_ts, strip_fqdn
+from .data import age_seconds, build_row_values, parse_duration, resolve_last_ok_ts, strip_fqdn
 from .formatting import render_row_cells
 
 
@@ -91,7 +91,6 @@ class RowRenderer:
             - ts_value: Timestamp for coloring DATA column
             - tc_ts_value: TC timestamp for coloring
             - tc_worker_data: TC worker data dict
-            - uptime_s: Uptime in seconds for coloring
             - tc_act_s: TC last active in seconds for coloring
             - tc_task_state: TaskCluster task state for coloring TC_T_DUR
             - pp_age_s: Puppet age in seconds for coloring
@@ -112,12 +111,6 @@ class RowRenderer:
         )
         ts_value = resolve_last_ok_ts(latest.get(host), last_ok=latest_ok.get(host))
         tc_ts_value = tc_worker_data.get("ts") if tc_worker_data else None
-        uptime_value = values.get("uptime")
-        uptime_s = None
-        if uptime_value and uptime_value not in ("-", "?"):
-            observed = (latest_ok.get(host) or latest.get(host) or {}).get("observed", {})
-            uptime_s = observed.get("uptime_s")
-
         # Calculate TC_ACT in seconds for coloring (relative to now, so it ages continuously)
         tc_act_s = None
         if tc_worker_data:
@@ -158,7 +151,6 @@ class RowRenderer:
             "ts_value": ts_value,
             "tc_ts_value": tc_ts_value,
             "tc_worker_data": tc_worker_data,
-            "uptime_s": uptime_s,
             "tc_act_s": tc_act_s,
             "tc_task_state": tc_task_state,
             "pp_age_s": pp_age_s,
@@ -186,7 +178,6 @@ class RowRenderer:
         values = render_data["values"]
         ts_value = render_data["ts_value"]
         tc_ts_value = render_data["tc_ts_value"]
-        uptime_s = render_data["uptime_s"]
         tc_act_s = render_data["tc_act_s"]
         tc_task_state = render_data["tc_task_state"]
         pp_age_s = render_data["pp_age_s"]
@@ -263,7 +254,7 @@ class RowRenderer:
                 else:
                     attr = 0
             elif col_name == "uptime":
-                attr = self.colors.uptime_attr(uptime_s)
+                attr = self.colors.uptime_attr(parse_duration(values.get("uptime", "-")))
             else:
                 attr = 0
             if col_name == "role" and cell.startswith("# "):
