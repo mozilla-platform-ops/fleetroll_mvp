@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .data import build_row_values, parse_duration, strip_fqdn
+from .data import build_row_values, compact_duration, parse_duration, strip_fqdn
 from .uptime import format_uptime
 
 if TYPE_CHECKING:
@@ -22,10 +22,23 @@ def clip_cell(value: str, width: int) -> str:
     return f"{value[: width - 3]}..."
 
 
+def format_data_cell(value: str) -> str:
+    """Compact audit/TC ages for display while preserving missing source positions."""
+    parts = [
+        part if part in ("-", "?") else compact_duration(parse_duration(part), min_unit="m")
+        for part in value.split("/")
+    ]
+    if len(parts) == 2 and parts[0] == parts[1]:
+        return parts[0]
+    return "/".join(parts)
+
+
 def render_cell_text(col_name: str, value: str, width: int, *, include_marker: bool = True) -> str:
     """Render a padded cell for a column."""
     if col_name == "uptime" and include_marker:
         return clip_cell(format_uptime(parse_duration(value)), width)
+    if col_name == "data" and include_marker:
+        return clip_cell(format_data_cell(value), width)
     if include_marker and col_name == "role" and width >= 2:
         return clip_cell(f"# {value}", width)
     return clip_cell(value, width)
@@ -113,7 +126,7 @@ def compute_columns_and_widths(
         "pp_sha": 7,
         "pp_match": 8,
         "healthy": 7,
-        "data": 12,
+        "data": 7,
     }
     if cap_widths and max_width > 0:
         caps["host"] = min(caps["host"], max_width)
@@ -137,7 +150,8 @@ def compute_columns_and_widths(
         for col in columns:
             if col == "uptime":
                 continue
-            widths[col] = max(widths[col], len(values[col]))
+            value = format_data_cell(values[col]) if col == "data" else values[col]
+            widths[col] = max(widths[col], len(value))
     if cap_widths:
         for col in columns:
             widths[col] = min(widths[col], caps[col])
@@ -210,7 +224,7 @@ def format_monitor_row(
         notes_data=notes_data,
     )
     parts = [
-        render_cell_text(col, values[col], widths[col], include_marker=(col == "uptime"))
+        render_cell_text(col, values[col], widths[col], include_marker=(col in ("uptime", "data")))
         for col in columns
     ]
     return col_sep.join(parts)

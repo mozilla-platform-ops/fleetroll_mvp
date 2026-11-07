@@ -214,6 +214,27 @@ def humanize_duration(seconds_value: int | None, *, min_unit: str = "s") -> str:
     return f"{days}d {hours:02d}h"
 
 
+def compact_duration(seconds_value: int | None, *, min_unit: str = "s") -> str:
+    """Return a whole-unit label of at most three characters (saturating at 99y)."""
+    if seconds_value is None:
+        return "-"
+    seconds_value = max(seconds_value, 0)
+    if min_unit == "m" and seconds_value < 60:
+        return "<1m"
+    for unit, size, limit in (
+        ("s", 1, 60),
+        ("m", 60, 60),
+        ("h", 3600, 24),
+        ("d", 86400, 100),
+        ("w", 7 * 86400, 100),
+        ("y", 365 * 86400, None),
+    ):
+        count = seconds_value // size
+        if limit is None or count < limit:
+            return f"{min(count, 99)}{unit}"
+    raise AssertionError("year unit always matches")
+
+
 _DURATION_RE = re.compile(r"(\d+)\s*([smhd])", re.IGNORECASE)
 
 

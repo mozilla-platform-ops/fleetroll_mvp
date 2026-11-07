@@ -69,3 +69,22 @@ These bands are fixed across views. Blue shades get lighter for longer
 uptimes on 256-color terminals; basic terminals use dim, normal, and bold
 cyan. With color disabled, the bar still communicates magnitude. Neither
 the bar nor its color indicates health or confirms that a worker is idle.
+
+## Compact DATA ages
+
+The terminal monitor and text table show compact whole-unit ages in
+host-audit/Taskcluster order. Matching displayed ages show once: `5m/5m`
+becomes `5m`, and `1h 02m/1h 58m` becomes `1h`. Ages under a minute use `<1m`.
+Different displayed ages remain separate, such as `2m/45m`.
+
+Each source uses its own freshness color: green under 5 minutes, yellow from
+5 minutes to under 30 minutes, and red from 30 minutes onward. A shared age
+uses the older source's color. The slash stays neutral, and missing or unknown
+sources have no freshness color.
+
+Missing source positions remain explicit (`5m/-`, `-/5m`); both missing
+becomes `-`. An unobserved host keeps its `?` marker, such as `?/5m` or `?/-`.
+Widths follow the compact values, so a view with matching ages can use just
+four columns under the DATA header. Filtering, sorting, JSON, and browser
+values keep the original age strings; DATA duration comparisons continue to
+use the larger available source age.

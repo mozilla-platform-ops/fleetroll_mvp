@@ -33,6 +33,15 @@ class TestMonitorLayout:
         """Seeded one-hour uptimes retain their compact label and Unicode bar."""
         assert tmux_session.wait_for("1h █░░", timeout=3.0), tmux_session.capture()
 
+    def test_missing_data_ages_collapse(self, tmux_session: TmuxSession) -> None:
+        screen = tmux_session.capture().splitlines()
+        header = next(line for line in screen if "UPTIME" in line and "DATA" in line)
+        start = header.index("DATA")
+        end = header.index(" | ", start)
+        rows = [line for line in screen if line.startswith("t-linux64-ms-")]
+        assert rows
+        assert all(line[start:end].strip() == "-" for line in rows)
+
     def test_header_visible(self, tmux_session: TmuxSession) -> None:
         """The top header line is present."""
         screen = tmux_session.capture()

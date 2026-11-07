@@ -1,5 +1,7 @@
 """Compact uptime presentation; bands show magnitude, not host health."""
 
+from .data import compact_duration
+
 UPTIME_THRESHOLDS = (3600, 6 * 3600, 86400, 7 * 86400)
 UPTIME_BARS = ("▎░░", "█░░", "█▌░", "██░", "███")
 UPTIME_COLOR_PAIR_START = 100
@@ -21,16 +23,5 @@ def format_uptime(seconds_value: int | None) -> str:
     if seconds_value is None:
         return "  -    "
     seconds_value = max(seconds_value, 0)
-    for unit, size, limit in (
-        ("s", 1, 60),
-        ("m", 60, 60),
-        ("h", 3600, 24),
-        ("d", 86400, 100),
-        ("w", 7 * 86400, 100),
-        ("y", 365 * 86400, None),
-    ):
-        count = seconds_value // size
-        if limit is None or count < limit:
-            label = f"{min(count, 99)}{unit}"
-            return f"{label:>3} {UPTIME_BARS[uptime_band(seconds_value)]}"
-    raise AssertionError("year unit always matches")
+    label = compact_duration(seconds_value)
+    return f"{label:>3} {UPTIME_BARS[uptime_band(seconds_value)]}"

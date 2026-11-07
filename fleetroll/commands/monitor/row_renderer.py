@@ -194,20 +194,26 @@ class RowRenderer:
                 self.safe_addstr(row, col, " | ", 0)
                 col += 3
             if col_name == "data":
-                # Color DATA based on the older of the two ages
-                audit_age_s = age_seconds(ts_value) if ts_value else None
-                tc_age_s = age_seconds(tc_ts_value) if tc_ts_value else None
-                # Use the older (larger) age for coloring
-                if audit_age_s is not None and tc_age_s is not None:
-                    max_age_s = max(audit_age_s, tc_age_s)
-                elif audit_age_s is not None:
-                    max_age_s = audit_age_s
-                elif tc_age_s is not None:
-                    max_age_s = tc_age_s
+                raw_parts = values["data"].split("/")
+                audit_age_s = (
+                    age_seconds(ts_value) if parse_duration(raw_parts[0]) is not None else None
+                )
+                tc_age_s = (
+                    age_seconds(tc_ts_value)
+                    if len(raw_parts) > 1 and parse_duration(raw_parts[1]) is not None
+                    else None
+                )
+                if "/" in cell:
+                    audit_text, tc_text = cell.split("/", 1)
+                    self.safe_addstr(row, col, audit_text, self.colors.last_ok_attr(audit_age_s))
+                    self.safe_addstr(row, col + len(audit_text), "/", 0)
+                    self.safe_addstr(
+                        row, col + len(audit_text) + 1, tc_text, self.colors.last_ok_attr(tc_age_s)
+                    )
                 else:
-                    max_age_s = None
-                attr = self.colors.last_ok_attr(max_age_s)
-                self.safe_addstr(row, col, cell, attr)
+                    ages = [age for age in (audit_age_s, tc_age_s) if age is not None]
+                    attr = self.colors.last_ok_attr(max(ages) if ages else None)
+                    self.safe_addstr(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "tc_act":

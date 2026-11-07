@@ -132,6 +132,9 @@ TC_T_DUR  TC task duration (or time since start if in progress)
           Color: green=completed, yellow=exception, red=failed
 TC_QUAR   TC quarantine status (Y if quarantined)
 DATA      Data freshness: audit_age/tc_age
+          Matching displayed ages show once; '-' = missing, '?' = unknown
+          Each source: green <5m, yellow <30m, red >=30m
+          A shared age uses the older source's color
 
 HEALTHY   Overall host health status
           Y = PP_MATCH and TC worker active (< 1 hour)

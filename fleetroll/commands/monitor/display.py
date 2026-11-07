@@ -38,6 +38,7 @@ from .filters_popup import (
     filter_rows,
     find_active_row_index,
 )
+from .formatting import format_data_cell
 from .header_renderer import HeaderInfo, HeaderRenderer
 from .help_popup import draw_help_popup
 from .named_filters import load_named_filters
@@ -764,7 +765,8 @@ class MonitorDisplay:
             for col in all_columns:
                 if col == "uptime":
                     continue
-                widths[col] = max(widths[col], len(values[col]))
+                value = format_data_cell(values[col]) if col == "data" else values[col]
+                widths[col] = max(widths[col], len(value))
 
         # Add padding for role/sha columns
         for col in ("role", "sha", "vlt_sha"):
