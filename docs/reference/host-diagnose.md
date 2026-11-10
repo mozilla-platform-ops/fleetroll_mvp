@@ -1,4 +1,4 @@
-# Live host diagnosis JSON (version 1)
+# Live host diagnosis JSON (version 2)
 
 `uv run fleetroll host diagnose HOST --json` runs one live Linux
 `sudo -n gwhc --json` check over SSH. It neither changes the host nor writes
@@ -25,31 +25,57 @@ SSH nonzero exits invalidate partial output; SSH timeout is distinguished from
 other transport failures. Invalid output after an exit 1 (for example, denied
 sudo with no report) is unavailable diagnosis, not evidence of an unhealthy worker.
 
-Current gwhc reports have no schema version. Fleetroll validates their existing
-shape for diagnostics: boolean `ok`, nonempty host and state, timezone-aware
+Fleetroll supports upstream gwhc integer `schema_version: 1` and legacy reports
+with no version. Both require boolean `ok`, nonempty host and state, timezone-aware
 timestamp, and a nonempty checks list. Every check must have a nonempty name,
 `pass`/`warn`/`fail` status, string detail, and object data. An unhealthy diagnosis
 can include a check that failed to execute; consumers must examine its evidence
 rather than interpreting aggregate health as a specific diagnosis.
 
-No versioned upstream schema is supported yet. Any explicit `schema_version`,
-including null or an unexpected type, is rejected as unsupported and its raw
-report retained. Upstream versioning and agreed structured zombie semantics are
-tracked in `mvp-6xh4`. Do not assume upstream version 1 is supported just because
-the Fleetroll envelope is version 1.
+Other explicit versions, including null, strings, booleans, and floating-point
+`1.0`, are unsupported; Fleetroll retains their raw report. Version recognition
+sets `contract_status: supported`; required field validation must also succeed
+before `ok` becomes true. The upstream and Fleetroll envelope versions are
+independent of each other and of the software release.
 
-**The normalized `zombie.status` is currently always `unknown`.** Explicit legacy
-evidence, such as `generic_worker_process.data.zombie_pids` and process state
-records, is preserved in full for inspection. It does not qualify for automated
-zombie recovery. `DEGRADED`, detail text, empty/missing evidence, and unknown
-schema versions never imply either a zombie or its absence. Normalizing confirmed
-zombies requires a separately agreed upstream contract and consumer tests.
+## Structured zombie evidence
+
+The upstream contract is documented in
+[ronin_puppet gwhc](https://github.com/mozilla-platform-ops/ronin_puppet/blob/2d576c2bf6676e05eddf70ed5e0b548a56951710/modules/linux_generic_worker/tests/gwhc/README.md).
+For supported upstream v1 reports, Fleetroll normalizes exactly one
+`generic_worker_process` check using its `data.zombie_pids` and `data.processes`.
+PID arrays must contain distinct positive integers. Each process requires a
+distinct positive integer `pid`, nonnegative integer `ppid`, and a recognized
+single-character Linux process state. Booleans are not integers for these fields.
+The zombie PID set must exactly match the process records with state `Z`.
+Optional `unverified_pids` must be a valid PID array disjoint from verified records.
+
+| `zombie.status` | Required evidence | `zombie.reason` |
+| --- | --- | --- |
+| `present` | Nonempty, consistent zombie evidence and a failing process check. Other unverified PIDs do not negate a confirmed finding. | `confirmed_zombie_processes` |
+| `absent` | Empty zombie array, at least one verified process, no unverified PIDs or exited (`X`/`x`) processes, and a passing or warning process check. | `verified_process_inspection` |
+| `unknown` | Missing process check or required evidence. | `missing_zombie_evidence` |
+| `unknown` | Malformed, duplicate, or contradictory evidence. | `invalid_zombie_evidence` |
+| `unknown` | Failed inspection, unverified PIDs, no verified processes, or exited processes without a confirmed zombie. | `unverified_process_inspection` |
+
+Incomplete zombie evidence does not invalidate an otherwise valid general
+diagnosis: `ok` can be true while `zombie.status` is unknown. A different failed
+check can coexist with verified zombie absence. `DEGRADED`, detail text, and
+aggregate health never establish zombie presence or absence. Legacy reports always
+produce `unknown` with reason `unversioned_gwhc_schema`; unsupported versions use
+`unsupported_gwhc_schema`; failed collection/validation uses `diagnosis_unavailable`.
+
+Zombie findings describe process evidence, not task activity or recovery eligibility.
+`HELD` and operator-hold check data remain preserved independently of health and
+zombie status. Recovery consumers must honor holds even with confirmed zombies.
+Automatic reboot/quarantine policy belongs to `mvp-fw8r`; Medic integration remains
+separate. This command never authorizes or performs recovery.
 
 ## Envelope
 
 | Field | Meaning |
 | --- | --- |
-| `schema_version` | Fleetroll diagnosis envelope version, currently integer 1. |
+| `schema_version` | Fleetroll diagnosis envelope version, currently integer 2. |
 | `host` | Requested SSH target, expanded to an FQDN; may include a user prefix. |
 | `ts` | Local UTC time when Fleetroll emitted the result. |
 | `checked_at` | Remote UTC time immediately before collection; null if unavailable. |
@@ -60,14 +86,14 @@ zombies requires a separately agreed upstream contract and consumer tests.
 | `ssh_exit_code` | SSH return code, or null on a local execution exception. |
 | `gwhc_exit_code` | Upstream return code, or null if unavailable. |
 | `gwhc_schema_version` | Original upstream schema value, or null when absent. |
-| `contract_status` | `legacy`, `unsupported`, or `unknown`. |
+| `contract_status` | `supported`, `legacy`, `unsupported`, or `unknown`. Version recognition alone does not validate the report. |
 | `health` | `healthy`, `unhealthy`, or `unknown`. |
 | `gwhc_state` | Validated upstream state string, or null. Never an action gate. |
 | `gwhc_ts` | Validated upstream observation time, or null. |
 | `reported_host` | Hostname reported by gwhc, or null. Distinct from requested target. |
 | `checks` | All validated check objects, including nested data and additive fields; otherwise empty. |
 | `gwhc` | Complete parsed upstream object, including invalid/unsupported reports, or null. |
-| `zombie` | Object with `status: unknown` and a machine-readable `reason`. |
+| `zombie` | Object with `status: present`, `absent`, or `unknown` and a machine-readable `reason`; see evidence rules above. |
 | `stderr` | SSH/check diagnostic stderr when execution returned normally. |
 | `error` | Optional local execution exception description. |
 
@@ -87,7 +113,21 @@ Consumers must explicitly accept envelope versions they implement, tolerate
 additive fields, and retain unknown values. This is a snapshot, not a reservation,
 freshness guarantee, recovery authorization, or proof of recovery.
 
-## Migration from idle diagnostics
+## Migration
+
+Envelope v1 rejected all explicit upstream versions and always emitted unknown
+zombie status. Envelope v2 accepts upstream v1, adds `contract_status: supported`,
+and introduces normalized `present`/`absent` statuses. Consumers must explicitly
+accept envelope v2 and handle all three zombie statuses; older consumers should
+reject it until upgraded. Existing field names, collection/health separation,
+raw evidence preservation, and command exit semantics remain the same. Legacy
+upstream reports still work for diagnosis with unknown zombie status.
+
+For example, a completed v2 diagnosis of a zombie worker has `ok: true`,
+`collection_status: completed`, `health: unhealthy`, `gwhc_exit_code: 1`,
+`gwhc_schema_version: 1`, `contract_status: supported`, and
+`zombie: {"status": "present", "reason": "confirmed_zombie_processes"}`.
+The Fleetroll command exits 0 because diagnosis completed.
 
 Use `host diagnose --json` to inspect unhealthy gwhc findings. Unlike `host idle`,
 it preserves valid exit 1 reports and every structured check rather than returning

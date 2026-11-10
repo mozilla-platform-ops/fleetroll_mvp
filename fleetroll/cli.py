@@ -857,7 +857,7 @@ def host_diagnose(
     """Diagnose one Linux host using live gwhc without changing the host.
 
     Completed healthy or unhealthy diagnoses exit 0. Failed or unsupported
-    checks exit 1. Legacy evidence is diagnostic only; zombie remains unknown.
+    checks exit 1. Diagnosis v2 supports gwhc v1 zombie evidence; legacy stays unknown.
     """
     cmd_host_diagnose(
         HostDiagnoseArgs(

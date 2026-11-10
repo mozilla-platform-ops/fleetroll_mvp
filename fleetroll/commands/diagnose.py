@@ -26,8 +26,8 @@ def _timestamp_valid(value: Any) -> bool:
         return False
 
 
-def _validate_legacy_health(health: dict[str, Any], *, exit_code: int) -> str | None:
-    """Recognize the existing unversioned report for diagnostics only."""
+def _validate_health(health: dict[str, Any], *, exit_code: int) -> str | None:
+    """Validate common health fields and independent upstream exit semantics."""
     checks = health.get("checks")
     if (
         type(health.get("ok")) is not bool
@@ -56,6 +56,76 @@ def _validate_legacy_health(health: dict[str, Any], *, exit_code: int) -> str | 
     return None
 
 
+def _pid_list_valid(value: Any) -> bool:
+    return (
+        isinstance(value, list)
+        and all(type(pid) is int and pid > 0 for pid in value)
+        and len(value) == len(set(value))
+    )
+
+
+def _validated_process_states(data: dict[str, Any]) -> dict[int, str] | None:
+    """Return process states only when PID lists and process records agree."""
+    zombies = data["zombie_pids"]
+    processes = data["processes"]
+    unverified = data.get("unverified_pids", [])
+    if (
+        not _pid_list_valid(zombies)
+        or not _pid_list_valid(unverified)
+        or not isinstance(processes, list)
+    ):
+        return None
+    states = {}
+    for process in processes:
+        if (
+            not isinstance(process, dict)
+            or type(process.get("pid")) is not int
+            or process["pid"] <= 0
+            or type(process.get("ppid")) is not int
+            or process["ppid"] < 0
+            or not isinstance(process.get("state"), str)
+            or process["state"] not in ("R", "S", "D", "Z", "T", "t", "X", "x", "K", "W", "P", "I")
+            or process["pid"] in states
+        ):
+            return None
+        states[process["pid"]] = process["state"]
+    if set(zombies) != {pid for pid, state in states.items() if state == "Z"}:
+        return None
+    if set(unverified) & states.keys():
+        return None
+    return states
+
+
+def _normalize_v1_zombie(checks: list[dict[str, Any]]) -> dict[str, str]:
+    """Interpret explicit process evidence; summary state never supplies it."""
+    unknown = {"status": "unknown", "reason": "invalid_zombie_evidence"}
+    process_checks = [check for check in checks if check["name"] == "generic_worker_process"]
+    if not process_checks:
+        return {"status": "unknown", "reason": "missing_zombie_evidence"}
+    if len(process_checks) != 1:
+        return unknown
+    check = process_checks[0]
+    data = check["data"]
+    if "zombie_pids" not in data or "processes" not in data:
+        return {"status": "unknown", "reason": "missing_zombie_evidence"}
+    states = _validated_process_states(data)
+    if states is None or (data["zombie_pids"] and check["status"] != "fail"):
+        return unknown
+    if data["zombie_pids"]:
+        return {"status": "present", "reason": "confirmed_zombie_processes"}
+    # A failed process check or unreadable process cannot establish absence.
+    unverified = (
+        data.get("unverified_pids")
+        or check["status"] == "fail"
+        or not states
+        or any(state in ("X", "x") for state in states.values())
+    )
+    return {
+        "status": "unknown" if unverified else "absent",
+        "reason": "unverified_process_inspection" if unverified else "verified_process_inspection",
+    }
+
+
 def _collection_error(markers: dict[str, str], *, ssh_rc: int) -> tuple[str | None, int | None]:
     if ssh_rc != 0:
         return ("ssh_timeout" if ssh_rc == SSH_TIMEOUT_EXIT_CODE else "ssh_failed"), None
@@ -80,7 +150,7 @@ def parse_diagnose_output(stdout: str, *, ssh_rc: int) -> dict[str, Any]:
             key, value = line[len(_PREFIX) :].split("=", 1)
             markers[key] = value
     result: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "ok": False,
         "collection_status": "failed",
         "reason": None,
@@ -116,12 +186,13 @@ def parse_diagnose_output(stdout: str, *, ssh_rc: int) -> dict[str, Any]:
     if exit_code not in (0, 1):
         result["reason"] = "gwhc_execution_failed"
         return result
-    if "schema_version" in health:
+    versioned = "schema_version" in health
+    if versioned and (type(health["schema_version"]) is not int or health["schema_version"] != 1):
         result.update(contract_status="unsupported", reason="unsupported_gwhc_schema")
         result["zombie"]["reason"] = "unsupported_gwhc_schema"
         return result
-    result["contract_status"] = "legacy"
-    error = _validate_legacy_health(health, exit_code=exit_code)
+    result["contract_status"] = "supported" if versioned else "legacy"
+    error = _validate_health(health, exit_code=exit_code)
     if error:
         result["reason"] = error
         return result
@@ -134,7 +205,11 @@ def parse_diagnose_output(stdout: str, *, ssh_rc: int) -> dict[str, Any]:
         gwhc_ts=health["ts"],
         reported_host=health["host"],
         checks=health["checks"],
-        zombie={"status": "unknown", "reason": "unversioned_gwhc_schema"},
+        zombie=(
+            _normalize_v1_zombie(health["checks"])
+            if versioned
+            else {"status": "unknown", "reason": "unversioned_gwhc_schema"}
+        ),
     )
     return result
 
@@ -165,7 +240,7 @@ def cmd_host_diagnose(args: HostDiagnoseArgs) -> None:
         print(f"Checked at: {result['checked_at'] or result['ts']}")
         print(f"Collection: {result['collection_status']}; health: {result['health']}")
         print(f"Reason: {result['reason']}; gwhc state: {result['gwhc_state']}")
-        print(f"Zombie: unknown ({result['zombie']['reason']})")
+        print(f"Zombie: {result['zombie']['status']} ({result['zombie']['reason']})")
         print("Snapshot only; diagnostic evidence does not authorize recovery.")
     if not result["ok"]:
         raise CommandFailureError

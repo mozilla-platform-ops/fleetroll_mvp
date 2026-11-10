@@ -624,8 +624,9 @@ uv run fleetroll host diagnose t-linux64-ms-017 --json
 ```
 
 The versioned Fleetroll envelope keeps health separate from collection status.
-Current unversioned gwhc reports are diagnostic only: normalized zombie status
-remains unknown pending the upstream contract. See the
+Diagnosis envelope v2 supports upstream gwhc schema v1 and normalizes explicit
+zombie process evidence as present, absent, or unknown. Legacy unversioned reports
+remain diagnostic with unknown zombie status. See the
 [diagnosis JSON contract](docs/reference/host-diagnose.md) for compatibility,
 fields, failures, and migration from idle diagnostics. Medic integration is separate.
 
