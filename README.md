@@ -488,10 +488,12 @@ uv run fleetroll host monitor configs/host-lists/linux/all.list
 # keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
 ```
 
-Left/Right (or `h`/`l`) scroll through columns, keeping HOST visible. At the
-NOTE column, continue Right to read long notes without hiding more columns.
-Left returns through the note before scrolling back through columns. The header
-shows the note text offset.
+Left/Right (or `h`/`l`) jump between columns, keeping HOST and its separator
+frozen. Columns wider than the viewport use overlapping sections so their full
+content is readable; this works the same for ROLE, NOTE, and every other column.
+Partial columns remain visible at the screen edges. The header shows the
+visible column range. Column widths reflect all filtered hosts, including hosts
+on other pages.
 
 ### Web Interface
 

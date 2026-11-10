@@ -1,7 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
-import pytest
 from fleetroll.commands.monitor import (
     age_seconds,
     build_row_values,
@@ -15,7 +14,6 @@ from fleetroll.commands.monitor import (
     render_monitor_lines,
     render_row_cells,
 )
-from fleetroll.commands.monitor.display import MonitorDisplay
 from fleetroll.commands.monitor.header_renderer import (
     HeaderInfo,
     HeaderRenderer,
@@ -1216,35 +1214,6 @@ def test_compute_visible_columns_zero_usable_width() -> None:
         all_cols, widths=widths, usable_width=0, col_offset=0
     )
     assert columns == ["host"]
-
-
-@pytest.mark.parametrize("note_space", [3, 4, 12, 40, 60])
-@pytest.mark.parametrize("col_offset", [0, 1])
-def test_tui_notes_use_remaining_width(note_space: int, col_offset: int) -> None:
-    """Notes truncate at the screen edge while preceding columns stay intact."""
-    display = MagicMock(col_offset=col_offset, note_offset=0)
-    widths = {"host": 10, "healthy": 7, "note": 40}
-    preceding_width = 23 if col_offset == 0 else 13
-    usable_width = preceding_width + note_space
-    columns, indicator = MonitorDisplay._compute_visible_columns(  # noqa: SLF001
-        display, ["host", "healthy", "note"], widths=widths, usable_width=usable_width
-    )
-    assert widths["host"] == 10
-    assert widths["healthy"] == 7
-    if note_space < 4:
-        assert "note" not in columns
-        assert "▶" in indicator
-        return
-
-    assert "note" in columns
-    assert widths["note"] == min(note_space, 40)
-    values = {"host": "test-host", "healthy": "Y", "note": "investigating " + "x" * 26}
-    cells = render_row_cells(values, columns=columns, widths=widths)
-    assert len(" | ".join(cells)) <= usable_width
-    if note_space < 40:
-        assert cells[-1].endswith("...")
-    else:
-        assert cells[-1] == values["note"]
 
 
 # ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ monitor/
 ├── data.py           # Data layer (loading, filtering, aggregation)
 ├── formatting.py     # Text rendering (column layout, cell formatting)
 ├── display.py        # UI layer (curses display with colors)
+├── viewport.py       # Shared horizontal clipping with a frozen hostname
 └── entry.py          # Entry point (cmd_host_monitor orchestration)
 ```
 

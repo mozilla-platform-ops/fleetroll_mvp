@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .curses_colors import CursesColors
+    from .viewport import HorizontalViewport
 
 from .formatting import clip_cell, render_row_cells
 from .types import os_filter_label
@@ -93,6 +94,7 @@ class HeaderRenderer:
         columns: list[str],
         widths: dict[str, int],
         header_row: int = 1,
+        viewport: HorizontalViewport | None = None,
     ) -> None:
         """Render the column header labels with separators.
 
@@ -103,6 +105,7 @@ class HeaderRenderer:
             header_row: Row number for the column header (default 1)
         """
         # Colored asterisk attribute (yellow to stand out from magenta headers)
+        draw = viewport.wrap(self.safe_addstr) if viewport is not None else self.safe_addstr
         asterisk_attr = self.colors.curses_mod.color_pair(2) if self.colors.color_enabled else 0
 
         header_parts = render_row_cells(
@@ -114,7 +117,7 @@ class HeaderRenderer:
             col = 0
             for idx, part in enumerate(parts):
                 if idx:
-                    self.safe_addstr(header_row, col, " | ", 0)
+                    draw(header_row, col, " | ", 0)
                     col += 3
                 # Check if this part contains the sort indicator (strip padding first)
                 found = _find_sort_indicator(part)
@@ -123,15 +126,15 @@ class HeaderRenderer:
                     base_part = part[:ind_pos]
                     indicator = part[ind_pos : ind_pos + ind_len]
                     padding = part[ind_pos + ind_len :]
-                    self.safe_addstr(header_row, col, base_part, self.colors.attrs.column_attr)
+                    draw(header_row, col, base_part, self.colors.attrs.column_attr)
                     col += len(base_part)
-                    self.safe_addstr(header_row, col, indicator, asterisk_attr)
+                    draw(header_row, col, indicator, asterisk_attr)
                     col += ind_len
                     if padding:
-                        self.safe_addstr(header_row, col, padding, self.colors.attrs.column_attr)
+                        draw(header_row, col, padding, self.colors.attrs.column_attr)
                         col += len(padding)
                 else:
-                    self.safe_addstr(header_row, col, part, self.colors.attrs.column_attr)
+                    draw(header_row, col, part, self.colors.attrs.column_attr)
                     col += len(part)
         # Single column case
         elif _find_sort_indicator(header_line):
@@ -139,14 +142,12 @@ class HeaderRenderer:
             base_line = header_line[:ind_pos]
             indicator = header_line[ind_pos : ind_pos + ind_len]
             padding = header_line[ind_pos + ind_len :]
-            self.safe_addstr(header_row, 0, base_line, self.colors.attrs.column_attr)
-            self.safe_addstr(header_row, len(base_line), indicator, asterisk_attr)
+            draw(header_row, 0, base_line, self.colors.attrs.column_attr)
+            draw(header_row, len(base_line), indicator, asterisk_attr)
             if padding:
-                self.safe_addstr(
-                    header_row, len(base_line) + ind_len, padding, self.colors.attrs.column_attr
-                )
+                draw(header_row, len(base_line) + ind_len, padding, self.colors.attrs.column_attr)
         else:
-            self.safe_addstr(header_row, 0, header_line, self.colors.attrs.column_attr)
+            draw(header_row, 0, header_line, self.colors.attrs.column_attr)
 
     def render_header_line(
         self,

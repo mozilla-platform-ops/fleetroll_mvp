@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .curses_colors import CursesColors
+    from .viewport import HorizontalViewport
 
 from .data import age_seconds, build_row_values, parse_duration, resolve_last_ok_ts, strip_fqdn
 from .formatting import override_cell_parts, render_row_cells, vault_cell_parts
@@ -159,7 +160,7 @@ class RowRenderer:
         columns: list[str],
         widths: dict[str, int],
         color_maps: dict[str, dict[str, int]],
-        note_offset: int = 0,
+        viewport: HorizontalViewport | None = None,
     ) -> None:
         """Draw a single host row with appropriate coloring.
 
@@ -171,8 +172,7 @@ class RowRenderer:
             color_maps: Categorical color mappings (sha, vlt_sha, role)
         """
         values = render_data["values"]
-        if note_offset and values.get("note", "-") != "-":
-            values = {**values, "note": values["note"][note_offset:]}
+        draw = viewport.wrap(self.safe_addstr) if viewport is not None else self.safe_addstr
         ts_value = render_data["ts_value"]
         tc_ts_value = render_data["tc_ts_value"]
         tc_act_s = render_data["tc_act_s"]
@@ -194,7 +194,7 @@ class RowRenderer:
         col = 0
         for col_name, cell in zip(columns, row_cells):
             if col_name != columns[0]:
-                self.safe_addstr(row, col, " | ", 0)
+                draw(row, col, " | ", 0)
                 col += 3
             if col_name == "data":
                 raw_parts = values["data"].split("/")
@@ -208,47 +208,47 @@ class RowRenderer:
                 )
                 if "/" in cell:
                     audit_text, tc_text = cell.split("/", 1)
-                    self.safe_addstr(row, col, audit_text, self.colors.last_ok_attr(audit_age_s))
-                    self.safe_addstr(row, col + len(audit_text), "/", 0)
-                    self.safe_addstr(
+                    draw(row, col, audit_text, self.colors.last_ok_attr(audit_age_s))
+                    draw(row, col + len(audit_text), "/", 0)
+                    draw(
                         row, col + len(audit_text) + 1, tc_text, self.colors.last_ok_attr(tc_age_s)
                     )
                 else:
                     ages = [age for age in (audit_age_s, tc_age_s) if age is not None]
                     attr = self.colors.last_ok_attr(max(ages) if ages else None)
-                    self.safe_addstr(row, col, cell, attr)
+                    draw(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "tc_act":
                 # Apply color based on TC last active time
                 attr = self.colors.tc_act_attr(tc_act_s)
-                self.safe_addstr(row, col, cell, attr)
+                draw(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "pp_last":
                 attr = self.colors.pp_last_attr(pp_age_s, failed=pp_failed)
-                self.safe_addstr(row, col, cell, attr)
+                draw(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "pp_match":
                 attr = self.colors.pp_match_attr(values.get("pp_match", "-"))
-                self.safe_addstr(row, col, cell, attr)
+                draw(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "healthy":
                 attr = self.colors.ro_health_attr(values.get("healthy", "-"))
-                self.safe_addstr(row, col, cell, attr)
+                draw(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "tc_quar":
                 attr = self.colors.tc_quar_attr(values.get("tc_quar", "-"))
-                self.safe_addstr(row, col, cell, attr)
+                draw(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "tc_j_sf":
                 # Color TC_T_DUR based on task completion state
                 attr = self.colors.tc_j_sf_attr(tc_task_state)
-                self.safe_addstr(row, col, cell, attr)
+                draw(row, col, cell, attr)
                 col += len(cell)
                 continue
             if col_name == "note":
@@ -270,10 +270,10 @@ class RowRenderer:
                 marker_attr = role_colors.get(values.get("role", ""), 0)
                 role_text = cell[2:].rstrip()
                 padding = " " * (len(cell) - len(role_text))
-                self.safe_addstr(row, col, role_text, marker_attr)
+                draw(row, col, role_text, marker_attr)
                 col += len(role_text)
                 if padding:
-                    self.safe_addstr(row, col, padding, 0)
+                    draw(row, col, padding, 0)
                     col += len(padding)
             elif col_name == "sha":
                 full_value = values.get("sha", "")
@@ -290,17 +290,17 @@ class RowRenderer:
                         if not text or offset >= len(cell):
                             continue
                         if offset:
-                            self.safe_addstr(row, col + offset, " ", 0)
+                            draw(row, col + offset, " ", 0)
                             offset += 1
                         visible = text[: max(len(cell) - offset, 0)]
                         if visible:
-                            self.safe_addstr(row, col + offset, visible, part_attr)
+                            draw(row, col + offset, visible, part_attr)
                             offset += len(visible)
                     if offset < len(cell):
-                        self.safe_addstr(row, col + offset, " " * (len(cell) - offset), 0)
+                        draw(row, col + offset, " " * (len(cell) - offset), 0)
                     col += len(cell)
                 else:
-                    self.safe_addstr(row, col, cell, attr)
+                    draw(row, col, cell, attr)
                     col += len(cell)
             elif col_name == "vlt_sha":
                 full_value = values.get("vlt_sha", "")
@@ -317,15 +317,15 @@ class RowRenderer:
                     if not text or offset >= len(cell):
                         continue
                     if offset:
-                        self.safe_addstr(row, col + offset, " ", 0)
+                        draw(row, col + offset, " ", 0)
                         offset += 1
                     visible = text[: max(len(cell) - offset, 0)]
                     if visible:
-                        self.safe_addstr(row, col + offset, visible, part_attr)
+                        draw(row, col + offset, visible, part_attr)
                         offset += len(visible)
                 if offset < len(cell):
-                    self.safe_addstr(row, col + offset, " " * (len(cell) - offset), 0)
+                    draw(row, col + offset, " " * (len(cell) - offset), 0)
                 col += len(cell)
             else:
-                self.safe_addstr(row, col, cell, attr)
+                draw(row, col, cell, attr)
                 col += len(cell)

@@ -50,6 +50,7 @@ from .named_filters import load_named_filters
 from .query import Query, apply_query, parse_query_safe, tokenize_for_highlight, validate_query
 from .row_renderer import RowRenderer
 from .types import cycle_os_filter
+from .viewport import HorizontalViewport
 
 
 def compute_visible_columns(
@@ -59,7 +60,9 @@ def compute_visible_columns(
     usable_width: int,
     col_offset: int,
 ) -> tuple[list[str], str, int, int]:
-    """Determine which columns fit on screen with horizontal scrolling.
+    """Legacy whole-column layout helper retained for callers of the public API.
+
+    The interactive table uses HorizontalViewport for clipping and column navigation.
 
     Args:
         all_columns: Complete list of column names in display order
@@ -184,9 +187,7 @@ class MonitorDisplay:
         self.page_step = 1
         self.max_offset = 0
         self.max_col_offset = 0
-        self.note_offset = 0
-        self.max_note_offset = 0
-        self.note_scroll_step = 1
+        self._horizontal_viewport: HorizontalViewport | None = None
         timestamps = [r.get("ts") for r in latest.values() if r.get("ts")]
         self.last_updated = max(timestamps, default=None) if timestamps else None
         self.fqdn_suffix = detect_common_fqdn_suffix(hosts)
@@ -382,18 +383,12 @@ class MonitorDisplay:
             self.offset = min(self.offset + self.page_step, self.max_offset)
             self.draw_screen()
         elif key in (self.curses_mod.KEY_LEFT, ord("h")):
-            if self.note_offset:
-                self.note_offset = max(self.note_offset - self.note_scroll_step, 0)
-            else:
-                self.col_offset = max(self.col_offset - 1, 0)
+            if self._horizontal_viewport is not None:
+                self.col_offset = self._horizontal_viewport.previous_offset
             self.draw_screen()
         elif key in (self.curses_mod.KEY_RIGHT, ord("l")):
-            if self.col_offset < self.max_col_offset:
-                self.col_offset += 1
-            else:
-                self.note_offset = min(
-                    self.note_offset + self.note_scroll_step, self.max_note_offset
-                )
+            if self._horizontal_viewport is not None:
+                self.col_offset = self._horizontal_viewport.next_offset
             self.draw_screen()
         elif key == ord("r"):
             # Reload will be handled later if needed
@@ -815,51 +810,21 @@ class MonitorDisplay:
 
         return all_columns, labels, widths
 
-    def _compute_visible_columns(
+    def _compute_viewport(
         self,
         all_columns: list[str],
         *,
         widths: dict[str, int],
         usable_width: int,
-    ) -> tuple[list[str], str]:
-        """Determine which columns fit on screen with horizontal scrolling."""
-        # NOTE is the trailing column: use spare space rather than requiring
-        # the longest note to fit. Widths are rebuilt on each draw, so notes
-        # expand again when the terminal grows.
-        scrollable = [col for col in all_columns if col != "host"]
-        full_note_width = widths.get("note", 0)
-        if scrollable and scrollable[-1] == "note":
-            preceding = ["host", *scrollable[self.col_offset : -1]]
-            remaining = usable_width - sum(widths[col] for col in preceding) - 3 * len(preceding)
-            if remaining >= len("NOTE"):
-                widths["note"] = min(widths["note"], remaining)
-
-        columns, scroll_indicator, col_offset, max_col_offset = compute_visible_columns(
-            all_columns, widths=widths, usable_width=usable_width, col_offset=self.col_offset
+    ) -> HorizontalViewport:
+        """Lay out the shared viewport and navigation stops for all columns."""
+        viewport = HorizontalViewport.for_columns(
+            all_columns, widths=widths, usable_width=usable_width, offset=self.col_offset
         )
-        self.col_offset = col_offset
-        self.max_col_offset = max_col_offset
-        self.max_note_offset = 0
-        if "note" in columns:
-            # Once NOTE is visible, scroll its text in place, keeping the
-            # preceding columns available for context.
-            self.max_col_offset = self.col_offset
-            if widths["note"] < full_note_width:
-                self.max_note_offset = full_note_width - widths["note"]
-                # Overlap successive views, including the text hidden by "...".
-                self.note_scroll_step = max(widths["note"] - 3, 1)
-        self.note_offset = min(self.note_offset, self.max_note_offset)
-        if self.max_col_offset or self.max_note_offset or self.note_offset:
-            arrows = "◀" if self.col_offset or self.note_offset else ""
-            if self.col_offset < self.max_col_offset or self.note_offset < self.max_note_offset:
-                arrows += "▶"
-            scroll_indicator = (
-                f" [{arrows} {self.col_offset + 1}-"
-                f"{self.col_offset + len(columns) - 1}/{len(scrollable)}]"
-            )
-            if self.max_note_offset:
-                scroll_indicator += f" [NOTE +{self.note_offset}]"
-        return columns, scroll_indicator
+        self.col_offset = viewport.offset
+        self.max_col_offset = viewport.max_offset
+        self._horizontal_viewport = viewport
+        return viewport
 
     def _get_sort_key(self, hostname: str) -> tuple:
         """Extract sort key for a host based on current sort field.
@@ -955,8 +920,8 @@ class MonitorDisplay:
         # Compute column configuration
         all_columns, labels, widths = self._compute_column_widths(sorted_hosts)
 
-        # Determine visible columns
-        columns, scroll_indicator = self._compute_visible_columns(
+        # Clip all columns to the same horizontal viewport.
+        viewport = self._compute_viewport(
             all_columns, widths=widths, usable_width=metrics["usable_width"]
         )
 
@@ -983,14 +948,18 @@ class MonitorDisplay:
             header_info=header_info,
             total_pages=metrics["total_pages"],
             current_page=metrics["current_page"],
-            scroll_indicator=scroll_indicator,
+            scroll_indicator=viewport.indicator,
             updated=metrics["updated"],
             usable_width=metrics["usable_width"],
             filtered_host_count=filtered_count,
             data_is_stale=metrics["data_is_stale"],
         )
         self.header_renderer.draw_column_header(
-            labels=labels, columns=columns, widths=widths, header_row=header_rows
+            labels=labels,
+            columns=all_columns,
+            widths=widths,
+            header_row=header_rows,
+            viewport=viewport,
         )
 
         # Adjust page size if using two-line header
@@ -1035,10 +1004,10 @@ class MonitorDisplay:
             self.row_renderer.draw_host_row(
                 row,
                 render_data=render_data,
-                columns=columns,
+                columns=all_columns,
                 widths=widths,
                 color_maps=color_maps,
-                note_offset=self.note_offset,
+                viewport=viewport,
             )
 
         # Draw ephemeral status message at bottom (red background), unless filter bar is up

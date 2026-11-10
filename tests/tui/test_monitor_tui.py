@@ -213,14 +213,32 @@ class TestKeyboardNavigation:
         assert tmux_session.wait_for("HOST", timeout=3.0)
 
     def test_scroll_through_long_note(self, tmux_monitor_env, tmp_path) -> None:
-        """Arrow keys expose the note tail and return to its beginning."""
+        """One viewport reveals long ROLE and NOTE cells and returns to the start."""
+        from fleetroll.db import get_connection, insert_host_observation
         from fleetroll.notes import append_note
 
+        conn = get_connection(tmux_monitor_env["db_path"])
+        try:
+            insert_host_observation(
+                conn,
+                {
+                    "host": tmux_monitor_env["hosts"][0],
+                    "ts": "2026-11-10T00:00:00+00:00",
+                    "ok": True,
+                    "observed": {
+                        "role_present": True,
+                        "role": "ROLE BEGIN " + "long role " * 10 + "ROLE END",
+                    },
+                },
+            )
+            conn.commit()
+        finally:
+            conn.close()
         notes_path = tmp_path / "notes.jsonl"
         append_note(
             notes_path,
             host=tmux_monitor_env["hosts"][0],
-            note="B " + "investigating " * 2 + " END",
+            note="NOTE BEGIN " + "investigating " * 3 + "NOTE END",
             actor="test",
         )
         # Override only the notes path; the subprocess uses the real monitor CLI.
@@ -253,18 +271,18 @@ class TestKeyboardNavigation:
                 sess.send_keys(key)
                 return False
 
-            assert sess.wait_until(lambda: navigate_until("Right", " | NOTE"), timeout=15.0), (
+            assert sess.wait_until(lambda: navigate_until("Right", "ROLE END"), timeout=15.0), (
                 sess.capture()
             )
-            column_header = next(line for line in sess.capture().splitlines() if "HOST" in line)
-            assert sess.wait_until(lambda: navigate_until("Right", " END"), timeout=15.0), (
+            assert sess.wait_until(lambda: navigate_until("Right", "NOTE END"), timeout=30.0), (
                 sess.capture()
             )
-            assert column_header in sess.capture().splitlines()
             assert "t-linux64-ms-001" in sess.capture()
-            assert sess.wait_until(lambda: navigate_until("Left", "[NOTE +0]"), timeout=15.0), (
+            assert "[NOTE +" not in sess.capture()
+            assert sess.wait_until(lambda: navigate_until("Left", "[▶ 1-"), timeout=30.0), (
                 sess.capture()
             )
+            assert sess.wait_for("ROLE BEGIN", timeout=3.0), sess.capture()
 
     def test_sort_cycle_with_s(self, tmux_session: TmuxSession) -> None:
         """Pressing s cycles sort order; sort indicator (↑) appears on a column."""
