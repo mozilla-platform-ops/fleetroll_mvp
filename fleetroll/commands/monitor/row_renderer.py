@@ -159,6 +159,7 @@ class RowRenderer:
         columns: list[str],
         widths: dict[str, int],
         color_maps: dict[str, dict[str, int]],
+        note_offset: int = 0,
     ) -> None:
         """Draw a single host row with appropriate coloring.
 
@@ -170,6 +171,8 @@ class RowRenderer:
             color_maps: Categorical color mappings (sha, vlt_sha, role)
         """
         values = render_data["values"]
+        if note_offset and values.get("note", "-") != "-":
+            values = {**values, "note": values["note"][note_offset:]}
         ts_value = render_data["ts_value"]
         tc_ts_value = render_data["tc_ts_value"]
         tc_act_s = render_data["tc_act_s"]

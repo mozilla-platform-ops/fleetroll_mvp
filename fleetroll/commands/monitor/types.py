@@ -98,7 +98,7 @@ def os_filter_label(os_filter: str | None) -> str | None:
 HELP_KEYBINDINGS = """\
 Keybindings:
   ↑/↓ or j/k  Scroll rows (page by page)
-  ←/→ or h/l  Scroll columns (when they don't fit)
+  ←/→ or h/l  Scroll columns, then long notes
   s           Cycle sort order (host → role → ovr_bch → host)
               (no-op when /query has a sort: clause)
   o           Toggle override filter (all hosts ↔ overrides only)

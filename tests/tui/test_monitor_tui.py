@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 from typing import Any
 
 import pytest
@@ -210,6 +211,55 @@ class TestKeyboardNavigation:
         tmux_session.send_keys("l")
         tmux_session.send_keys("h")
         assert tmux_session.wait_for("HOST", timeout=3.0)
+
+    def test_scroll_through_long_note(self, tmux_monitor_env, tmp_path) -> None:
+        """Arrow keys expose the note tail and return to its beginning."""
+        from fleetroll.notes import append_note
+
+        notes_path = tmp_path / "notes.jsonl"
+        append_note(
+            notes_path,
+            host=tmux_monitor_env["hosts"][0],
+            note="NOTE BEGIN " + "investigating this host; " * 12 + "NOTE END",
+            actor="test",
+        )
+        # Override only the notes path; the subprocess uses the real monitor CLI.
+        runner = tmp_path / "monitor.py"
+        runner.write_text(
+            "from pathlib import Path\n"
+            "import fleetroll.commands.monitor.entry as entry\n"
+            "from fleetroll.cli import main\n"
+            f"entry.default_notes_path = lambda: Path({str(notes_path)!r})\n"
+            "main()\n"
+        )
+        cmd = shlex.join(
+            [
+                _UV_PATH,
+                "run",
+                "python",
+                str(runner),
+                "host-monitor",
+                str(tmux_monitor_env["hosts_file"]),
+            ]
+        )
+        with TmuxSession(
+            cmd=cmd, cols=100, rows=40, env=_session_env(tmux_monitor_env["home"])
+        ) as sess:
+            assert sess.wait_for("HOST", timeout=15.0), sess.capture()
+
+            def navigate_until(key, text):
+                if text in sess.capture():
+                    return True
+                sess.send_keys(key)
+                return False
+
+            assert sess.wait_until(lambda: navigate_until("Right", "NOTE END"), timeout=15.0), (
+                sess.capture()
+            )
+            assert "t-linux64-ms-001" in sess.capture()
+            assert sess.wait_until(lambda: navigate_until("Left", "NOTE BEGIN"), timeout=10.0), (
+                sess.capture()
+            )
 
     def test_sort_cycle_with_s(self, tmux_session: TmuxSession) -> None:
         """Pressing s cycles sort order; sort indicator (↑) appears on a column."""

@@ -488,6 +488,10 @@ uv run fleetroll host monitor configs/host-lists/linux/all.list
 # keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
 ```
 
+Left/Right (or `h`/`l`) scroll through columns, keeping HOST visible. At the
+NOTE column, continue Right to read long notes; Left returns through the note
+before scrolling back through columns. The header shows the note text offset.
+
 ### Web Interface
 
 ```bash

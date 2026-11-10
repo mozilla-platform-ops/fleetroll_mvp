@@ -184,6 +184,9 @@ class MonitorDisplay:
         self.page_step = 1
         self.max_offset = 0
         self.max_col_offset = 0
+        self.note_offset = 0
+        self.max_note_offset = 0
+        self.note_scroll_step = 1
         timestamps = [r.get("ts") for r in latest.values() if r.get("ts")]
         self.last_updated = max(timestamps, default=None) if timestamps else None
         self.fqdn_suffix = detect_common_fqdn_suffix(hosts)
@@ -379,10 +382,18 @@ class MonitorDisplay:
             self.offset = min(self.offset + self.page_step, self.max_offset)
             self.draw_screen()
         elif key in (self.curses_mod.KEY_LEFT, ord("h")):
-            self.col_offset = max(self.col_offset - 1, 0)
+            if self.note_offset:
+                self.note_offset = max(self.note_offset - self.note_scroll_step, 0)
+            else:
+                self.col_offset = max(self.col_offset - 1, 0)
             self.draw_screen()
         elif key in (self.curses_mod.KEY_RIGHT, ord("l")):
-            self.col_offset = min(self.col_offset + 1, self.max_col_offset)
+            if self.col_offset < self.max_col_offset:
+                self.col_offset += 1
+            else:
+                self.note_offset = min(
+                    self.note_offset + self.note_scroll_step, self.max_note_offset
+                )
             self.draw_screen()
         elif key == ord("r"):
             # Reload will be handled later if needed
@@ -816,6 +827,7 @@ class MonitorDisplay:
         # the longest note to fit. Widths are rebuilt on each draw, so notes
         # expand again when the terminal grows or the user scrolls right.
         scrollable = [col for col in all_columns if col != "host"]
+        full_note_width = widths.get("note", 0)
         if scrollable and scrollable[-1] == "note":
             preceding = ["host", *scrollable[self.col_offset : -1]]
             remaining = usable_width - sum(widths[col] for col in preceding) - 3 * len(preceding)
@@ -827,6 +839,25 @@ class MonitorDisplay:
         )
         self.col_offset = col_offset
         self.max_col_offset = max_col_offset
+        self.max_note_offset = 0
+        if "note" in columns and widths["note"] < full_note_width:
+            # Keep moving by column until NOTE has all the available space.
+            self.max_col_offset = len(scrollable) - 1
+            if self.col_offset == self.max_col_offset:
+                self.max_note_offset = full_note_width - widths["note"]
+                # Overlap successive views, including the text hidden by "...".
+                self.note_scroll_step = max(widths["note"] - 3, 1)
+        self.note_offset = min(self.note_offset, self.max_note_offset)
+        if self.max_col_offset or self.max_note_offset or self.note_offset:
+            arrows = "◀" if self.col_offset or self.note_offset else ""
+            if self.col_offset < self.max_col_offset or self.note_offset < self.max_note_offset:
+                arrows += "▶"
+            scroll_indicator = (
+                f" [{arrows} {self.col_offset + 1}-"
+                f"{self.col_offset + len(columns) - 1}/{len(scrollable)}]"
+            )
+            if self.max_note_offset:
+                scroll_indicator += f" [NOTE +{self.note_offset}]"
         return columns, scroll_indicator
 
     def _get_sort_key(self, hostname: str) -> tuple:
@@ -1001,7 +1032,12 @@ class MonitorDisplay:
                 git_checksums=self._git_checksums,
             )
             self.row_renderer.draw_host_row(
-                row, render_data=render_data, columns=columns, widths=widths, color_maps=color_maps
+                row,
+                render_data=render_data,
+                columns=columns,
+                widths=widths,
+                color_maps=color_maps,
+                note_offset=self.note_offset,
             )
 
         # Draw ephemeral status message at bottom (red background), unless filter bar is up

@@ -1222,7 +1222,7 @@ def test_compute_visible_columns_zero_usable_width() -> None:
 @pytest.mark.parametrize("col_offset", [0, 1])
 def test_tui_notes_use_remaining_width(note_space: int, col_offset: int) -> None:
     """Notes truncate at the screen edge while preceding columns stay intact."""
-    display = MagicMock(col_offset=col_offset)
+    display = MagicMock(col_offset=col_offset, note_offset=0)
     widths = {"host": 10, "healthy": 7, "note": 40}
     preceding_width = 23 if col_offset == 0 else 13
     usable_width = preceding_width + note_space
