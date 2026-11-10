@@ -489,8 +489,9 @@ uv run fleetroll host monitor configs/host-lists/linux/all.list
 ```
 
 Left/Right (or `h`/`l`) scroll through columns, keeping HOST visible. At the
-NOTE column, continue Right to read long notes; Left returns through the note
-before scrolling back through columns. The header shows the note text offset.
+NOTE column, continue Right to read long notes without hiding more columns.
+Left returns through the note before scrolling back through columns. The header
+shows the note text offset.
 
 ### Web Interface
 

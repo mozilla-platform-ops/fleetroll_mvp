@@ -28,7 +28,10 @@ def display(monkeypatch):
 @pytest.mark.parametrize(
     ("right", "left"), [(ord("l"), ord("h")), (curses.KEY_RIGHT, curses.KEY_LEFT)]
 )
-def test_read_entire_note_and_return_to_columns(display, right, left):
+@pytest.mark.parametrize(("healthy_width", "note_col_offset"), [(7, 0), (20, 1)])
+def test_read_entire_note_and_return_to_columns(
+    display, right, left, healthy_width, note_col_offset
+):
     """Exercise keys, layout and real row rendering, retaining the frozen host."""
     display.curses_mod = curses
     draw = Mock()
@@ -38,7 +41,7 @@ def test_read_entire_note_and_return_to_columns(display, right, left):
     indicators = []
 
     def redraw():
-        widths = {"host": 5, "healthy": 7, "note": len(note)}
+        widths = {"host": 5, "healthy": healthy_width, "note": len(note)}
         columns, indicator = display._compute_visible_columns(  # noqa: SLF001
             ["host", "healthy", "note"], widths=widths, usable_width=30
         )
@@ -69,13 +72,15 @@ def test_read_entire_note_and_return_to_columns(display, right, left):
 
     display.draw_screen = redraw
     redraw()
-    assert "start" in screens[-1]
+    if note_col_offset == 0:
+        assert "start" in screens[-1]
     assert "▶" in indicators[-1]
     display.handle_key(right)
-    assert display.col_offset == 1
-    assert display.note_offset == 0
+    assert display.col_offset == note_col_offset
+    assert (display.note_offset > 0) == (note_col_offset == 0)
     for _ in range(len(note)):
         display.handle_key(right)
+        assert display.col_offset == note_col_offset
         if display.note_offset == display.max_note_offset:
             break
     assert screens[-1].endswith("the end")
@@ -87,8 +92,8 @@ def test_read_entire_note_and_return_to_columns(display, right, left):
         display.handle_key(left)
         if display.note_offset == 0:
             break
-        assert display.col_offset == 1
-    assert display.col_offset == 1
+        assert display.col_offset == note_col_offset
+    assert display.col_offset == note_col_offset
     display.handle_key(left)
     assert display.col_offset == 0
     assert screens[-1] == screens[0]
@@ -109,3 +114,26 @@ def test_note_offset_clamped_after_layout_change(display, change):
         usable_width = 10
     display._compute_visible_columns(columns, widths=widths, usable_width=usable_width)  # noqa: SLF001
     assert display.note_offset == display.max_note_offset == 0
+
+
+def test_note_scroll_preserves_role_after_hiding_os(display):
+    """Keep ROLE visible while scrolling NOTE after hiding OS."""
+    display.curses_mod = curses
+
+    def redraw():
+        columns, _ = display._compute_visible_columns(  # noqa: SLF001
+            ["host", "os", "role", "note"],
+            widths={"host": 5, "os": 2, "role": 7, "note": 100},
+            usable_width=25,
+        )
+        return columns
+
+    display.draw_screen = redraw
+    assert redraw() == ["host", "os", "role"]
+    display.handle_key(curses.KEY_RIGHT)
+    assert redraw() == ["host", "role", "note"]
+    assert display.col_offset == 1
+    display.handle_key(curses.KEY_RIGHT)
+    assert display.note_offset > 0
+    assert display.col_offset == 1
+    assert redraw() == ["host", "role", "note"]

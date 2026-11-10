@@ -825,7 +825,7 @@ class MonitorDisplay:
         """Determine which columns fit on screen with horizontal scrolling."""
         # NOTE is the trailing column: use spare space rather than requiring
         # the longest note to fit. Widths are rebuilt on each draw, so notes
-        # expand again when the terminal grows or the user scrolls right.
+        # expand again when the terminal grows.
         scrollable = [col for col in all_columns if col != "host"]
         full_note_width = widths.get("note", 0)
         if scrollable and scrollable[-1] == "note":
@@ -840,10 +840,11 @@ class MonitorDisplay:
         self.col_offset = col_offset
         self.max_col_offset = max_col_offset
         self.max_note_offset = 0
-        if "note" in columns and widths["note"] < full_note_width:
-            # Keep moving by column until NOTE has all the available space.
-            self.max_col_offset = len(scrollable) - 1
-            if self.col_offset == self.max_col_offset:
+        if "note" in columns:
+            # Once NOTE is visible, scroll its text in place, keeping the
+            # preceding columns available for context.
+            self.max_col_offset = self.col_offset
+            if widths["note"] < full_note_width:
                 self.max_note_offset = full_note_width - widths["note"]
                 # Overlap successive views, including the text hidden by "...".
                 self.note_scroll_step = max(widths["note"] - 3, 1)

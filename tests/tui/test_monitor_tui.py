@@ -220,7 +220,7 @@ class TestKeyboardNavigation:
         append_note(
             notes_path,
             host=tmux_monitor_env["hosts"][0],
-            note="NOTE BEGIN " + "investigating this host; " * 12 + "NOTE END",
+            note="B " + "investigating " * 2 + " END",
             actor="test",
         )
         # Override only the notes path; the subprocess uses the real monitor CLI.
@@ -253,11 +253,16 @@ class TestKeyboardNavigation:
                 sess.send_keys(key)
                 return False
 
-            assert sess.wait_until(lambda: navigate_until("Right", "NOTE END"), timeout=15.0), (
+            assert sess.wait_until(lambda: navigate_until("Right", " | NOTE"), timeout=15.0), (
                 sess.capture()
             )
+            column_header = next(line for line in sess.capture().splitlines() if "HOST" in line)
+            assert sess.wait_until(lambda: navigate_until("Right", " END"), timeout=15.0), (
+                sess.capture()
+            )
+            assert column_header in sess.capture().splitlines()
             assert "t-linux64-ms-001" in sess.capture()
-            assert sess.wait_until(lambda: navigate_until("Left", "NOTE BEGIN"), timeout=10.0), (
+            assert sess.wait_until(lambda: navigate_until("Left", "[NOTE +0]"), timeout=15.0), (
                 sess.capture()
             )
 
