@@ -34,8 +34,14 @@ other data sources, and ingestion of hosts among the MVP's missing features.
 ## What defines the fleet?
 
 The fleet should be the hosts we intend Fleetroll to manage, backed by an
-authoritative inventory. The choice of authoritative source still needs to be
-made; this proposal does not declare an existing file or service complete.
+authoritative inventory. On 2026-11-13, the maintainer identified the Google
+Sheet **Moonshot Master Inventory** as the source of `all_moonshots.list`.
+The supplied export has 315 MDC_1 rows, while the local baseline has 280 names;
+30 same-numbered rows use Windows rather than Linux hostnames. Population
+inclusion, hostname/physical-identity reconciliation, source revision and the
+update procedure still need to be established before claiming equivalence or
+complete coverage. See the [source reconciliation findings](../reference/moonshot-inventory.md).
+Other platforms' authority is outside this Moonshot milestone.
 
 "Accepts our SSH key" is a useful connectivity check, but a poor membership rule:
 it excludes broken or rebuilding hosts precisely when we need to track them,
@@ -115,6 +121,14 @@ hardware baseline, independent of observed OS, role, pool, or reachability.
 Report its provenance and unverified completeness, duplicate names, and gaps in
 the ms-NNN range. Gaps are candidates for investigation, not proof of membership.
 
+Clarification from the imaging workflow: "Linux/Moonshots" names the existing
+list location and workstream, not an OS-based hardware membership rule. Moonshot
+nodes being imaged from Windows to Linux or from 18.04 to 24.04 must remain
+accounted for while unreachable or carrying old observations. Separate non-Moonshot
+Mac/Windows inventories remain out of scope. The 315-row source export and
+280-name baseline have unresolved scope/hostname differences; preserve the
+current lists until those inclusion and identity rules are confirmed.
+
 Keep only `all_moonshots.list` and the generated `all.list` in the Linux list
 directory. Remove OS, half, canary, and batch lists; select subsets through
 Fleetroll filters or explicit host arguments. Update active scripts and
@@ -154,7 +168,10 @@ that the manually supplied baseline is complete.
 
 ### 2a. Decide authority, identity, and lifecycle rules
 
-Choose the source of authority and document ownership and lifecycle rules.
+Formalize the identified Moonshot Google Sheet source and document ownership,
+inclusion, snapshot completeness, export/import, and lifecycle rules. Reconcile
+its physical-node population with the existing hostname-only projection before
+silently replacing or expanding the operational baseline.
 Decide where intended assignment is maintained, how identity survives reimages
 and replacements, and how inventory snapshot completeness is established.
 Produce a concrete schema and import contract before implementing persistence.

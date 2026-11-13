@@ -22,6 +22,7 @@ contracts in more detail.
 | Topic | Reference |
 | --- | --- |
 | Commands and aliases | [CLI hierarchy](reference/cli-command-hierarchy.md) |
+| Moonshot baseline source and imaging scope | [Inventory source and reconciliation](reference/moonshot-inventory.md) |
 | Override deployment checks | [Worker type safety](reference/override-worker-type-safety.md) |
 | Puppet run fields and collector paths | [Puppet metadata](reference/puppet-state-tracking.md) |
 | Taskcluster identity selection | [Worker identity collection](reference/worker-identity.md) |
