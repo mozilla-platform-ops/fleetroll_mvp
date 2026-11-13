@@ -29,15 +29,35 @@ observation timestamps with the change before relying on recorded state.
 | `PP_EXP` | Expected revision from the recorded GitHub branch reference (override branch or master) |
 | `PP_SHA` | Revision reported by Puppet |
 | `PP_MATCH` | `Y` when the full expected/applied revisions match and Puppet succeeded; `N` for mismatch/failure; `-` when comparison data is unavailable |
-| `HEALTHY` | `Y` when `PP_MATCH=Y` and recorded TC activity is less than one hour old; `N` otherwise when comparison is available; `-` when unavailable |
+| `HEALTHY` | Legacy revision/activity signal, with an additional Linux/macOS vault gate: `Y` requires `PP_MATCH=Y`, recorded TC activity less than one hour old, and matching full deployed/applied vault checksums |
 
 These checks apply to Linux/macOS hosts with or without overrides. Private
 branches need local GitHub read access for `gather gh`; missing expected revisions
 make `PP_EXP`, `PP_MATCH`, and `HEALTHY` unavailable. Windows uses a separate
 [pool-hash comparison](windows-support.md).
 
-`HEALTHY` is a compact revision/activity signal. It does not check all deployed
-checksums, prove that the latest TC lookup succeeded, or assess task outcomes.
+On Linux/macOS, an otherwise positive result becomes `N` when the full vault
+checksums differ, or `-` when either checksum is missing, malformed, or abbreviated.
+The comparison is case-insensitive over 64 hexadecimal characters. Two missing
+checksums do not prove that Puppet applied an absent vault. An explicit absent
+vault flag also prevents a positive result. This gate restricts existing `Y`
+results; existing revision/activity `N` and unavailable results keep their meaning.
+`PP_MATCH` remains revision-only. Windows has no vault gate.
+
+Older observations lacking `puppet_vault_sha_applied` now produce `-` instead of
+`Y` when the other checks pass. Gather again after Puppet runs with a metadata
+writer. The raw JSON fields and worker evidence schema v3 are unchanged. The
+CLI table, TUI, web rows, and shared filters use the same gate. `healthy=n` excludes
+unknown; use `healthy!=y` to review both negative and unknown rows, or `healthy=`
+for unknown only. These filters select observations, not authorized actions.
+
+`HEALTHY` remains a compact recorded revision/vault/activity signal. It does not
+check override convergence, qualify historical rows as current, prove that the
+latest TC lookup succeeded, enforce freshness, or assess task outcomes. Missing
+TC activity can still produce the legacy `N`; that is not proof of worker failure.
+The [health evidence design](design/health-evidence-and-verification.md) separates
+those components and plans their migration; the new component model is not yet
+implemented.
 For automation, use [monitor JSON](reference/monitor-json.md) to check source freshness,
 lookup status, full identity, provenance, and override application explicitly.
 

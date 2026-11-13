@@ -39,6 +39,7 @@ contracts in more detail.
 - [Client/server architecture](design/client-server-design.md)
 - [Tart fleet integration](design/tart-fleet-integration.md)
 - [Fleet membership, discovery, and coverage](design/fleet-membership-and-discovery.md)
+- [Health evidence and configuration verification](design/health-evidence-and-verification.md)
 
 `archive/` retains dated planning and review context, not current task status:
 

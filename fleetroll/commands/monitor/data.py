@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import re
 import sqlite3
@@ -285,6 +286,23 @@ def format_ts_with_age(ts_value: str) -> str:
     return f"{ts_value} ({humanize_age(ts_value)})"
 
 
+def vault_checksum_match(observed: dict[str, Any]) -> str:
+    """Compare full recorded vault checksums without equating missing values.
+
+    This is a file comparison, not proof of a successful Puppet run or fresh
+    collection. The caller must qualify it with the other health requirements.
+    """
+    if observed.get("vault_present") is False:
+        return "-"
+    deployed = observed.get("vault_sha256")
+    applied = observed.get("puppet_vault_sha_applied")
+    if not isinstance(deployed, str) or not isinstance(applied, str):
+        return "-"
+    if not all(re.fullmatch(r"[0-9a-fA-F]{64}", value) for value in (deployed, applied)):
+        return "-"
+    return "Y" if deployed.lower() == applied.lower() else "N"
+
+
 def build_ok_row_values(
     host: str,
     record: dict[str, Any],
@@ -323,16 +341,21 @@ def build_ok_row_values(
         "present" if override_present is True else "absent" if override_present is False else "?"
     )
     sha_full = observed.get("override_sha256") or ""
-    vault_sha_full = observed.get("vault_sha256") or ""
+    raw_vault_sha = observed.get("vault_sha256")
+    vault_sha_full = raw_vault_sha if isinstance(raw_vault_sha, str) else ""
     sha = sha_full[:8] if sha_full else "-"
     vault_sha = vault_sha_full[:8] if vault_sha_full else "-"
+    vlt_mnemonic = ""
     if vault_sha_full:
-        vault_sha = f"{vault_sha} {humanize(vault_sha_full, words=2)}"
+        # Malformed legacy evidence has no mnemonic or positive match.
+        with contextlib.suppress(ValueError):
+            vlt_mnemonic = humanize(vault_sha_full, words=2)
+        if vlt_mnemonic:
+            vault_sha = f"{vault_sha} {vlt_mnemonic}"
 
     # Structured sub-fields for web UI popover (TUI uses the formatted strings below)
     ovr_branch = ""
     vlt_symlink = ""
-    vlt_mnemonic = humanize(vault_sha_full, words=2) if vault_sha_full else ""
 
     # Append human-readable info to SHA columns
     if sha_cache:
@@ -469,6 +492,12 @@ def build_ok_row_values(
         healthy = "N"
         if pp_match == "Y" and tc_act_s is not None and tc_act_s < 3600:
             healthy = "Y"
+
+    # Narrow legacy positives: a successful revision/activity comparison alone
+    # cannot establish that Puppet used the deployed vault. Keep PP_MATCH as a
+    # revision-only signal. Windows uses its own pool-hash contract below.
+    if os_type != "W" and healthy == "Y":
+        healthy = vault_checksum_match(observed)
 
     # Windows hosts don't run Puppet the same way; suppress pp_last,
     # but try to compute PP_EXP/PP_MATCH from windows_pools hash data.

@@ -133,7 +133,7 @@ const columns = [
     ),
   }),
   columnHelper.accessor("healthy", {
-    header: th("HEALTHY", "Overall health assessment: Y=healthy, N=unhealthy, -=unknown"),
+    header: th("HEALTHY", "Recorded revision/vault/activity signal: Y=revision and vault match with TC activity <1h; N=check failed; -=evidence unavailable. Windows uses pool hash and TC activity. Check data age too; not recovery approval."),
     cell: (info) => {
       const v = info.getValue();
       return (

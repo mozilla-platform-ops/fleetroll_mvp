@@ -291,7 +291,7 @@ def test_quarantine_status_checks_future():
     assert values["tc_quar"] == "-"
 
 
-def test_puppet_columns_pp_match_healthy():
+def test_puppet_columns_pp_match_healthy(tmp_path):
     """Test PP_LAST, PP_MATCH, HEALTHY columns with SHA-based logic."""
     from datetime import datetime
 
@@ -314,7 +314,7 @@ def test_puppet_columns_pp_match_healthy():
             "url": "https://api.github.com/repos/testuser/ronin_puppet/git/refs/heads/test-branch",
         }
     }
-    sha_cache = ShaInfoCache(overrides_dir="/nonexistent", vault_dir="/nonexistent")
+    sha_cache = ShaInfoCache(overrides_dir=tmp_path / "overrides", vault_dir=tmp_path / "vaults")
     sha_cache.override_cache["abc123"] = {
         "user": "testuser",
         "repo": "ronin_puppet",
@@ -329,7 +329,8 @@ def test_puppet_columns_pp_match_healthy():
             "role": "gecko_t_linux_talos",
             "override_present": True,
             "override_sha256": "abc123",
-            "vault_sha256": None,
+            "vault_sha256": "a" * 64,
+            "puppet_vault_sha_applied": "a" * 64,
             "override_meta": {"mtime_epoch": str(now_epoch - 3600)},
             "uptime_s": 3600,
             "puppet_git_sha": "test_git_sha_1234",
@@ -387,7 +388,8 @@ def test_puppet_columns_pp_match_healthy():
             "role": "gecko_t_linux_talos",
             "override_present": False,
             "override_sha256": None,
-            "vault_sha256": None,
+            "vault_sha256": "a" * 64,
+            "puppet_vault_sha_applied": "a" * 64,
             "override_meta": {},
             "uptime_s": 3600,
             "puppet_git_sha": "master_sha_123",

@@ -141,10 +141,12 @@ DATA      Data freshness: audit_age/tc_age
           Each source: green <5m, yellow <30m, red >=30m
           A shared age uses the older source's color
 
-HEALTHY   Overall host health status
-          Y = PP_MATCH and TC worker active (< 1 hour)
-          N = not matched or TC worker stale
-          - = no puppet/GitHub data available"""
+HEALTHY   Recorded revision/vault/activity signal (not overall health)
+          Y = PP_MATCH and TC activity <1h and full vault checksums match
+          N = legacy revision/activity failure, or vault checksum mismatch
+          - = required revision/vault evidence unavailable
+          Windows uses pool-hash match and TC activity; no vault check
+          Check DATA/status too; this signal does not authorize recovery"""
 
 COLUMN_GUIDE_TEXT = (
     """\

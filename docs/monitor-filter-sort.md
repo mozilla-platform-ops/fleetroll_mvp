@@ -68,6 +68,14 @@ the installed Ubuntu version or evidence freshness. Run these views against
 hosts that retain a historical role. Future baseline coverage reporting will
 account separately for stale evidence and roles outside the saved views.
 
+`healthy` is the recorded revision/vault/activity signal, not a freshness or
+recovery gate. On Linux/macOS, an otherwise positive result needs matching full
+deployed/applied vault checksums; missing applied evidence is unknown. `pp_match`
+continues to compare revisions. `healthy=n` excludes unknown rows; `healthy!=y`
+includes negative and unknown, while `healthy=` selects unknown only. Windows
+keeps its pool-hash/activity behavior. See [rollout verification](rollout-health-verification.md)
+for the exact compatibility behavior and evidence limits.
+
 ## Gather matching hosts
 
 `gather all`, `gather host`, and `gather tc` accept `--filter QUERY` or

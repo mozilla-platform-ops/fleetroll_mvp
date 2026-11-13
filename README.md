@@ -394,7 +394,7 @@ Filters are space-separated conditions (all must match). Each condition is `COLU
 | `tc_quar` | | string | TC quarantine status |
 | `pool` | | string | actual TC worker pool name (filter-only †) |
 | `data` | | duration | max(audit age, TC age) |
-| `healthy` | `health` | string | health status (`y`/`n`) |
+| `healthy` | `health` | string | recorded revision/vault/activity signal (`y`/`n`; empty for unknown) |
 | `note` | | string | notes |
 
 Time columns (`pp_last`, `tc_act`, `uptime`, `tc_j_sf`, `data`) accept duration values like `20h`, `90m`, `2d`.
@@ -417,7 +417,17 @@ comparison, configure a token with repository read access under `[github]`
 `api_token` in `~/.fleetroll/config.toml`, then run
 `uv run fleetroll gather gh --override-delay`. `HEALTHY` becomes `Y` only when
 Puppet successfully applied the expected revision and Taskcluster activity is
-less than one hour old.
+less than one hour old. On Linux/macOS it also requires equal, valid full deployed
+and Puppet-applied vault checksums. A vault mismatch changes an otherwise positive
+result to `N`; missing vault evidence changes it to `-`. `PP_MATCH` remains the
+revision comparison; Windows keeps its separate pool-hash/activity check.
+
+Older observations without the applied vault checksum can no longer produce
+`HEALTHY=Y` on Linux/macOS. Refresh host observations after Puppet has run with a
+metadata-writing wrapper. `healthy=n` excludes unknown rows; `healthy!=y` includes
+both negative and unknown rows, and `healthy=` selects unknown. This remains a
+recorded signal: inspect `DATA` and collection status separately. See
+[rollout verification](docs/rollout-health-verification.md) for its limits.
 
 **Special syntax**
 
