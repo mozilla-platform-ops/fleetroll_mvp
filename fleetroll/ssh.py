@@ -671,15 +671,38 @@ fi
 
 
 def remote_run_puppet_script() -> str:
-    """Generate remote shell script requesting one Puppet attempt.
+    """Request one attempt and capture metadata independently of wrapper exit.
 
-    Echoes EXIT=N at the end so callers can extract puppet's own exit code
-    even when the outer ssh exit code is also nonzero. Puppet uses:
-      0 = success, no changes
-      2 = success, changes applied
-      1/4/6 = failure
+    The wrapper normalizes Puppet's successful exits (0 and 2) to zero.
+    Snapshot metadata before and after it, with remote-clock bounds, so old
+    state cannot be reported as the outcome of this invocation.
     """
-    body = "sudo -n env FLEETROLL_SINGLE_RUN=1 run-puppet.sh 2>&1; echo EXIT=$?"
+    body = r"""case $(uname -s) in
+  Linux) state_path=/etc/puppet/last_run_metadata.json ;;
+  Darwin) state_path=/opt/puppet_environments/last_run_metadata.json ;;
+  *) exit 1 ;;
+esac
+read_state() {
+  if state=$(sudo -n cat "$state_path" 2>/dev/null); then
+    printf '%s' "$state" | base64 | tr -d '\r\n'
+  elif sudo -n test ! -e "$state_path" 2>/dev/null; then
+    printf missing
+  else
+    printf unavailable
+  fi
+}
+before=$(read_state)
+started=$(date -u +%s)
+sudo -n env FLEETROLL_SINGLE_RUN=1 run-puppet.sh 2>&1
+wrapper_exit=$?
+ended=$(date -u +%s)
+after=$(read_state)
+printf '\nFLEETROLL_PUPPET_WRAPPER_EXIT=%s\n' "$wrapper_exit"
+printf 'FLEETROLL_PUPPET_START=%s\n' "$started"
+printf 'FLEETROLL_PUPPET_END=%s\n' "$ended"
+printf 'FLEETROLL_PUPPET_BEFORE=%s\n' "$before"
+printf 'FLEETROLL_PUPPET_AFTER=%s\n' "$after"
+"""
     return "sh -c " + shlex.quote(body)
 
 

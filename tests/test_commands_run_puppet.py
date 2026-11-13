@@ -10,9 +10,101 @@ from fleetroll.cli_types import HostRunPuppetArgs
 from fleetroll.commands.run_puppet import _strip_ansi, cmd_host_run_puppet
 from fleetroll.exceptions import CommandFailureError
 
+from tests.puppet_helpers import run_evidence
+
 
 class TestCmdHostRunPuppet:
     """Tests for cmd_host_run_puppet function."""
+
+    @pytest.mark.parametrize(
+        ("wrapper_exit", "puppet_exit", "ssh_rc", "outcome", "ok"),
+        [
+            (0, 2, 0, "changed", True),
+            (0, 6, 0, "failed", False),
+            (1, 0, 0, "unchanged", False),
+            (1, 2, 0, "changed", False),
+            (0, 0, 255, "unchanged", False),
+        ],
+    )
+    def test_wrapper_and_puppet_outcomes_in_json_and_audit(
+        self,
+        mocker,
+        mock_args_run_puppet,
+        tmp_path,
+        capsys,
+        wrapper_exit,
+        puppet_exit,
+        ssh_rc,
+        outcome,
+        ok,
+    ):
+        mock_args_run_puppet.json = True
+        mock_args_run_puppet.audit_log = str(tmp_path / "audit.jsonl")
+        mocker.patch(
+            "fleetroll.commands.run_puppet.run_ssh",
+            return_value=(ssh_rc, run_evidence(puppet_exit, wrapper_exit=wrapper_exit), ""),
+        )
+        if ok:
+            cmd_host_run_puppet(mock_args_run_puppet)
+        else:
+            with pytest.raises(CommandFailureError):
+                cmd_host_run_puppet(mock_args_run_puppet)
+        result = json.loads(capsys.readouterr().out)
+        audit = json.loads(Path(mock_args_run_puppet.audit_log).read_text())
+        assert result["ok"] is ok
+        assert result["observed"]["wrapper_exit"] == wrapper_exit
+        assert result["observed"]["puppet_exit"] == puppet_exit
+        assert result["observed"]["puppet_outcome"] == outcome
+        assert audit["observed"] == result["observed"]
+
+    @pytest.mark.parametrize("json_output", [False, True])
+    def test_wrapper_zero_without_metadata_is_unknown_and_nonzero(
+        self,
+        mocker,
+        mock_args_run_puppet,
+        tmp_path,
+        capsys,
+        json_output,
+    ):
+        mock_args_run_puppet.json = json_output
+        mock_args_run_puppet.quiet = True
+        mock_args_run_puppet.audit_log = str(tmp_path / "audit.jsonl")
+        mocker.patch("fleetroll.commands.run_puppet.run_ssh", return_value=(0, "EXIT=0\n", ""))
+        with pytest.raises(CommandFailureError):
+            cmd_host_run_puppet(mock_args_run_puppet)
+        output = capsys.readouterr().out
+        if json_output:
+            observed = json.loads(output)["observed"]
+            assert observed["puppet_outcome"] == "unknown"
+            assert observed["changes_applied"] is None
+        else:
+            assert "puppet_outcome=unknown" in output
+            assert "no changes" not in output
+
+    def test_batch_summary_distinguishes_unknown_from_puppet_failure(
+        self,
+        mocker,
+        mock_args_run_puppet,
+        tmp_path,
+        capsys,
+    ):
+        mock_args_run_puppet.json = False
+        mock_args_run_puppet.quiet = True
+        mock_args_run_puppet.hosts = ["changed", "failed", "unknown"]
+        mock_args_run_puppet.host_file = None
+        mock_args_run_puppet.audit_log = str(tmp_path / "audit.jsonl")
+
+        def fake_ssh(host, *args, **kwargs):
+            output = {"changed": run_evidence(2), "failed": run_evidence(4), "unknown": "EXIT=0\n"}
+            return 0, output[host], ""
+
+        mocker.patch("fleetroll.commands.run_puppet.run_ssh", side_effect=fake_ssh)
+        with pytest.raises(CommandFailureError):
+            cmd_host_run_puppet(mock_args_run_puppet)
+        output = capsys.readouterr().out
+        assert "successful=1 failed=1 unknown=1" in output
+        assert "changes applied" in output
+        assert "no changes" not in output
 
     @pytest.mark.parametrize("json_output", [False, True])
     def test_single_host_without_confirm_is_read_only(
@@ -68,7 +160,7 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.json = True
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (0, "some puppet output\nEXIT=0\n", "")
+        mock_run_ssh.return_value = (0, run_evidence(output="some puppet output"), "")
 
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
@@ -94,7 +186,7 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.json = True
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (0, "applied changes\nEXIT=2\n", "")
+        mock_run_ssh.return_value = (0, run_evidence(2, output="applied changes"), "")
 
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
@@ -114,7 +206,11 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.json = True
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (1, "puppet failed\nEXIT=1\n", "catalog failed")
+        mock_run_ssh.return_value = (
+            1,
+            run_evidence(1, wrapper_exit=1, output="puppet failed"),
+            "catalog failed",
+        )
 
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
@@ -129,12 +225,16 @@ class TestCmdHostRunPuppet:
     def test_single_host_puppet_failure_with_changes(
         self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path
     ):
-        """Raises CommandFailureError when puppet exits 4 (failure + changes)."""
+        """Raises CommandFailureError when puppet exits 4 (failure without changes)."""
         mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
         mock_args_run_puppet.json = True
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (1, "partial failure\nEXIT=4\n", "resource failed")
+        mock_run_ssh.return_value = (
+            1,
+            run_evidence(4, wrapper_exit=1, output="partial failure"),
+            "resource failed",
+        )
 
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
@@ -206,7 +306,7 @@ class TestCmdHostRunPuppet:
         def fake_run_ssh(host: str, *args, **kwargs):
             if host == "host1.example.com":
                 raise OSError("could not allocate pty")
-            return 0, "EXIT=0\n", ""
+            return 0, run_evidence(), ""
 
         mocker.patch("fleetroll.commands.run_puppet.run_ssh", side_effect=fake_run_ssh)
         captured = []
@@ -232,7 +332,7 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.reason = "post-override puppet run"
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (0, "EXIT=0\n", "")
+        mock_run_ssh.return_value = (0, run_evidence(), "")
 
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(a[0]))
@@ -251,7 +351,7 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.json = True
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (0, "EXIT=0\n", "")
+        mock_run_ssh.return_value = (0, run_evidence(), "")
 
         mocker.patch("builtins.print")
 
@@ -272,7 +372,7 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.json = False
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (0, "EXIT=0\n", "")
+        mock_run_ssh.return_value = (0, run_evidence(), "")
 
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
@@ -296,7 +396,7 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.no_audit = True
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (0, "EXIT=0\n", "")
+        mock_run_ssh.return_value = (0, run_evidence(), "")
         mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
 
         mocker.patch("builtins.print")
@@ -313,7 +413,7 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.no_audit = False
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (0, "EXIT=0\n", "")
+        mock_run_ssh.return_value = (0, run_evidence(), "")
         mock_audit = mocker.patch("fleetroll.commands._auto_audit._run_auto_audit")
 
         mocker.patch("builtins.print")
@@ -337,7 +437,7 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.json = False
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (0, "EXIT=0\n", "")
+        mock_run_ssh.return_value = (0, run_evidence(), "")
 
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
@@ -394,7 +494,7 @@ class TestCmdHostRunPuppet:
         mock_args_run_puppet.no_audit = False
 
         mock_run_ssh = mocker.patch("fleetroll.commands.run_puppet.run_ssh")
-        mock_run_ssh.return_value = (0, "EXIT=0\n", "")
+        mock_run_ssh.return_value = (0, run_evidence(), "")
 
         mocker.patch(
             "fleetroll.commands._auto_audit._run_auto_audit",
@@ -443,7 +543,7 @@ class TestCmdHostRunPuppetOutput:
 
         mocker.patch(
             "fleetroll.commands.run_puppet.run_ssh",
-            return_value=(0, "Notice: Finished catalog run\nEXIT=0\n", ""),
+            return_value=(0, run_evidence(output="Notice: Finished catalog run"), ""),
         )
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
@@ -463,7 +563,7 @@ class TestCmdHostRunPuppetOutput:
 
         mocker.patch(
             "fleetroll.commands.run_puppet.run_ssh",
-            return_value=(0, "Notice: Finished catalog run\nEXIT=0\n", ""),
+            return_value=(0, run_evidence(output="Notice: Finished catalog run"), ""),
         )
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
@@ -486,7 +586,7 @@ class TestCmdHostRunPuppetOutput:
         mock_args_run_puppet.json = False
         mocker.patch(
             "fleetroll.commands.run_puppet.run_ssh",
-            return_value=(0, "verbose Puppet output\nEXIT=0\n", ""),
+            return_value=(0, run_evidence(output="verbose Puppet output"), ""),
         )
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
@@ -509,7 +609,7 @@ class TestCmdHostRunPuppetOutput:
 
         mocker.patch(
             "fleetroll.commands.run_puppet.run_ssh",
-            return_value=(0, "Notice: Finished catalog run\nEXIT=0\n", ""),
+            return_value=(0, run_evidence(output="Notice: Finished catalog run"), ""),
         )
         captured = []
         mocker.patch("builtins.print", side_effect=lambda *a, **kw: captured.append(str(a[0])))
@@ -531,7 +631,7 @@ class TestCmdHostRunPuppetExpandHostname:
         mock_args_run_puppet.json = False
 
         mock_run_ssh = mocker.patch(
-            "fleetroll.commands.run_puppet.run_ssh", return_value=(0, "EXIT=0\n", "")
+            "fleetroll.commands.run_puppet.run_ssh", return_value=(0, run_evidence(), "")
         )
         mocker.patch("fleetroll.commands.run_puppet.append_jsonl")
         mocker.patch("builtins.print")
@@ -548,7 +648,7 @@ class TestCmdHostRunPuppetExpandHostname:
         mock_args_run_puppet.json = False
 
         mock_run_ssh = mocker.patch(
-            "fleetroll.commands.run_puppet.run_ssh", return_value=(0, "EXIT=0\n", "")
+            "fleetroll.commands.run_puppet.run_ssh", return_value=(0, run_evidence(), "")
         )
         mocker.patch("fleetroll.commands.run_puppet.append_jsonl")
         mocker.patch("builtins.print")
@@ -623,7 +723,7 @@ class TestAnsiStrippedInOutput:
         mock_args_run_puppet.quiet = False
         mock_args_run_puppet.json = False
 
-        ansi_stdout = "\x1b[0;32mNotice:\x1b[0m Finished catalog\x1b[40G\nEXIT=0\n"
+        ansi_stdout = run_evidence(output="\x1b[0;32mNotice:\x1b[0m Finished catalog\x1b[40G")
         mocker.patch(
             "fleetroll.commands.run_puppet.run_ssh",
             return_value=(0, ansi_stdout, ""),
@@ -649,7 +749,7 @@ class TestAnsiStrippedInOutput:
         mock_args_run_puppet.hosts = ["host1.example.com", "host2.example.com"]
         mock_args_run_puppet.host_file = None
 
-        ansi_stdout = "PUPPET_BRANCH:\x1b[40Gbranch_name\nEXIT=0\n"
+        ansi_stdout = run_evidence(output="PUPPET_BRANCH:\x1b[40Gbranch_name")
         mocker.patch(
             "fleetroll.commands.run_puppet.run_ssh",
             return_value=(0, ansi_stdout, ""),

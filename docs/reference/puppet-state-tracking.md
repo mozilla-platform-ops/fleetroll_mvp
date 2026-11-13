@@ -70,3 +70,53 @@ checksums and require a successful run. Expected branch revision and Taskcluster
 activity are separate evidence; the monitor and rollout report apply different
 checks. See [rollout verification](../rollout-health-verification.md),
 [monitor JSON](monitor-json.md), and [rollout report](../rollout-report.md).
+
+## Operator-triggered run results
+
+`fleetroll host run-puppet HOST --confirm` captures metadata immediately before
+and after invoking the remote wrapper. The Linux wrapper converts both Puppet
+exit 0 and exit 2 into wrapper exit 0, so wrapper success alone cannot distinguish
+"no changes" from "changes applied". Fleetroll reads the detailed result from
+new metadata rather than the wrapper's exit status or the local observation DB.
+`--no-audit` skips the subsequent gather, but does not skip this result capture.
+
+The metadata must change, use schema v1, have consistent typed `success` and
+`exit_code` fields, and include a timezone-aware completion timestamp and a finite,
+nonnegative duration. Completion must fall within the remote invocation window;
+completion minus duration must not predate its start, allowing one second for
+whole-second producer timing. Missing, unreadable, unchanged, malformed,
+unsupported, or out-of-window metadata leaves the Puppet outcome unknown.
+
+JSON results and audit records distinguish these `observed` fields:
+
+| Field | Meaning |
+| --- | --- |
+| `wrapper_exit` | Wrapper exit code, independent of Puppet's code; null if unavailable |
+| `puppet_exit` | Validated metadata exit code; null without usable evidence |
+| `puppet_outcome` | `unchanged` (0), `changed` (2), `failed` (other codes), or `unknown` |
+| `changes_applied` | False for codes 0/4, true for 2/6 (including partial failure); null otherwise |
+| `outcome_reason` | Why evidence is unknown; null for a known Puppet result |
+| `outcome_source` | `run_window_metadata_v1` for usable metadata; null otherwise |
+| `puppet_state_ts` | Original metadata completion timestamp; null without usable evidence |
+| `run_started_epoch`, `run_finished_epoch` | Remote-clock bounds around wrapper execution; null if unavailable |
+| `duration_s` | Local elapsed SSH execution time, separate from Puppet metadata duration |
+
+Top-level `ssh_rc` remains the outer SSH/remote collection status. `ok=true`
+requires successful SSH collection, wrapper exit 0, and known Puppet success.
+A wrapper failure can coexist with metadata reporting changes or an unchanged
+apply: later wrapper steps may fail. A wrapper success can coexist with failed
+Puppet metadata; it does not override that failure. Unknown outcomes produce
+`ok=false` and a nonzero command exit. Batch summaries count unknown outcomes
+separately from failed executions with known Puppet outcomes.
+
+Compatibility correction: `puppet_exit` previously contained the wrapper code,
+and `changes_applied=false` could mean there was no evidence. Consumers must now
+handle null and use `puppet_outcome`, `wrapper_exit`, and top-level `ok` separately.
+Legacy `EXIT=N` output alone is insufficient evidence and yields unknown.
+
+Schema v1 has no invocation ID. These checks bound the evidence to the run window
+but cannot identify a competing Puppet run wholly contained within that window.
+Avoid concurrent Puppet invocations on a host. This evidence is for operator
+reporting, not exclusive execution proof or authorization for automatic recovery.
+The command requests `FLEETROLL_SINGLE_RUN=1`; whether a remote wrapper honors
+that request is a separate capability and is not established by metadata capture.

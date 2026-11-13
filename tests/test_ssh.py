@@ -648,7 +648,7 @@ class TestBackupCreatedMarkerInUnsetScript:
 
 
 class TestRemoteRunPuppetScript:
-    """remote_run_puppet_script requests one attempt and emits an exit marker."""
+    """The script captures wrapper status and bounded before/after metadata."""
 
     def test_invokes_run_puppet_with_sudo(self):
         script = remote_run_puppet_script()
@@ -660,4 +660,7 @@ class TestRemoteRunPuppetScript:
 
     def test_emits_exit_marker(self):
         script = remote_run_puppet_script()
-        assert "echo EXIT=$?" in script
+        assert "wrapper_exit=$?" in script
+        assert "FLEETROLL_PUPPET_WRAPPER_EXIT=%s" in script
+        assert "FLEETROLL_PUPPET_BEFORE=%s" in script
+        assert "FLEETROLL_PUPPET_AFTER=%s" in script

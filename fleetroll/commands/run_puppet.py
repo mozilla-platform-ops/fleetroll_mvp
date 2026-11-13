@@ -18,6 +18,7 @@ import click
 from ..audit import append_jsonl
 from ..constants import DRY_RUN_PREVIEW_LIMIT
 from ..exceptions import CommandFailureError
+from ..puppet_outcome import parse_run_observation, strip_run_markers, unknown_puppet_observation
 from ..ssh import build_ssh_options, is_windows_host, remote_run_puppet_script, run_ssh
 from ..utils import (
     default_audit_log_path,
@@ -32,9 +33,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("fleetroll")
 
-_PUPPET_SUCCESS_EXITS = frozenset({0, 2})
-
-_EXIT_RE = re.compile(r"(?m)^EXIT=(\d+)")
 _ANSI_ESCAPE_RE = re.compile(
     # CSI: ESC [ params? intermediates? final  — final byte set excludes
     # 'm' (109) so SGR colors survive; everything else (cursor moves,
@@ -52,24 +50,13 @@ _ANSI_ESCAPE_RE = re.compile(
 
 
 def _strip_exit_marker(stdout: str) -> str:
-    """Remove the internal EXIT=N sentinel line from puppet output."""
-    return _EXIT_RE.sub("", stdout).strip()
+    """Remove internal evidence markers from puppet output."""
+    return strip_run_markers(stdout)
 
 
 def _strip_ansi(s: str) -> str:
     """Strip cursor-control ANSI escapes; preserve SGR color codes (...m)."""
     return _ANSI_ESCAPE_RE.sub("", s)
-
-
-def _parse_puppet_exit(stdout: str) -> int | None:
-    """Extract puppet exit code from the trailing EXIT=N marker."""
-    m = _EXIT_RE.search(stdout)
-    if m:
-        try:
-            return int(m.group(1))
-        except ValueError:
-            return None
-    return None
 
 
 def run_puppet_for_host(
@@ -106,8 +93,7 @@ def run_puppet_for_host(
             "stderr": "",
             "error": f"{type(exc).__name__}: {exc}",
             "observed": {
-                "puppet_exit": None,
-                "changes_applied": False,
+                **unknown_puppet_observation(reason="ssh_exception"),
                 "duration_s": duration_s,
             },
             "parameters": {
@@ -117,8 +103,12 @@ def run_puppet_for_host(
         out = ""
     else:
         duration_s = round(time.monotonic() - start, 2)
-        puppet_exit = _parse_puppet_exit(out)
-        ok = rc == 0 and puppet_exit in _PUPPET_SUCCESS_EXITS
+        observed = parse_run_observation(out)
+        ok = (
+            rc == 0
+            and observed["wrapper_exit"] == 0
+            and observed["puppet_outcome"] in {"unchanged", "changed"}
+        )
         result = {
             "ts": utc_now_iso(),
             "actor": actor,
@@ -128,8 +118,7 @@ def run_puppet_for_host(
             "ssh_rc": rc,
             "stderr": err.strip(),
             "observed": {
-                "puppet_exit": puppet_exit,
-                "changes_applied": (puppet_exit == 2),
+                **observed,
                 "duration_s": duration_s,
             },
             "parameters": {
@@ -156,11 +145,20 @@ def format_puppet_line(result: dict[str, Any]) -> str:
             return f"OK {host} changes applied ({duration_s:.1f}s)"
         return f"OK {host} no changes ({duration_s:.1f}s)"
     puppet_exit = result.get("observed", {}).get("puppet_exit")
-    error = result.get("error") or result.get("stderr") or "unknown_error"
+    observed = result.get("observed", {})
+    error = (
+        result.get("error")
+        or result.get("stderr")
+        or observed.get("outcome_reason")
+        or "execution_failed"
+    )
     rc = result.get("ssh_rc")
     rc_str = f" rc={rc}" if rc is not None else ""
     pe_str = f" puppet_exit={puppet_exit}" if puppet_exit is not None else ""
-    return f"FAIL {host}{rc_str}{pe_str} {error}"
+    wrapper_exit = observed.get("wrapper_exit")
+    wrapper_str = f" wrapper_exit={wrapper_exit}" if wrapper_exit is not None else ""
+    outcome = observed.get("puppet_outcome", "unknown")
+    return f"FAIL {host}{rc_str}{wrapper_str}{pe_str} puppet_outcome={outcome} {error}"
 
 
 def _print_dry_run(
@@ -273,8 +271,7 @@ def _run_puppet_batch(
                         "stderr": "",
                         "error": str(e),
                         "observed": {
-                            "puppet_exit": None,
-                            "changes_applied": False,
+                            **unknown_puppet_observation(reason="execution_exception"),
                             "duration_s": 0.0,
                         },
                         "parameters": {
@@ -350,7 +347,7 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
             print(format_puppet_line(result))
             if not result["ok"]:
                 print(
-                    f"[{hosts[0]}] puppet FAILED (rc={rc}, "
+                    f"[{hosts[0]}] Puppet execution not verified successful (rc={rc}, "
                     f"puppet_exit={result['observed']['puppet_exit']}). "
                     f"stderr:\n{result.get('stderr', '')}",
                     file=sys.stderr,
@@ -374,13 +371,16 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
         for result in sorted(results, key=lambda r: r["host"]):
             print(format_puppet_line(result))
         total = len(results)
-        failed = sum(1 for r in results if not r.get("ok"))
-        successful = total - failed
+        successful = sum(1 for r in results if r.get("ok"))
+        unknown = sum(
+            1 for r in results if not r.get("ok") and r["observed"]["puppet_outcome"] == "unknown"
+        )
+        failed = total - successful - unknown
         skipped = len(windows_hosts)
         duration_s = time.monotonic() - start_time
         print(
             f"\nSummary: total={total} successful={successful} failed={failed} "
-            f"skipped={skipped} duration={duration_s:.1f}s"
+            f"unknown={unknown} skipped={skipped} duration={duration_s:.1f}s"
         )
         if windows_hosts:
             print(f"Skipped (Windows): {', '.join(windows_hosts)}")
