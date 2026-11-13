@@ -67,10 +67,13 @@ Task names are cached separately from host evidence in a SQLite sidecar beside
 the selected `--db` (normally `~/.fleetroll/fleetroll.task-names.sqlite3`). The
 cache stores only task ID, service root URL, name, and fetch timestamp. Entries
 expire after 30 days and retention is capped at 50,000 entries across service
-roots. Failed lookups are retried on the next comparison. Cache failures warn
+roots. The cache is shared with `rollout report`, including names of failed tasks.
+Each uncached task ID requires a separate task-definition request; concurrent
+requests improve elapsed time, while cache reuse reduces request counts.
+Failed lookups are retried on the next invocation. Cache failures warn
 and fall back to live lookups; they do not discard comparison results. Use
-`--no-task-name-cache` to bypass cache reads and writes. Names already fetched
-for failed/exception tasks in the current report are reused.
+`--no-task-name-cache` to bypass cache reads and writes. Task IDs are deduplicated
+across both pools and all returned runs before fetching names.
 
 Task-name requests use `--metadata-workers` (1–20, default 12), independently of
 `--workers` for host checks. Progress shows the completed/total network lookups,

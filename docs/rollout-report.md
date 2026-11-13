@@ -42,6 +42,8 @@ consumers of their deployment-only JSON must migrate to the versioned summary.
 | `--min-finished` | 20 finished tasks per comparison side and for independent cohort health |
 | `--min-coverage` | 80% task attribution warning threshold; does not veto comparison. 0 suppresses threshold warnings for measured coverage |
 | `--min-host-coverage` | 80% successfully queried hosts; applies within each comparison's role/pool/group |
+| `--metadata-workers` | 12 concurrent task-name requests (1–20), independent of `--workers` |
+| `--no-task-name-cache` | Fetch names without reading or writing the shared task-name cache |
 | `--details` | Revisions, outcomes, queue timestamps/errors, membership, failure patterns, per-host evidence |
 | `--verbose` / `-v` | Details plus individual tasks, unknown history ranges, and individual diagnostics |
 
@@ -98,6 +100,25 @@ are shown separately. Unknown configurations never enter cohort rates or count
 as passes. Rates use completed + failed + exception as denominator; pending,
 running, and unknown outcomes are not successful work. Task-name patterns are
 observations, not root-cause classifications.
+
+## Task names
+
+In-window task rows include workload names for successes as well as failures.
+Each previously unseen task ID requires a separate Queue task-definition request;
+requests run concurrently and repeated runs of one task share one lookup. Normal
+`gather tc` does not collect names and makes no additional requests for this feature.
+
+Names share the `rollout compare-pools` SQLite sidecar beside `--db` (normally
+`~/.fleetroll/fleetroll.task-names.sqlite3`). Entries expire after 30 days; retention
+is capped at 50,000 names across service roots. Both commands reuse cached names,
+including names of failed tasks, while outcomes and worker evidence refresh live.
+`--no-task-name-cache` bypasses reads and writes. Cache errors warn and fall back
+to live lookups.
+
+Name lookup failures leave `name: null` and set `name_error`; they warn without
+changing task outcomes, attribution, or the report exit status. Failed lookups
+are retried on the next invocation. Tasks with unresolved query/identity errors,
+outside the report window, or in known out-of-scope configurations are not enriched.
 
 ## Evidence and selection
 
@@ -162,12 +183,13 @@ is pending; running tasks can still finish. Details/JSON retain fetch timestamps
 
 Top-level fields are `schema_version`, `configuration_history`,
 `fleet_override_status`, `queue_counts`, `window`, `selection`, `hosts`, `summary`,
-`comparisons`, `errors`, and `warnings`. Additive fields below retain version 1.
+`comparisons`, `errors`, `warnings`, and `task_name_lookups`. Additive fields below retain version 1.
 
 | Area | Fields and semantics |
 | --- | --- |
 | Selection | Role or provisioner/pool selectors; null for explicit hosts. Per-host `out_of_scope_history` retains omitted `intervals`, `jobs`, and verified current `configuration`; ordinary fields serve the selected assessment. |
 | Host evidence | Jobs and exclusion reasons; intervals with raw/compact sources, maximum polling gaps, cutoffs; `configuration_evidence` with pinned provenance/reasons; `configuration_gaps` for unknown ranges. Gaps describe the full timeline, not known out-of-scope work. |
+| Task metadata | Job `name` and `name_error` are nullable strings, separate from `query_error`. `task_name_lookups` counts unique task IDs: `cached`, `reused` (names already present in rows), `fetched`, `failed`, and cache `warnings`. |
 | Coverage | Fetched, selected in-window, classified, excluded, unresolved tasks; requested/queried hosts and observation freshness. `out_of_scope` counts known omitted in-window work; `outside_window` counts retrieved work beyond time bounds. |
 | Summary | Cohorts, applied revisions, outcome totals/rates, `evidence` sample/attribution fields. `all_observed_outcomes` includes all retrieved in-window work; `out_of_scope_outcomes` is known omitted work; `unattributed_outcomes` is unknown configuration only. |
 | Cohort health | `health.status`, `sample_status`, `minimum_finished`, `basis: "verified tasks in report window"`, `warnings` |

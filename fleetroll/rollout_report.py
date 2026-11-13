@@ -44,6 +44,7 @@ from .rollout_history import (
     verified_configuration,
     worker_identity,
 )
+from .task_name_cache import enrich_task_names
 from .taskcluster import create_tc_clients, load_tc_credentials
 from .utils import default_audit_log_path, is_host_file, parse_host_list, parse_worker_type
 
@@ -300,6 +301,7 @@ def fetch_task_run(
         "started": None,
         "resolved": None,
         "name": None,
+        "name_error": None,
         "query_error": None,
     }
     try:
@@ -322,9 +324,6 @@ def fetch_task_run(
             resolved=run.get("resolved"),
             outcome=outcome if outcome in OUTCOMES else "unknown",
         )
-        if job["outcome"] in {"failed", "exception", "unknown"}:
-            task = clients.queue.task(task_id)
-            job["name"] = (task.get("metadata") or {}).get("name")
     except Exception as exc:
         job["query_error"] = str(exc)
     return job
@@ -1802,6 +1801,19 @@ def add_report_options(parser):
         action="store_true",
         help="Include all details plus individual task results and configuration gaps.",
     )
+    parser.add_argument(
+        "--metadata-workers",
+        type=int,
+        choices=range(1, 21),
+        default=12,
+        metavar="1-20",
+        help="Concurrent task-name lookups (default 12); independent of --workers.",
+    )
+    parser.add_argument(
+        "--no-task-name-cache",
+        action="store_true",
+        help="Fetch task names without reading or writing the persistent metadata cache.",
+    )
     parser.add_argument("--json", action="store_true")
 
 
@@ -1870,7 +1882,29 @@ def validate_report_options(args, *, parser):
     return args
 
 
-def build_report(args, *, clients=None, progress=None) -> dict[str, Any]:
+def refresh_report_summary(result, *, args):
+    """Rebuild name-dependent summaries after optional deferred enrichment."""
+    hosts = result["hosts"]
+    summary = summarize(hosts, min_finished=args.min_finished)
+    summary["evidence"] = evidence_status(
+        summary,
+        min_finished=args.min_finished,
+        min_coverage=args.min_coverage / 100,
+        min_host_coverage=args.min_host_coverage / 100,
+    )
+    result["summary"] = summary
+    result["comparisons"] = compare_cohorts(
+        hosts,
+        summary=summary,
+        since=args.since,
+        until=args.until,
+        min_finished=args.min_finished,
+        min_coverage=args.min_coverage / 100,
+        min_host_coverage=args.min_host_coverage / 100,
+    )
+
+
+def build_report(args, *, clients=None, progress=None, include_task_names=True) -> dict[str, Any]:
     """Collect a report without rendering; callers own presentation and exit policy."""
     overrides_dir = args.audit_log.parent / OVERRIDES_DIR_NAME
     history_metadata: dict[str, Any] = {}
@@ -1956,6 +1990,23 @@ def build_report(args, *, clients=None, progress=None) -> dict[str, Any]:
         )
         for host in hosts
     ]
+    metadata = None
+    if include_task_names:
+        metadata = enrich_task_names(
+            hosts,
+            clients=clients,
+            workers=args.metadata_workers,
+            progress=progress,
+            cache_path=None
+            if args.no_task_name_cache
+            else args.db.with_suffix(".task-names.sqlite3"),
+        )
+        warnings.extend(metadata["warnings"])
+        if metadata["failed"]:
+            warnings.append(
+                f"{metadata['failed']} task metadata name queries unavailable; "
+                "outcomes and attribution retained."
+            )
     for host in hosts:
         if host["error"]:
             errors.append(f"{host['host']}: {host['error']}")
@@ -1963,19 +2014,6 @@ def build_report(args, *, clients=None, progress=None) -> dict[str, Any]:
             if job.get("query_error"):
                 errors.append(f"{host['host']}: task {job['task_id']}: {job['query_error']}")
         warnings.extend(f"{host['host']}: {warning}" for warning in host["warnings"])
-    summary = summarize(hosts, min_finished=args.min_finished)
-    summary["evidence"] = evidence_status(
-        summary,
-        min_finished=args.min_finished,
-        min_coverage=args.min_coverage / 100,
-        min_host_coverage=args.min_host_coverage / 100,
-    )
-    if summary["truncated_hosts"]:
-        warnings.append(
-            f"{len(summary['truncated_hosts'])} host(s) have a full 20-task window; earlier jobs may be omitted."
-        )
-    if summary["coverage"]["excluded"]:
-        warnings.append("Excluded jobs are unknown configuration evidence, not successful work.")
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "selection": {
@@ -1993,19 +2031,19 @@ def build_report(args, *, clients=None, progress=None) -> dict[str, Any]:
         ),
         "window": {"since": iso(args.since), "until": iso(args.until)},
         "hosts": hosts,
-        "summary": summary,
-        "comparisons": compare_cohorts(
-            hosts,
-            summary=summary,
-            since=args.since,
-            until=args.until,
-            min_finished=args.min_finished,
-            min_coverage=args.min_coverage / 100,
-            min_host_coverage=args.min_host_coverage / 100,
-        ),
         "errors": errors,
         "warnings": warnings,
     }
+    refresh_report_summary(report, args=args)
+    summary = report["summary"]
+    if summary["truncated_hosts"]:
+        warnings.append(
+            f"{len(summary['truncated_hosts'])} host(s) have a full 20-task window; earlier jobs may be omitted."
+        )
+    if summary["coverage"]["excluded"]:
+        warnings.append("Excluded jobs are unknown configuration evidence, not successful work.")
+    if metadata is not None:
+        report["task_name_lookups"] = metadata
     successful = {
         host: entry
         for host, entries in records.items()

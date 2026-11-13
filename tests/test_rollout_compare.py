@@ -403,14 +403,56 @@ def test_warm_cache_skips_metadata_but_refreshes_outcomes_and_fetches_new_tasks(
     assert updated["task_name_lookups"]["fetched"] == 1
 
 
-def test_reuses_report_metadata_for_failed_jobs(env, capsys):
+def test_failed_job_names_are_cached_too(env, capsys):
     pools(env)
     task(env, "control", state="failed")
     task(env, "canary", pool="candidate", state="exception")
     _, result = invoke(env, capsys)
     assert env.clients.queue.task.call_count == 2
-    assert result["task_name_lookups"]["reused"] == 2
-    assert result["task_name_lookups"]["fetched"] == 0
+    assert result["task_name_lookups"]["fetched"] == 2
+    assert all(
+        side["summary"]["failure_patterns"][0]["name"] == "test-benchmark"
+        for side in result["reports"].values()
+    )
+    env.clients.queue.task.reset_mock()
+    _, warm = invoke(env, capsys)
+    env.clients.queue.task.assert_not_called()
+    assert warm["task_name_lookups"]["cached"] == 2
+
+
+@pytest.mark.parametrize("report_first", [True, False])
+def test_report_and_comparison_share_name_cache(env, capsys, report_first):
+    pools(env)
+    task(env, "control", state="failed")
+    task(env, "canary", pool="candidate")
+
+    def run_report():
+        assert (
+            report.main(
+                [
+                    "control",
+                    "canary",
+                    "--db",
+                    str(env.db),
+                    "--audit-log",
+                    str(env.audit),
+                    "--since",
+                    SINCE.isoformat(),
+                    "--until",
+                    UNTIL.isoformat(),
+                    "--json",
+                ]
+            )
+            == 1
+        )
+        return json.loads(capsys.readouterr().out)
+
+    first = run_report if report_first else lambda: invoke(env, capsys)[1]
+    second = (lambda: invoke(env, capsys)[1]) if report_first else run_report
+    assert first()["task_name_lookups"]["fetched"] == 2
+    env.clients.queue.task.reset_mock()
+    assert second()["task_name_lookups"]["cached"] == 2
+    env.clients.queue.task.assert_not_called()
 
 
 def test_failed_name_lookups_are_retried_and_not_cached(env, capsys):

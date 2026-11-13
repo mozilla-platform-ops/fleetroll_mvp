@@ -157,6 +157,75 @@ def read(capsys):
     return json.loads(capsys.readouterr().out)
 
 
+def test_names_retained_for_successes_and_failures_and_cached_across_reports(env, capsys):
+    seed(env, "master")
+    success = task(env, "master", name="successful workload")
+    task(env, "master", state="failed", name="failing workload")
+    assert invoke(env, "master") == 1
+    cold = read(capsys)
+    assert {job["name"] for job in cold["hosts"][0]["jobs"]} == {
+        "successful workload",
+        "failing workload",
+    }
+    assert cold["task_name_lookups"]["fetched"] == 2
+    env.clients.queue.task.reset_mock()
+    env.clients.queue.status.reset_mock()
+    env.tasks[success][1]["status"]["runs"][0]["state"] = "running"
+    assert invoke(env, "master") == 1
+    warm = read(capsys)
+    env.clients.queue.task.assert_not_called()
+    assert env.clients.queue.status.call_count == 2
+    assert warm["task_name_lookups"]["cached"] == 2
+    assert warm["summary"]["cohorts"][0]["outcomes"]["running"] == 1
+    new = task(env, "master", name="new workload")
+    assert invoke(env, "master") == 1
+    assert read(capsys)["task_name_lookups"]["fetched"] == 1
+    env.clients.queue.task.assert_called_once_with(new)
+
+
+@pytest.mark.parametrize("state", ["completed", "failed", "exception", "unknown"])
+def test_name_failure_keeps_outcomes_and_attribution_and_is_retried(env, capsys, state):
+    seed(env, "master")
+    task(env, "master", state=state)
+    fetch = env.clients.queue.task.side_effect
+    env.clients.queue.task.side_effect = RuntimeError("metadata unavailable")
+    assert invoke(env, "master") == int(state != "completed")
+    failed = read(capsys)
+    job = failed["hosts"][0]["jobs"][0]
+    assert job["name"] is None
+    assert job["name_error"] == "metadata unavailable"
+    assert job["query_error"] is None
+    assert job["configuration"] is not None
+    assert failed["summary"]["coverage"]["classified"] == 1
+    assert failed["summary"]["cohorts"][0]["outcomes"][state] == 1
+    assert failed["task_name_lookups"]["failed"] == 1
+    assert not failed["errors"]
+    assert any(
+        "task metadata name queries unavailable" in warning for warning in failed["warnings"]
+    )
+    env.clients.queue.task.side_effect = fetch
+    assert invoke(env, "master") == int(state != "completed")
+    recovered = read(capsys)
+    assert recovered["task_name_lookups"]["cached"] == 0
+    assert recovered["task_name_lookups"]["fetched"] == 1
+    assert recovered["hosts"][0]["jobs"][0]["name_error"] is None
+
+
+def test_report_cache_bypass_and_cache_errors_preserve_names(env, capsys):
+    seed(env, "master")
+    task(env, "master")
+    path = env.db.with_suffix(".task-names.sqlite3")
+    assert invoke(env, "master", "--no-task-name-cache") == 0
+    bypassed = read(capsys)
+    assert bypassed["task_name_lookups"]["fetched"] == 1
+    assert not path.exists()
+    path.write_text("invalid SQLite file")
+    assert invoke(env, "master") == 0
+    result = read(capsys)
+    assert result["hosts"][0]["jobs"][0]["name"] == "test-benchmark"
+    assert any("Task-name cache read unavailable" in warning for warning in result["warnings"])
+
+
 def test_live_queue_counts_separate_pools_and_preserve_report_on_failure(env, capsys):
     seed(env, "master")
     seed(env, "second")
