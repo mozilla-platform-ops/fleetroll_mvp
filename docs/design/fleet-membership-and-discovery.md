@@ -4,6 +4,26 @@ Status: proposal, with the Phase 1 host-list cleanup implemented. The inventory
 and coverage features below remain planned, not a command or API contract.
 Implementation tasks and completion status live in Beads.
 
+## Planning checkpoint: 2026-11-13
+
+The maintainer approved pausing the unfinished baseline report at the identity
+design boundary. Keep the existing `mvp-xs2c` epic and the completed list cleanup.
+
+| Bead | Current role |
+| --- | --- |
+| `mvp-xs2c.1` | Deferred, partially complete: list cleanup shipped; coverage/report work waits for the identity contract in `.2`. |
+| `mvp-xs2c.2` | Next open design task: authority, node/hardware/interface/network identity, lifecycle, schema and import/association contracts. |
+| `mvp-xs2c.6` | Shared storage, migrations and persistence APIs after the design; source parsing and endpoint resolution have separate children. |
+| `mvp-xs2c.9` | Import the approved inventory source/export into node, hardware and interface records using shared storage. |
+| `mvp-xs2c.10` | Associate recorded endpoints with inventory nodes, preserving name history, timestamps, network scope and full worker identities. |
+
+Storage depends on the design; import depends on storage; endpoint association
+depends on imported inventory. Existing discovery (`.3`) and selection (`.4`)
+reuse the endpoint association rather than introducing parallel identity models.
+The baseline report can be rescoped after `.2`; do not assume it must implement
+the entire inventory backend, or add further prerequisites without that review.
+This checkpoint does not claim the design contract or its implementation is done.
+
 ## The problem
 
 Fleetroll has a fleet discovery and membership problem: today, the host list
@@ -38,9 +58,12 @@ authoritative inventory. On 2026-11-13, the maintainer identified the Google
 Sheet **Moonshot Master Inventory** as the source of `all_moonshots.list`.
 The supplied export has 315 MDC_1 rows, while the local baseline has 280 names;
 30 same-numbered rows use Windows rather than Linux hostnames. Population
-inclusion, hostname/physical-identity reconciliation, source revision and the
-update procedure still need to be established before claiming equivalence or
-complete coverage. See the [source reconciliation findings](../reference/moonshot-inventory.md).
+inclusion was subsequently confirmed: seven racked chassis contain 315 nodes,
+and all 315 belong in coverage. The numeric `ms-NNN` identifier is stable across
+imaging; IT changes Windows-to-Linux endpoint names in its DHCP/DNS database.
+Source revision, projection/update procedure, and current endpoint reconciliation
+still need to be established before claiming equivalent coverage. See the
+[source reconciliation findings](../reference/moonshot-inventory.md).
 Other platforms' authority is outside this Moonshot milestone.
 
 "Accepts our SSH key" is a useful connectivity check, but a poor membership rule:
@@ -56,10 +79,18 @@ and may include unrelated machines.
 | SSH observations | Actual OS, role, and configuration | Unreachable hosts still belong to the fleet |
 
 Hostname ranges are useful as discovery seeds, especially for a bounded Moonshot
-estate. They should not determine OS pool membership. A hostname should retain
-its identity while its OS and pool change. The identity model must also account
-for hostname reuse or hardware replacement rather than silently merging their
-histories.
+estate. They should not determine OS pool membership. The inventory node retains
+its identity while OS, pool and IT-managed endpoint names can change. The design
+must also account for hostname reuse or hardware replacement rather than silently
+merging their histories.
+
+The model needs distinct layers: logical node; installed hardware instance and
+location history; interfaces and MACs; network-scoped IP and DHCP/DNS assignments;
+and source-timestamped observations. One node can have multiple interfaces and
+historical endpoints without becoming multiple inventory members. A MAC or IP is
+not a permanent primary key: define network scope, effective time, replacement,
+reuse and ambiguity in `.2`. Inventory annotations, IT network assignments and
+Fleetroll observations are separate claims with their own provenance.
 
 ## Separate membership, intent, and evidence
 
@@ -126,8 +157,14 @@ list location and workstream, not an OS-based hardware membership rule. Moonshot
 nodes being imaged from Windows to Linux or from 18.04 to 24.04 must remain
 accounted for while unreachable or carrying old observations. Separate non-Moonshot
 Mac/Windows inventories remain out of scope. The 315-row source export and
-280-name baseline have unresolved scope/hostname differences; preserve the
-current lists until those inclusion and identity rules are confirmed.
+280-name baseline differ: all 315 physical nodes are confirmed in scope, while
+the 30 Windows/Linux hostname pairs represent the same numeric nodes. Count each
+`ms-NNN` once while retaining source hostname and per-endpoint observation times.
+The prefix change requires IT DHCP/DNS work; imaging does not automatically
+create a valid new endpoint. Linux 18.04-to-24.04 imaging retains the Linux name.
+Do not manufacture collection/write targets from the expected target OS or merge
+old TC registrations into current worker identity. Keep the 315-node physical
+coverage scope separate from current endpoint selection.
 
 Keep only `all_moonshots.list` and the generated `all.list` in the Linux list
 directory. Remove OS, half, canary, and batch lists; select subsets through
@@ -145,8 +182,10 @@ in `mvp-xs2c.8`: store separate string fields for OS ID and version alongside
 names. Missing values remain unknown. Version filtering requires collection and
 filter-field support before these views can use it.
 
-The host-list cleanup ships first; the coverage command/interface is deferred for
-review. The remaining Phase 1 work is a CLI/JSON baseline coverage report with
+The host-list cleanup has shipped. The remaining work in `mvp-xs2c.1` is deferred
+behind `mvp-xs2c.2`, rather than closed as complete. The coverage command/interface
+must be reviewed against that identity contract before implementation resumes.
+The remaining Phase 1 goal is a CLI/JSON baseline coverage report with
 counts by recorded OS/pool/role, evidence timestamps/age, and an explicit
 unobserved bucket. Distinguish fresh
 observations, stale-only historical identity, and no observations. A missing
@@ -181,8 +220,25 @@ This is a bounded design task; it does not implement storage or source adapters.
 
 Implement the authority and lifecycle contract from the preceding design task.
 Introduce records for membership, intended assignment, identity, and provenance
-separate from host observations. Import existing inventories without treating
-successful SSH access as enrollment or failed access as retirement.
+separate from host observations. This bead owns shared schema/migrations and
+transactional persistence primitives. Source import is `mvp-xs2c.9`; recorded
+endpoint association is `mvp-xs2c.10`. Neither successful SSH access nor failed
+access establishes enrollment or retirement.
+
+### 2c. Import inventory sources and associate recorded endpoints
+
+`mvp-xs2c.9` implements the source adapter chosen by `.2`, using `.6` persistence.
+Preserve source rows, revisions/snapshot completeness, original values and times;
+validate all 315 nodes without dropping offline, imaging or out-of-service rows.
+Source formats and any future online synchronization follow the design rather
+than being assumed by the existence of a Google Sheet export.
+
+`mvp-xs2c.10` associates endpoints with logical nodes using the approved identity
+and evidence rules, preserving endpoint and worker histories. An IT-managed
+Windows-to-Linux rename keeps node identity; imaging alone does not prove a new
+DNS assignment. Unknown or contradictory mappings remain explicit and cannot
+authorize a collection/write target automatically. These tasks extend the shared
+migration fixtures before discovery, selection or coverage consumers adopt them.
 
 ### 3. Reconcile discovery sources
 

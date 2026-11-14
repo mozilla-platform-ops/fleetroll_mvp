@@ -48,11 +48,11 @@ not combined into this population.
 
 The 30 same-numbered pairs use different prefixes and DNS domains:
 `t-linux64-ms-NNN.test.releng.mdc1.mozilla.com` in the baseline versus
-`t-w1064-ms-NNN.wintest.releng.mdc1.mozilla.com` in the export. They are rename
-candidates, not verified aliases. The baseline contains no chassis/slot mapping
-with which to independently prove that identity. Do not probe or mutate both
-names as if they were two different physical nodes, or rewrite one to the other
-without an explicit reconciliation rule.
+`t-w1064-ms-NNN.wintest.releng.mdc1.mozilla.com` in the export. The maintainer
+subsequently confirmed that the numeric `ms-NNN` identifier is stable: `ms-241`
+is the same node under either prefix. Those 30 pairs therefore identify 30 nodes,
+not 60. This confirms physical identity, not which DNS endpoint currently exists
+or whether both names resolve. Retain endpoint history and source timestamps.
 
 The sheet's recorded **Current OS Installed** values are 154 Ubuntu 24.04,
 78 Ubuntu 18.04, and 83 blank. All 65 Windows-prefixed rows have a blank OS cell;
@@ -61,12 +61,57 @@ prefixes alone do not establish installed OS. Recorded states are 234 `prod`,
 not live observations. Neither `dev` nor `out-of-service` is an established rule
 for omitting hardware from coverage or declaring it retired.
 
-The sheet is therefore the identified inventory source, but equivalence of its
-315-row population and the current 280-name Fleetroll projection is unverified.
-The maintainer must confirm whether the 35 missing numeric slots are in scope or
-whether the baseline intentionally represents a subset. Until that is resolved,
-keep the existing lists unchanged and report any coverage explicitly against
-the supplied baseline, not as complete coverage of the Google inventory.
+The maintainer subsequently confirmed on 2026-11-13 that seven Moonshot chassis
+are currently racked, containing 315 nodes. The coverage population is therefore
+all 315 nodes, including offline and imaging nodes; the 280-name baseline is
+incomplete for that population. The 35 additional source slots must be accounted
+for. This confirms the population count, not current reachability, installed OS,
+or the freshness of each sheet row.
+
+Until the projection is updated and validated, label reports against the existing
+list as scoped to 280 nodes rather than complete coverage of the 315-node hardware
+inventory. Updating a coverage denominator is separate from selecting operational
+collection targets.
+
+### Confirmed identity and DHCP/DNS rules
+
+The maintainer confirmed on 2026-11-13:
+
+- The numeric Moonshot identifier stays fixed across imaging: `ms-241` remains
+  `ms-241`. Use `ms-NNN` as the logical node key within this Moonshot inventory.
+- Windows-to-Linux migration changes the hostname prefix from `t-w1064` to
+  `t-linux64`. The endpoint/domain change is performed with IT in its DHCP/DNS
+  database; imaging alone does not establish that the new endpoint is valid.
+- Linux 18.04-to-24.04 imaging keeps the existing Linux hostname.
+
+Fleetroll should reconcile recorded names to one inventory node while retaining
+each endpoint's evidence, original timestamps, and worker identity. It must not
+invent a new collection/write target from a planned OS, assume IT completed a
+rename, merge distinct Taskcluster registrations, or change DHCP/DNS itself.
+Use an explicitly recorded endpoint for collection; surface source/observation
+disagreements and unknown current naming. Chassis/cartridge/node-index remains
+useful physical provenance; hardware replacement and number reuse still need
+their separate lifecycle contract.
+
+### Recorded hostname evidence
+
+A subsequent read-only `host monitor --once --json` inspection compared all
+315 inventory names plus the 30 additional baseline Linux-name candidates
+(345 endpoint names, not 345 physical nodes). It made no live collection calls:
+
+- Linux names 241–270: all 30 latest host gathers failed, with observation times
+  from `2026-11-07T04:02:36+00:00` through `2026-11-07T04:02:46+00:00`.
+  No historical worker identity was available for those names.
+- Windows names 241–270: no recorded host observations or historical identities.
+- The 35 additional source Windows names: no recorded host observations or
+  historical identities.
+
+These records cannot establish current reachability, OS, or which endpoint IT
+currently registers. The stable numeric identity is confirmed separately by the
+maintainer, not inferred from these failed or absent observations. Do not infer
+65 additional machines by adding all Windows names to the existing 280-name list;
+30 are alternate names for nodes already represented. The physical membership
+gap is 35 nodes, and the coverage denominator is 315.
 
 ## Consequences for coverage work
 
@@ -78,9 +123,11 @@ the supplied baseline, not as complete coverage of the Google inventory.
   evidence at that attempt's time, not permanent offline status.
 - Preserve original timestamps for retained OS/role/worker identity. Old Windows
   registrations cannot establish that an imaged Linux node is still Windows.
-- Reconcile hostnames through explicitly reviewed physical identity rules.
-  Chassis/cartridge/node-index is a useful source key; hardware replacement and
-  hostname reuse still require lifecycle rules and history.
+- Reconcile the confirmed Windows/Linux hostname forms by stable `ms-NNN` identity
+  within this inventory, retaining endpoint-specific evidence. Do not use that
+  grouping as proof of current DNS registration or authorization to write to
+  another endpoint. Hardware replacement and hostname reuse still require
+  lifecycle rules and history.
 - Record source sheet/tab, export or sync time, and source revision/fingerprint
   when importing. Do not fabricate a source revision from a file modification
   time or treat a successful import as proof of source completeness.
@@ -88,7 +135,11 @@ the supplied baseline, not as complete coverage of the Google inventory.
   the export contains suffixes 616–630; a continuous 001–630 range would invent
   many inventory members not established by the source.
 
-The remaining baseline/report work is `mvp-xs2c.1`. Formal source ownership,
-identity, inclusion/lifecycle, and import contracts belong to `mvp-xs2c.2`;
-persistence follows in `mvp-xs2c.6`. See the
-[fleet membership design](../design/fleet-membership-and-discovery.md).
+At the maintainer-approved pause point, remaining baseline/report work in
+`mvp-xs2c.1` is deferred behind the identity/source design in `mvp-xs2c.2`.
+Completed list cleanup remains complete; the unfinished report is not closed.
+The next task is the design contract for logical node, hardware, interfaces,
+network assignments, lifecycle, provenance and uncertain associations.
+Shared persistence is `mvp-xs2c.6`, inventory source import is `mvp-xs2c.9`, and
+recorded endpoint association is `mvp-xs2c.10`, all under the existing epic.
+See the [fleet membership design](../design/fleet-membership-and-discovery.md).
