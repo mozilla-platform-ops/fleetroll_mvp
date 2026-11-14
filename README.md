@@ -498,6 +498,15 @@ uv run fleetroll host monitor configs/host-lists/linux/all.list
 # keys: q quit, up/down (or j/k) scroll, left/right horizontal scroll, PgUp/PgDn page
 ```
 
+`OVR_BCH` colors group overrides with identical literal settings, ignoring comments,
+blank lines, assignment order, spacing, and quote style. Every active variable
+(including repo, branch, mail, and worker type) and its export flag participates.
+Files containing shell expressions, repeated assignments, or unavailable local
+contents fall back to checksum-based colors. This is a conservative comparison
+without executing shell code. Displayed checksums and Puppet convergence checks
+continue to use the exact file bytes; matching colors do not establish application
+success. The finite palette can reuse colors for different configurations.
+
 Left/Right (or `h`/`l`) jump between columns, keeping HOST and its separator
 frozen. Columns wider than the viewport use overlapping sections so their full
 content is readable; this works the same for ROLE, NOTE, and every other column.

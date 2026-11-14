@@ -2,11 +2,41 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Iterable
 from os.path import commonprefix
 from pathlib import Path
 from typing import cast
+
+
+def override_configuration_key(content: str) -> str | None:
+    """Fingerprint complete literal settings, never executing shell content.
+
+    Ignore comments, assignment order, whitespace and literal quote style.
+    Preserve all variables and export flags. Unsupported shell syntax or repeated
+    assignments make equivalence unknown, rather than silently dropping content.
+    """
+    assignment = re.compile(
+        r"[ \t]*(?P<export>export[ \t]+)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)="
+        r"(?:'(?P<single>[^'\n]*)'|\"(?P<double>[^\"\n$`\\]*)\""
+        r"|(?P<bare>[^\s'\"$`\\;|&<>()~{}]*))"
+        r"(?:[ \t]+#[^\n]*)?[ \t]*"
+    )
+    settings: dict[str, tuple[str, bool]] = {}
+    for line in content.split("\n"):
+        if not line.strip(" \t") or line.lstrip(" \t").startswith("#"):
+            continue
+        match = assignment.fullmatch(line)
+        if match is None or match["name"] in settings:
+            return None
+        value = next(
+            match[name] for name in ("single", "double", "bare") if match[name] is not None
+        )
+        settings[match["name"]] = (value, match["export"] is not None)
+    canonical = json.dumps(settings, sort_keys=True, ensure_ascii=True)
+    return "settings:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _literal_assignment(content: str, *, name: str) -> str | None:
@@ -128,6 +158,26 @@ class ShaInfoCache:
         self.vault_cache: dict[str, str] = {}
         self.vault_checksums: set[str] = set()
         self.git_checksums: set[str] = set()
+        self.override_color_keys: dict[str, str] = {}
+
+    def get_override_color_key(self, sha256: str) -> str:
+        """Group proven equivalent files; retain checksum identity when unknown.
+
+        Cached override files are immutable and named by full or 12-character
+        checksums. Missing files are retried so a later gather can supply them.
+        """
+        if sha256 in self.override_color_keys:
+            return self.override_color_keys[sha256]
+        fallback = "checksum:" + sha256
+        for name in dict.fromkeys((sha256, sha256[:12])):
+            try:
+                content = (self.overrides_dir / name).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            key = override_configuration_key(content) or fallback
+            self.override_color_keys[sha256] = key
+            return key
+        return fallback
 
     def load_all(self) -> None:
         """Pre-populate caches by scanning directories."""

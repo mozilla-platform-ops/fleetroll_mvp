@@ -4,7 +4,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from fleetroll.commands.monitor.cache import ShaInfoCache
 from fleetroll.commands.monitor.curses_colors import CursesColors
+from fleetroll.commands.monitor.data import build_row_values
 from fleetroll.commands.monitor.row_renderer import RowRenderer
 from fleetroll.commands.monitor.uptime import format_uptime
 
@@ -16,6 +18,51 @@ def colors(monkeypatch):
     result.color_enabled = True
     result.curses_mod = SimpleNamespace(color_pair=lambda number: number * 100, A_DIM=1, A_BOLD=2)
     return result
+
+
+def test_equivalent_override_files_share_color_with_real_row_data(colors, tmp_path):
+    contents = {
+        "first": "PUPPET_BRANCH=topic\nPUPPET_REPO=https://example.com/repo.git\n",
+        "second": (
+            '# Another generated header\nPUPPET_REPO="https://example.com/repo.git"\n'
+            "PUPPET_BRANCH='topic' # same settings\n"
+        ),
+        "pool": (
+            "PUPPET_BRANCH=topic\nPUPPET_REPO=https://example.com/repo.git\n"
+            "WORKER_TYPE_OVERRIDE=other-pool\n"
+        ),
+        "repo": "PUPPET_BRANCH=topic\nPUPPET_REPO=https://example.com/other.git\n",
+        "dynamic": "PUPPET_BRANCH=topic\nPUPPET_REPO=$REPO\n",
+        "missing": None,
+    }
+    cache = ShaInfoCache(tmp_path, tmp_path / "vault")
+    records = {}
+    for name, content in contents.items():
+        checksum = f"{name}_test_checksum"
+        if content is not None:
+            (tmp_path / checksum[:12]).write_text(content)
+        records[name] = {
+            "ok": True,
+            "observed": {"override_present": True, "override_sha256": checksum},
+        }
+    cache.load_all()
+    # Failed refreshes must keep the same color as their displayed last success.
+    latest = {**records, "second": {"ok": False, "error": "SSH unavailable"}}
+    maps = colors.prepare_categorical_colors(
+        list(records),
+        latest=latest,
+        latest_ok=records,
+        tc_data={},
+        fqdn_suffix=None,
+        sha_cache=cache,
+        github_refs={},
+    )
+    attrs = {
+        name: maps["sha"][build_row_values(name, record, sha_cache=cache)["sha"]]
+        for name, record in records.items()
+    }
+    assert attrs["first"] == attrs["second"] != 0
+    assert len(set(attrs.values())) == len(contents) - 1
 
 
 @pytest.mark.parametrize(

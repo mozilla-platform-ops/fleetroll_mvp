@@ -7,8 +7,90 @@ import pytest
 from fleetroll.commands.monitor.cache import (
     ShaInfoCache,
     find_vault_symlink,
+    override_configuration_key,
     parse_override_file,
 )
+
+
+def test_override_configuration_ignores_only_presentation():
+    first = 'PUPPET_REPO="https://example.com/repo.git"\nPUPPET_BRANCH=topic\nEMPTY=\n'
+    second = (
+        "# Generated for another host\n\n"
+        "  EMPTY=''\nPUPPET_BRANCH='topic' # same branch\n"
+        "\tPUPPET_REPO=https://example.com/repo.git\n"
+    )
+    assert override_configuration_key(first) == override_configuration_key(second)
+    assert override_configuration_key(first) is not None
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        ("PUPPET_REPO=original", "PUPPET_REPO=other"),
+        ("PUPPET_BRANCH=topic", "PUPPET_BRANCH=other"),
+        ("", "WORKER_TYPE_OVERRIDE=other-pool"),
+        ("PUPPET_MAIL=original@example.com", "PUPPET_MAIL=other@example.com"),
+        ("", "UNKNOWN_SETTING=active"),
+        ("PUPPET_BRANCH=topic", "export PUPPET_BRANCH=topic"),
+        ("", "EMPTY="),
+    ],
+)
+def test_override_configuration_preserves_every_setting(first, second):
+    base = "COMMON_SETTING=same\n"
+    assert override_configuration_key(base + first + "\n") != override_configuration_key(
+        base + second + "\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "shell",
+    [
+        "PUPPET_BRANCH=$BRANCH",
+        'PUPPET_BRANCH="${BRANCH}"',
+        "PUPPET_BRANCH=$(touch should-never-exist)",
+        "PUPPET_BRANCH=`echo topic`",
+        "PUPPET_BRANCH=topic; echo other",
+        "source other-settings",
+        "if true; then\nPUPPET_BRANCH=topic\nfi",
+        "PUPPET_BRANCH=topic\nPUPPET_BRANCH=other",
+        "PUPPET_BRANCH=~user",
+        "PUPPET_BRANCH={a,b}",
+        "PUPPET_BRANCH='unterminated",
+        'PUPPET_BRANCH="escaped\\value"',
+    ],
+)
+def test_override_configuration_rejects_unknown_shell(shell):
+    assert override_configuration_key(shell) is None
+
+
+def test_override_configuration_distinguishes_literal_from_expansion():
+    assert override_configuration_key("VALUE='$BRANCH'\n") is not None
+    assert override_configuration_key('VALUE="$BRANCH"\n') is None
+    assert override_configuration_key("VALUE=topic#literal\n") == override_configuration_key(
+        "VALUE='topic#literal'\n"
+    )
+
+
+@pytest.mark.parametrize("full_filename", [True, False])
+def test_override_color_key_cache_and_later_gather(tmp_path, full_filename):
+    cache = ShaInfoCache(tmp_path, tmp_path / "vault")
+    checksum = "test_override_checksum_long"
+    assert cache.get_override_color_key(checksum) == "checksum:" + checksum
+    filename = checksum if full_filename else checksum[:12]
+    (tmp_path / filename).write_text("PUPPET_BRANCH=topic\n")
+    expected = override_configuration_key("PUPPET_BRANCH=topic\n")
+    assert cache.get_override_color_key(checksum) == expected
+    # Immutable checksum-named files are parsed only once.
+    (tmp_path / filename).unlink()
+    assert cache.get_override_color_key(checksum) == expected
+
+
+def test_override_color_key_falls_back_for_unreadable_or_dynamic_files(tmp_path):
+    cache = ShaInfoCache(tmp_path, tmp_path / "vault")
+    (tmp_path / "dynamic").write_text("PUPPET_BRANCH=$BRANCH\n")
+    (tmp_path / "invalid").write_bytes(b"\xff")
+    for checksum in ("dynamic", "invalid", "missing"):
+        assert cache.get_override_color_key(checksum) == "checksum:" + checksum
 
 
 @pytest.mark.parametrize("quote", ["", "'", '"'])

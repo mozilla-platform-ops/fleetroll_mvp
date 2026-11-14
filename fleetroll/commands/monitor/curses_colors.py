@@ -356,7 +356,7 @@ class CursesColors:
                 "role": {value: curses_attr, ...}
             }
         """
-        sha_values = set()
+        sha_keys: dict[str, str] = {}
         vlt_sha_values = set()
         role_values = set()
         for host in sorted_hosts:
@@ -375,7 +375,10 @@ class CursesColors:
             vlt_sha = values.get("vlt_sha", "")
             role = values.get("role", "")
             if sha and sha not in ("-", "?"):
-                sha_values.add(sha)
+                checksum = values.get("ovr_sha_full", "")
+                sha_keys[sha] = (
+                    sha_cache.get_override_color_key(checksum) if sha_cache and checksum else sha
+                )
             if vlt_sha and vlt_sha not in ("-", "?"):
                 vlt_sha_values.add(vlt_sha)
             if role and role not in ("-", "?", "missing"):
@@ -388,9 +391,10 @@ class CursesColors:
             self.curses_mod.color_pair(pair_num) for pair_num, _, _, _ in cat_combos
         ]
 
-        sha_colors = self.build_color_map(
-            sha_values, palette=categorical_palette, seed=0, overflow=False
+        sha_key_colors = self.build_color_map(
+            sha_keys.values(), palette=categorical_palette, seed=0, overflow=False
         )
+        sha_colors = {value: sha_key_colors.get(key, 0) for value, key in sha_keys.items()}
         vlt_sha_colors = self.build_color_map(
             vlt_sha_values, palette=categorical_palette, seed=1, overflow=False
         )
