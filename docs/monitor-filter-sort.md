@@ -143,6 +143,9 @@ collection every three minutes and the whole Linux baseline every ten minutes.
 
 ## Interactive monitor
 
+The same selectors also support [population override removal](override-removal.md),
+including optional saved plans and live full-checksum verification before removal.
+
 | Key | Action |
 | --- | --- |
 | `/` | Edit the current query |

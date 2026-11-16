@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from .override_removal import RemovalPlan
 
 
 @dataclass
@@ -122,6 +125,7 @@ class HostUnsetOverrideArgs:
     reason: str | None
     confirm: bool
     no_audit: bool = False
+    removal_plan: RemovalPlan | None = None
 
 
 @dataclass

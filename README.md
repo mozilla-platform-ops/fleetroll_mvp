@@ -609,6 +609,23 @@ uv run fleetroll override set --from-file ~/.fleetroll/overrides/0328af8c9d6f /t
 uv run fleetroll override unset /tmp/rollout-targets.list
 ```
 
+Remove an override population directly using a monitor query:
+
+```bash
+# Preview and save the exact selected hosts and deployed checksums.
+uv run fleetroll override unset configs/host-lists/linux/all.list \
+  --filter 'ovr_bch=my-test-branch' --save-plan /tmp/remove-overrides.json
+
+# Execute the reviewed population; live checksum mismatches are refused.
+uv run fleetroll override unset --from-plan /tmp/remove-overrides.json --confirm
+```
+
+Filters can also run directly with `--confirm`, reevaluating selection on each
+invocation. Saved plans freeze the preview. Evidence ages and failed gathers
+remain visible; removal does not establish Puppet convergence. See
+[population override removal](docs/override-removal.md) for freshness, JSON,
+partial failures, and concurrency limits.
+
 ### Operator hold
 
 `host hold` inspects or changes `/home/cltbld/operator_hold` on one Linux host.

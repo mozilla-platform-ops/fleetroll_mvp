@@ -711,8 +711,19 @@ def host_set_vault(
 
 
 @cli.command("host-unset-override")
-@click.argument("host", metavar="HOST_OR_FILE...", nargs=-1, required=True)
+@click.argument("host", metavar="[HOST_OR_FILE...]", nargs=-1)
 @common_options
+@gather_filter_options
+@click.option(
+    "--save-plan",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Save the population preview and exact checksums to a new JSON file (no overwrites).",
+)
+@click.option(
+    "--from-plan",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Use a saved population plan without reselecting; add --confirm to execute.",
+)
 @click.option(
     "--workers",
     type=int,
@@ -751,13 +762,40 @@ def host_unset_override(
     reason: str | None,
     confirm: bool,
     no_audit: bool,
+    filter_query: str | None,
+    filter_file: str | None,
+    save_plan: Path | None,
+    from_plan: Path | None,
 ):
     """Remove the override file from one or more hosts.
 
     HOST_OR_FILE can be one or more hostnames, user@hostname values, or a file
     containing hosts (one per line).
     """
-    hosts, host_file = resolve_host_args(host)
+    from .override_removal import build_removal_plan, load_removal_plan, save_removal_plan
+    from .selection import load_filter, select_hosts
+
+    if from_plan and (host or filter_query is not None or filter_file is not None or save_plan):
+        raise click.UsageError("--from-plan cannot be combined with hosts, filters, or --save-plan")
+    if save_plan and confirm:
+        raise click.UsageError("--save-plan previews only; execute with --from-plan FILE --confirm")
+    if workers < 1:
+        raise click.UsageError("--workers must be at least 1")
+    plan = None
+    if from_plan:
+        plan = load_removal_plan(from_plan)
+    else:
+        query = load_filter(expression=filter_query, path=filter_file)
+        if query is not None:
+            plan = build_removal_plan(select_hosts(host, query=query), query=query)
+        elif save_plan:
+            raise click.UsageError("--save-plan requires --filter or --filter-file")
+    if plan is not None:
+        hosts, host_file = [target.host for target in plan.targets], None
+        if save_plan:
+            save_removal_plan(plan, path=save_plan)
+    else:
+        hosts, host_file = resolve_host_args(host)
     args = HostUnsetOverrideArgs(
         hosts=hosts,
         host_file=host_file,
@@ -771,6 +809,7 @@ def host_unset_override(
         reason=reason,
         confirm=confirm,
         no_audit=no_audit,
+        removal_plan=plan,
     )
     cmd_host_unset(args)
 

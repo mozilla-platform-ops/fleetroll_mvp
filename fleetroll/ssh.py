@@ -634,8 +634,14 @@ fi
     return "sh -c " + shlex.quote(script.strip("\n"))
 
 
-def remote_unset_script(*, backup: bool, backup_suffix: str) -> str:
+def remote_unset_script(
+    *, backup: bool, backup_suffix: str, expected_checksum: str | None = None
+) -> str:
     """Generate remote shell script for unsetting (removing) override file."""
+    if expected_checksum is not None:
+        return _checked_unset_script(
+            backup=backup, backup_suffix=backup_suffix, expected_checksum=expected_checksum
+        )
     b = "true" if backup else "false"
     suf = shlex.quote(backup_suffix)
     script = f"""
@@ -668,6 +674,69 @@ if {b}; then
 fi
 """
     return "sh -c " + shlex.quote(script.strip("\n"))
+
+
+def _checked_unset_script(*, backup: bool, backup_suffix: str, expected_checksum: str) -> str:
+    """Verify the reviewed content on the host immediately before removal.
+
+    An empty expectation permits an absent-file no-op only. Run all checks as
+    root so sudo failure cannot be mistaken for file absence. This does not
+    provide atomic compare-and-unlink against an uncooperative concurrent writer.
+    """
+    body = r"""
+set -eu
+refuse() {
+  echo "UNSET_STATUS=$1"
+  echo "$2" >&2
+  exit 3
+}
+case $(uname -s) in
+  Linux) op=/etc/puppet/ronin_settings ;;
+  Darwin) op=/opt/puppet_environments/ronin_settings ;;
+  *) refuse unsupported_os 'Unsupported override platform' ;;
+esac
+if [ ! -e "$op" ] && [ ! -L "$op" ]; then
+  echo 'UNSET_STATUS=absent'
+  echo 'REMOVED=0'
+  exit 0
+fi
+check_expected() {
+  [ ! -L "$op" ] && [ -f "$op" ] && [ -r "$op" ] ||
+    refuse unavailable 'Override must be a readable regular file, not a symlink'
+  [ -n "$expected" ] || refuse checksum_mismatch 'An override replaced the reviewed absent file'
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest=$(sha256sum "$op") || refuse unavailable 'Cannot checksum override'
+  elif command -v shasum >/dev/null 2>&1; then
+    digest=$(shasum -a 256 "$op") || refuse unavailable 'Cannot checksum override'
+  else
+    refuse unavailable 'No SHA256 checksum tool available'
+  fi
+  actual=${digest%% *}
+  echo "CURRENT_SHA256=$actual"
+  [ "$actual" = "$expected" ] || refuse checksum_mismatch 'Override content differs from reviewed checksum'
+}
+check_expected
+if "$backup"; then
+  cp -p "$op" "$op.bak.$suffix"
+  echo "BACKUP_CREATED=$op.bak.$suffix"
+fi
+# Refuse replacements during backup as well as changes since selection.
+check_expected
+rm -f "$op"
+echo 'REMOVED=1'
+echo 'UNSET_STATUS=removed'
+if "$backup"; then
+  ls -t "$op".bak.* 2>/dev/null | tail -n +31 | while IFS= read -r old; do
+    rm -f "$old"
+  done
+fi
+"""
+    settings = (
+        f"expected={shlex.quote(expected_checksum.lower())}\n"
+        f"backup={'true' if backup else 'false'}\n"
+        f"suffix={shlex.quote(backup_suffix)}\n"
+    )
+    return "sudo -n sh -c " + shlex.quote(settings + body)
 
 
 def remote_run_puppet_script() -> str:

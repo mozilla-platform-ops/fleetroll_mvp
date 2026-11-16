@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,17 +17,20 @@ import click
 from ..audit import append_jsonl
 from ..constants import BACKUP_TIME_FORMAT, DRY_RUN_PREVIEW_LIMIT
 from ..exceptions import CommandFailureError
+from ..override_removal import describe_removal_plan
 from ..ssh import build_ssh_options, parse_backup_path, remote_unset_script, run_ssh
 from ..utils import (
     default_audit_log_path,
     format_host_preview,
     infer_actor,
+    parse_kv_lines,
     utc_now_iso,
 )
 from ._auto_audit import _maybe_auto_audit
 
 if TYPE_CHECKING:
     from ..cli_types import HostUnsetOverrideArgs
+    from ..override_removal import RemovalTarget
 
 
 def unset_override_for_host(
@@ -40,17 +43,38 @@ def unset_override_for_host(
     audit_log: Path,
     backup_suffix: str,
     log_lock: threading.Lock | None = None,
+    target: RemovalTarget | None = None,
 ) -> dict[str, Any]:
     """Unset override file for a single host and append audit log."""
-    rc, out, err = run_ssh(host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout)
-    removed = "REMOVED=1" in out
+    blocked = target.blocked_reason() if target else None
+    rc, out, err = None, "", ""
+    if target is not None and not blocked:
+        remote_cmd = remote_unset_script(
+            backup=not args.no_backup,
+            backup_suffix=backup_suffix,
+            expected_checksum=target.checksum or "",
+        )
+    if not blocked:
+        try:
+            rc, out, err = run_ssh(host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout)
+        except Exception as exc:
+            if target is None:
+                raise
+            err = str(exc)
+    info = parse_kv_lines(out)
+    status = "blocked" if blocked else info.get("UNSET_STATUS", "verification_unavailable")
+    checked_ok = rc == 0 and (
+        (status == "removed" and info.get("REMOVED") == "1")
+        or (status == "absent" and info.get("REMOVED") == "0")
+    )
+    removed = info.get("REMOVED") == "1"
 
     result: dict[str, Any] = {
         "ts": utc_now_iso(),
         "actor": actor,
         "action": "host.unset_override",
         "host": host,
-        "ok": (rc == 0),
+        "ok": checked_ok if target else (rc == 0),
         "ssh_rc": rc,
         "stderr": err.strip(),
         "observed": {
@@ -63,6 +87,18 @@ def unset_override_for_host(
             "reason": args.reason,
         },
     }
+    if target is not None:
+        result["status"] = status
+        result["selection"] = target.model_dump()
+        result["parameters"]["expected_override_sha256"] = target.checksum
+        if args.removal_plan is not None:
+            result["parameters"]["selection_source"] = args.removal_plan.source
+            result["parameters"]["selection_query"] = args.removal_plan.query
+            result["parameters"]["plan_created_at"] = args.removal_plan.created_at
+        result["observed"]["override_sha256_before"] = info.get("CURRENT_SHA256")
+        result["puppet_convergence"] = "not_checked"
+        if not result["ok"]:
+            result["error"] = blocked or err.strip() or status
 
     if log_lock:
         with log_lock:
@@ -91,6 +127,10 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
     actor = infer_actor()
     ssh_opts = build_ssh_options(args)
     audit_log = Path(args.audit_log) if args.audit_log else default_audit_log_path()
+
+    if args.removal_plan is not None:
+        _cmd_population_unset(args, ssh_opts=ssh_opts, actor=actor, audit_log=audit_log)
+        return
 
     hosts = args.hosts
     host_file = args.host_file
@@ -260,4 +300,101 @@ def cmd_host_unset(args: HostUnsetOverrideArgs) -> None:
     _maybe_auto_audit([r["host"] for r in results], args, audit_log)
 
     if any(not r.get("ok") for r in results):
+        raise CommandFailureError
+
+
+def _cmd_population_unset(
+    args: HostUnsetOverrideArgs, *, ssh_opts: list[str], actor: str, audit_log: Path
+) -> None:
+    plan = args.removal_plan
+    assert plan is not None  # noqa: S101 - internal dispatch invariant
+    description = describe_removal_plan(plan)
+    if not args.confirm:
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "dry_run": True,
+                        "action": plan.action,
+                        "status": "preview" if plan.targets else "no_matches",
+                        "plan": description,
+                        "backup": not args.no_backup,
+                        "reason": args.reason,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print("DRY RUN: --confirm not provided; no changes will be made.")
+            print(f"Selected {len(plan.targets)}/{plan.candidate_count} hosts from {plan.source}")
+            print(f"Query: {plan.query}")
+            print(f"Backup: {'no' if args.no_backup else 'yes'}; reason: {args.reason or '-'}")
+            for target in description["targets"]:
+                print(
+                    f"  {target['host']} branch={target['branch'] or '?'} "
+                    f"present={target['override_present']} checksum={target['checksum'] or '-'}\n"
+                    f"    observed={target['observation_ts'] or '?'} {target['freshness']} "
+                    f"latest_attempt={target['latest_attempt_ts'] or '?'} "
+                    f"latest_ok={target['latest_attempt_ok']} "
+                    f"blocked={target['blocked_reason'] or '-'}"
+                )
+            print("Recorded evidence may be stale; execution verifies each full checksum live.")
+            print(
+                "Use --save-plan FILE then --from-plan FILE --confirm to execute a frozen preview."
+            )
+        return
+
+    results = []
+    suffix = dt.datetime.now(dt.UTC).strftime(BACKUP_TIME_FORMAT)
+    lock = threading.Lock()
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        futures = [
+            executor.submit(
+                unset_override_for_host,
+                target.host,
+                args=args,
+                ssh_opts=ssh_opts,
+                remote_cmd="",
+                actor=actor,
+                audit_log=audit_log,
+                backup_suffix=suffix,
+                log_lock=lock,
+                target=target,
+            )
+            for target in plan.targets
+        ]
+        results = [future.result() for future in as_completed(futures)]
+    results.sort(key=lambda r: r["host"])
+    attempted = [r["host"] for r in results if r["status"] != "blocked"]
+    if attempted:
+        # The shared refresh helper can print; keep the population JSON one document.
+        with redirect_stdout(sys.stderr) if args.json else nullcontext():
+            _maybe_auto_audit(attempted, args, audit_log)
+    failed = sum(not r["ok"] for r in results)
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "action": plan.action,
+                    "dry_run": False,
+                    "status": "failed" if failed else "completed" if results else "no_matches",
+                    "plan": description,
+                    "results": results,
+                    "failed": failed,
+                    "puppet_convergence": "not_checked",
+                    "refresh_requested": bool(attempted) and not args.no_audit,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    else:
+        for result in results:
+            print(format_unset_line(result))
+        print(f"Summary: total={len(results)} successful={len(results) - failed} failed={failed}")
+        print("Removal results describe files only; Puppet convergence has not been verified.")
+        print(f"Audit log: {audit_log}")
+    if failed:
         raise CommandFailureError

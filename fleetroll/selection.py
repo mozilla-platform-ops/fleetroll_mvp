@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import click
 import yaml
@@ -22,6 +23,9 @@ class HostSelection:
     hosts: tuple[str, ...]
     eligible: int
     source: str
+    latest: dict[str, dict[str, Any]] = field(default_factory=dict)
+    latest_ok: dict[str, dict[str, Any]] = field(default_factory=dict)
+    rows: tuple[dict[str, str], ...] = ()
 
 
 def load_filter(*, expression: str | None, path: str | None) -> Query | None:
@@ -98,10 +102,14 @@ def select_hosts(host_args: tuple[str, ...], *, query: Query) -> HostSelection:
         )
         row["_host"] = host
         rows.append(row)
+    selected_rows = tuple(apply_query(rows, query))
     return HostSelection(
-        hosts=tuple(row["_host"] for row in apply_query(rows, query)),
+        hosts=tuple(row["_host"] for row in selected_rows),
         eligible=len(hosts),
         source=source,
+        latest=latest,
+        latest_ok=latest_ok,
+        rows=selected_rows,
     )
 
 
