@@ -51,9 +51,45 @@ override=present
 
 Supported fields: `host`, `os`, `role`, `override`, `vlt_sha`, `ovr_bch`, `uptime`, `pp_last`,
 `pp_sha`, `pp_exp`, `pp_match`, `tc_act`, `tc_t_dur`, `tc_quar`, `data`, `healthy`,
-`pool`, `wt_ovr`, and `note`. Aliases are `sha`/`ovr_sha` for `ovr_bch`,
-`tc_j_sf` for `tc_t_dur`, and `health` for `healthy`. Override branch values may
-include checksum and worker-type annotations; use `~` for a branch substring.
+`pool`, `wt_ovr`, `ovr_checksum`, and `note`. Aliases are `ovr_branch` for
+`ovr_bch`, `ovr_sha_full` for `ovr_checksum`, `tc_j_sf` for `tc_t_dur`, and
+`health` for `healthy`.
+
+`ovr_bch` now compares only the raw branch from structured cached override
+details. For example, `ovr_bch=release` matches `release` with any checksum or
+worker-pool setting, but excludes `release-next`. `ovr_bch~release` matches both.
+No display label, checksum or `*wt` annotation participates. An unavailable
+branch is empty: `ovr_bch=` includes absent overrides, present overrides whose
+branch cannot be resolved, and unknown presence. Combine with `override=absent`,
+`override=present`, or `override=?` to distinguish those states.
+`ovr_bch!=release` also includes unavailable branches; add `ovr_bch!=` to
+restrict it to known branches. Missing local contents can leave a present
+override unresolved until collection supplies the file.
+
+`sort:ovr_bch` and the keyboard's branch sort use that same raw value, ignoring
+case. Known branches come first in both directions; all unavailable branches
+share a final bucket, retaining their distinct `override` states. Explicit
+secondary sort keys take precedence over the final ascending natural-hostname
+tie-breaker (host2 before host10), which applies even in descending branch order.
+Failed audits use the same last-success fallback for display, filtering and sorting.
+
+Migration: `ovr_bch` formerly compared formatted branch/checksum/worker-type text.
+Use `ovr_bch=release` for exact branch selection, and change annotation queries
+such as `ovr_bch~*wt` to `wt_ovr=y`. Use `override=present` instead of the old
+`ovr_bch!=` when you mean all recorded overrides, including unresolved branches;
+the bundled `linux-overrides` saved filter has been updated accordingly.
+The repository's branch-list script uses `ovr_bch~...` and now searches only branches.
+`sha` and its legacy alias `ovr_sha` deliberately retain formatted-text behavior
+for saved queries; they are no longer aliases for `ovr_bch`.
+
+Use `ovr_checksum=FULL_CHECKSUM` for exact full-file identity. Equality never
+expands a prefix. `ovr_checksum~PREFIX` matches that prefix as a substring of the
+full checksum; it can also match an interior substring and does not guarantee
+uniqueness. Review matches before exporting a host selection. Legacy
+`sha~PREFIX`/`ovr_sha~PREFIX` only search displayed text (normally an eight-character
+checksum), so migrate checksum selection to `ovr_checksum`. Neither display
+abbreviations nor human-readable labels establish full checksum equality.
+
 Use `override=present` or `override=absent` to test recorded file presence
 independently of its checksum, branch, or worker-pool setting. Unknown or missing
 evidence matches neither. A failed audit can retain the last successful state;
@@ -118,7 +154,8 @@ collection every three minutes and the whole Linux baseline every ten minutes.
 
 The header shows the active query. Quick filters remain independent: `o` toggles
 overrides only, and `O` cycles OS selection; both combine with the query using
-AND. `s` cycles the built-in sort unless the query supplies `sort:`. Clearing the
+AND. `s` cycles host → role → branch unless the query supplies `sort:`; the CLI
+also accepts `--sort ovr_bch`. Clearing the
 query leaves quick filters intact. Recent queries persist in
 `~/.fleetroll/filter_history`.
 

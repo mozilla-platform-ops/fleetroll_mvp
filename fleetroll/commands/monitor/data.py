@@ -41,6 +41,7 @@ def get_host_sort_key(
     sort_field: str,
     latest: dict[str, dict[str, Any]],
     latest_ok: dict[str, dict[str, Any]] | None = None,
+    sha_cache: ShaInfoCache | None = None,
 ) -> tuple:
     """Generate sort key for a host based on sort field.
 
@@ -81,13 +82,10 @@ def get_host_sort_key(
         return (has_role, role, natural_sort_key(hostname))
 
     if sort_field == "ovr_bch":
-        # Extract override SHA from observed data
-        sha_full = observed.get("override_sha256") or ""
-
-        # Sort hosts with overrides first (0), then hosts without overrides (1)
-        has_override = 0 if sha_full else 1
-
-        return (has_override, sha_full, natural_sort_key(hostname))
+        if not host_data.get("ok"):
+            observed = {}
+        branch = resolve_override_branch(observed, sha_cache=sha_cache)
+        return (not bool(branch), branch.lower(), natural_sort_key(hostname), hostname)
 
     # Default to hostname if unknown sort field
     return (natural_sort_key(hostname),)
@@ -303,6 +301,19 @@ def vault_checksum_match(observed: dict[str, Any]) -> str:
     return "Y" if deployed.lower() == applied.lower() else "N"
 
 
+def resolve_override_branch(observed: dict[str, Any], *, sha_cache: ShaInfoCache | None) -> str:
+    """Resolve only structured branch evidence, never a human-readable label.
+
+    Unavailable branches are empty; the independent override presence field
+    distinguishes absent files, unresolved present files, and unknown evidence.
+    """
+    if observed.get("override_present") is not True or sha_cache is None:
+        return ""
+    details = sha_cache.get_override_details(observed.get("override_sha256") or "")
+    branch = details.get("branch") if details else None
+    return branch if isinstance(branch, str) else ""
+
+
 def build_ok_row_values(
     host: str,
     record: dict[str, Any],
@@ -354,7 +365,7 @@ def build_ok_row_values(
             vault_sha = f"{vault_sha} {vlt_mnemonic}"
 
     # Structured sub-fields for web UI popover (TUI uses the formatted strings below)
-    ovr_branch = ""
+    ovr_branch = resolve_override_branch(observed, sha_cache=sha_cache)
     vlt_symlink = ""
 
     # Append human-readable info to SHA columns
@@ -362,7 +373,6 @@ def build_ok_row_values(
         if sha_full:
             ovr_info = sha_cache.get_override_info(sha_full)
             if ovr_info != "-":
-                ovr_branch = ovr_info
                 sha = f"{ovr_info} ({sha})"
         if vault_sha_full:
             vlt_info = sha_cache.get_vault_info(vault_sha_full)

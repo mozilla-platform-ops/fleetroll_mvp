@@ -745,7 +745,10 @@ class MonitorDisplay:
         # Add sort indicator (↑/↓) to active column
         if self._query.has_sort():
             first_key = self._query.sort_keys[0]
-            active_column = first_key.column if first_key.column in labels else None
+            column = {"ovr_branch": "sha", "ovr_sha_full": "sha"}.get(
+                first_key.column, first_key.column
+            )
+            active_column = column if column in labels else None
             sort_indicator = " ↓" if first_key.direction == "desc" else " ↑"
         else:
             sort_field_to_column = {
@@ -833,7 +836,11 @@ class MonitorDisplay:
         Always includes hostname as secondary sort.
         """
         return get_host_sort_key(
-            hostname, sort_field=self.sort_field, latest=self.latest, latest_ok=self.latest_ok
+            hostname,
+            sort_field=self.sort_field,
+            latest=self.latest,
+            latest_ok=self.latest_ok,
+            sha_cache=self.sha_cache,
         )
 
     def _has_overrides(self, hostname: str) -> bool:

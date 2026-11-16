@@ -1,2 +1,2 @@
-query: ovr_bch!= os=L sort:ovr_bch,role:desc,host:asc
-description: Linux workers that are quarantined
+query: override=present os=L sort:ovr_bch,role:desc,host:asc
+description: Linux workers with a recorded override, including unresolved branches

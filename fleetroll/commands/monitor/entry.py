@@ -93,7 +93,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
             sorted_hosts = sorted(
                 hosts,
                 key=lambda h: get_host_sort_key(
-                    h, sort_field=args.sort, latest=latest, latest_ok=latest_ok
+                    h, sort_field=args.sort, latest=latest, latest_ok=latest_ok, sha_cache=sha_cache
                 ),
             )
 
@@ -152,7 +152,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
             sorted_hosts = sorted(
                 hosts,
                 key=lambda h: get_host_sort_key(
-                    h, sort_field=args.sort, latest=latest, latest_ok=latest_ok
+                    h, sort_field=args.sort, latest=latest, latest_ok=latest_ok, sha_cache=sha_cache
                 ),
             )
 

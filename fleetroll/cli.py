@@ -289,7 +289,7 @@ def gather_host(
 )
 @click.option(
     "--sort",
-    type=click.Choice(["host", "role"], case_sensitive=False),
+    type=click.Choice(["host", "role", "ovr_bch"], case_sensitive=False),
     default="host",
     help="Sort order for display (default: host).",
 )

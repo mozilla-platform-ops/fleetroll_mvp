@@ -381,7 +381,9 @@ Filters are space-separated conditions (all must match). Each condition is `COLU
 | `os` | | string | operating system |
 | `role` | | string | Puppet role |
 | `override` | | string | Recorded file presence: `present` / `absent`; unknown evidence matches neither |
-| `sha` | `ovr_bch`, `ovr_sha` | string | override branch / SHA (TUI marks a `*wt` suffix when the override sets a worker pool) |
+| `ovr_bch` | `ovr_branch` | string | Raw override branch; excludes checksum and worker-pool annotations |
+| `ovr_checksum` | `ovr_sha_full` | string | Full override file checksum: `=` exact, `~` substring (including prefixes) |
+| `sha` | `ovr_sha` | string | Legacy formatted override branch / SHA text, including annotations |
 | `wt_ovr` | | string | override sets a TC worker pool: `y`/`n`/`-` (filter-only †) |
 | `vlt_sha` | | string | vault SHA |
 | `uptime` | | duration | host uptime |

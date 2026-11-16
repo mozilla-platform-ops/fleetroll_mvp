@@ -287,11 +287,11 @@ class ShaInfoCache:
 
         if not info:
             # Try on-demand lookup
-            override_file = self.overrides_dir / sha_prefix
-            if override_file.exists():
-                info = parse_override_file(override_file)
+            for name in dict.fromkeys((sha256, sha_prefix)):
+                info = parse_override_file(self.overrides_dir / name)
                 if info:
-                    self.override_cache[sha_prefix] = info
+                    self.override_cache[name] = info
+                    break
 
         return info
 

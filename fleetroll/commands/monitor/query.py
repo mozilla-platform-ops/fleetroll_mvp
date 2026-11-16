@@ -5,6 +5,7 @@ from __future__ import annotations
 import operator as _op
 from dataclasses import dataclass, field
 
+from ...utils import natural_sort_key
 from .data import parse_duration
 
 # Sentinel values that represent "no data" and collapse to "" for filtering.
@@ -29,7 +30,10 @@ KNOWN_COLUMNS = frozenset(
         "override",  # present / absent / ? (unknown)
         "vlt_sha",
         "sha",
-        "ovr_bch",  # alias for "sha" (display label "OVR_BCH")
+        "ovr_bch",  # canonical raw branch (display label "OVR_BCH")
+        "ovr_branch",
+        "ovr_checksum",  # full override file checksum
+        "ovr_sha_full",
         "ovr_sha",  # legacy alias
         "uptime",
         "pp_last",
@@ -51,7 +55,8 @@ KNOWN_COLUMNS = frozenset(
 
 # Column aliases: display-label names → internal column key
 COLUMN_ALIASES: dict[str, str] = {
-    "ovr_bch": "sha",  # display label "OVR_BCH" → internal column "sha"
+    "ovr_bch": "ovr_branch",
+    "ovr_checksum": "ovr_sha_full",
     "ovr_sha": "sha",  # legacy alias
     "tc_t_dur": "tc_j_sf",  # display label "TC_T_DUR" → internal column "tc_j_sf"
     "health": "healthy",  # shorthand
@@ -257,7 +262,8 @@ def row_matches_condition(row: dict[str, str], cond: FilterCondition) -> bool:
         if flt_secs is not None:
             return _compare_numeric(col_secs, cond.op, flt_secs)
 
-    return _compare_string(normalize_for_filter(col_value), cond.op, cond.value)
+    value = col_value if cond.column == "ovr_branch" else normalize_for_filter(col_value)
+    return _compare_string(value, cond.op, cond.value)
 
 
 def apply_conditions(
@@ -303,6 +309,11 @@ def _row_sort_tuple(row: dict[str, str], sort_keys: list[SortKey]) -> tuple:
     parts: list = []
     for sk in sort_keys:
         raw = row.get(sk.column, "")
+        if sk.column == "ovr_branch":
+            # Only the empty string means unavailable in this raw field.
+            value = raw.lower() if sk.direction == "asc" else _Rev(raw.lower())
+            parts.append((not bool(raw), value))
+            continue
         unknown = raw in ("-", "?", "--", "")
         if sk.column in TIME_COLUMNS or sk.column == "data":
             if sk.column == "data":
@@ -320,6 +331,9 @@ def _row_sort_tuple(row: dict[str, str], sort_keys: list[SortKey]) -> tuple:
                 parts.append((1 if unknown else 0, str_val))
             else:
                 parts.append((1 if unknown else 0, _Rev(str_val)))
+    if any(sk.column == "ovr_branch" for sk in sort_keys):
+        host = row.get("_host", row.get("host", ""))
+        parts.extend((natural_sort_key(host), host))
     return tuple(parts)
 
 

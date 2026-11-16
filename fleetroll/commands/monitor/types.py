@@ -119,6 +119,9 @@ VLT_SHA   Abbreviated vault checksum + full mnemonic and optional symlink name
 OVR_BCH   Complete override branch + abbreviated checksum
           *wt = override sets a Taskcluster worker pool
           Checksum uses 4 characters, 8 on collision, longer if needed
+          Query ovr_bch matches raw branch; sort ignores case, missing last
+          ovr_checksum: full checksum (= exact; ~ substring, including prefix)
+          sha/ovr_sha retain legacy formatted-text query behavior
 NOTE      Most recent operator note for the host (count prefix when multiple)
 UPTIME    Uptime: three-character whole-unit label + three-cell magnitude bar
           Blue shades show magnitude, not health (cyan on basic terminals)
