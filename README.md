@@ -626,6 +626,21 @@ remain visible; removal does not establish Puppet convergence. See
 [population override removal](docs/override-removal.md) for freshness, JSON,
 partial failures, and concurrency limits.
 
+Deploy to a target percentage of a recorded role population:
+
+```bash
+# Preview total 50% coverage, retaining existing exact-checksum canaries.
+uv run fleetroll override set configs/host-lists/linux/all.list \
+  --role gecko_t_linux_2404_talos --target-percent 50 --from-file candidate.override
+```
+
+Add `--confirm` to deploy, or use `--save-plan FILE` and `--from-plan FILE` to
+freeze a preview. Additions require fresh successful evidence and no conflicting
+override; stale/failed role members remain in the denominator. Recent unverified
+writes block further expansion until collection catches up. See
+[percentage deployment](docs/percentage-deployment.md) for rounding, 100% coverage,
+unknown membership, JSON, and preview/execution semantics.
+
 ### Operator hold
 
 `host hold` inspects or changes `/home/cltbld/operator_hold` on one Linux host.

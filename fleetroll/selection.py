@@ -26,6 +26,7 @@ class HostSelection:
     latest: dict[str, dict[str, Any]] = field(default_factory=dict)
     latest_ok: dict[str, dict[str, Any]] = field(default_factory=dict)
     rows: tuple[dict[str, str], ...] = ()
+    override_writes: dict[str, float] = field(default_factory=dict)
 
 
 def load_filter(*, expression: str | None, path: str | None) -> Query | None:
@@ -59,6 +60,7 @@ def select_hosts(host_args: tuple[str, ...], *, query: Query) -> HostSelection:
     )
     source = str(host_file) if host_file else "explicit hosts" if host_args else "local database"
     latest, latest_ok, tc, refs, windows = {}, {}, {}, {}, {}
+    override_writes = {}
     db_path = db.get_db_path()
     if db_path.exists():
         conn = sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)
@@ -82,6 +84,17 @@ def select_hosts(host_args: tuple[str, ...], *, query: Query) -> HostSelection:
             tc = db.get_latest_tc_workers(conn, hosts)
             refs = db.get_latest_github_refs(conn)
             windows = db.get_latest_windows_pools(conn)
+            boundary_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(configuration_boundaries)")
+            }
+            if boundary_columns:
+                column = "source_ts" if "source_ts" in boundary_columns else "ts"
+                override_writes = dict(
+                    conn.execute(
+                        f"SELECT host,max({column}) FROM configuration_boundaries "  # noqa: S608 - fixed column allowlist
+                        "WHERE kind IN ('host.set_override','host.unset_override') GROUP BY host"
+                    )
+                )
         finally:
             conn.close()
     hosts = sorted(set(hosts or []))
@@ -110,6 +123,7 @@ def select_hosts(host_args: tuple[str, ...], *, query: Query) -> HostSelection:
         latest=latest,
         latest_ok=latest_ok,
         rows=selected_rows,
+        override_writes=override_writes,
     )
 
 

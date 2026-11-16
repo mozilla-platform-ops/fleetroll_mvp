@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import shlex
 import sys
 from importlib.metadata import version
@@ -466,8 +467,24 @@ def debug_host_script(
 
 
 @cli.command("host-set-override")
-@click.argument("host", metavar="HOST_OR_FILE...", nargs=-1, required=True)
+@click.argument("host", metavar="[HOST_OR_FILE...]", nargs=-1)
 @common_options
+@click.option("--role", help="Recorded Puppet role population for percentage deployment.")
+@click.option(
+    "--target-percent",
+    type=click.FloatRange(0, 100),
+    help="Target total deployed coverage of --role (0-100, rounded up to whole hosts).",
+)
+@click.option(
+    "--save-plan",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Save a percentage preview to a new JSON file without executing it.",
+)
+@click.option(
+    "--from-plan",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Use a saved percentage population; requires the same --from-file contents.",
+)
 @click.option(
     "--workers",
     type=int,
@@ -539,7 +556,7 @@ def debug_host_script(
     is_flag=True,
     help="Bypass worker type compatibility checks, including unknown host roles.",
 )
-def host_set_override(
+def host_set_override(  # noqa: PLR0913 - Click options retain the existing deployment interface
     host: tuple[str, ...],
     ssh_option: tuple[str, ...],
     connect_timeout: int,
@@ -559,13 +576,64 @@ def host_set_override(
     force: bool,
     no_audit: bool,
     allow_worker_type_mismatch: bool,
+    role: str | None,
+    target_percent: float | None,
+    save_plan: Path | None,
+    from_plan: Path | None,
 ):
     """Set the override file on one or more hosts (atomic write).
 
     HOST_OR_FILE can be one or more hostnames, user@hostname values, or a file
     containing hosts (one per line). Contents must be provided via --from-file.
     """
-    hosts, host_file = resolve_host_args(host)
+    from pydantic import ValidationError
+
+    from .commands.monitor.query import Query
+    from .percentage_deployment import (
+        build_percentage_plan,
+        load_percentage_plan,
+    )
+    from .selection import select_hosts
+    from .utils import sha256_hex
+
+    plan = None
+    if role is not None or target_percent is not None or from_plan or save_plan:
+        if force or ignore_state:
+            raise click.UsageError(
+                "Percentage deployment does not accept --force or --ignore-state"
+            )
+        if workers < 1:
+            raise click.UsageError("--workers must be at least 1")
+        if not from_file:
+            raise click.UsageError("Percentage deployment requires --from-file")
+        if from_plan and (host or role is not None or target_percent is not None or save_plan):
+            raise click.UsageError(
+                "--from-plan excludes hosts, --role, --target-percent and --save-plan"
+            )
+        if save_plan and confirm:
+            raise click.UsageError("--save-plan previews only; use --from-plan FILE --confirm")
+        try:
+            checksum = sha256_hex(Path(from_file).read_bytes())
+            if from_plan:
+                plan = load_percentage_plan(from_plan)
+                if plan.checksum != checksum:
+                    raise click.UsageError(
+                        "Override contents differ from the saved percentage plan"
+                    )
+            else:
+                if role is None or target_percent is None or not math.isfinite(target_percent):
+                    raise click.UsageError("Specify both --role and a finite --target-percent")
+                plan = build_percentage_plan(
+                    select_hosts(host, query=Query()),
+                    role=role,
+                    percent=target_percent,
+                    checksum=checksum,
+                )
+        except (OSError, ValidationError) as exc:
+            raise click.UsageError(f"Cannot prepare percentage deployment: {exc}") from exc
+        hosts, host_file = plan.additions, None
+    else:
+        hosts, host_file = resolve_host_args(host)
     args = HostSetOverrideArgs(
         hosts=hosts,
         host_file=host_file,
@@ -587,6 +655,8 @@ def host_set_override(
         force=force,
         no_audit=no_audit,
         allow_worker_type_mismatch=allow_worker_type_mismatch,
+        percentage_plan=plan,
+        percentage_save_plan=save_plan,
     )
     cmd_host_set(args)
 

@@ -453,8 +453,20 @@ def remote_set_script(
     backup: bool,
     backup_suffix: str,
     force: bool = False,
+    expected_role: str | None = None,
+    desired_checksum: str | None = None,
 ) -> str:
     """Generate remote shell script for setting override file."""
+    if expected_role is not None:
+        if desired_checksum is None:
+            raise ValueError("Checked deployment requires a desired checksum")
+        return _checked_set_script(
+            mode=mode,
+            owner=owner,
+            group=group,
+            expected_role=expected_role,
+            desired_checksum=desired_checksum,
+        )
     m = shlex.quote(mode)
     own = shlex.quote(owner)
     grp = shlex.quote(group)
@@ -674,6 +686,84 @@ if {b}; then
 fi
 """
     return "sh -c " + shlex.quote(script.strip("\n"))
+
+
+def _checked_set_script(
+    *, mode: str, owner: str, group: str, expected_role: str, desired_checksum: str
+) -> str:
+    """Create an absent override atomically; never replace a concurrent file."""
+    settings = "\n".join(
+        f"{key}={shlex.quote(value)}"
+        for key, value in {
+            "mode": mode,
+            "owner": owner,
+            "group": group,
+            "expected_role": expected_role,
+            "desired": desired_checksum,
+        }.items()
+    )
+    body = r"""
+set -eu
+refuse() {
+  echo "SET_STATUS=$1"
+  echo "$2" >&2
+  exit 3
+}
+case $(uname -s) in
+  Linux) op=/etc/puppet/ronin_settings; auto_group=root ;;
+  Darwin) op=/opt/puppet_environments/ronin_settings; auto_group=wheel ;;
+  *) refuse unsupported_os 'Unsupported override platform' ;;
+esac
+rp=/etc/puppet_role
+check_role() {
+  [ -f "$rp" ] && [ -r "$rp" ] || refuse role_unavailable 'Cannot read live Puppet role'
+  role=$(cat "$rp") || refuse role_unavailable 'Cannot read live Puppet role'
+  role=$(printf '%s' "$role" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  [ "$role" = "$expected_role" ] || refuse role_changed 'Live Puppet role differs from reviewed role'
+}
+checksum() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest=$(sha256sum "$1") || return 1
+  else
+    digest=$(shasum -a 256 "$1") || return 1
+  fi
+  printf '%s' "${digest%% *}"
+}
+check_current() {
+  if [ -e "$op" ] || [ -L "$op" ]; then
+    [ ! -L "$op" ] && [ -f "$op" ] && [ -r "$op" ] ||
+      refuse unavailable 'Override is not a readable regular file'
+    actual=$(checksum "$op") || refuse unavailable 'Cannot checksum current override'
+    [ "$actual" = "$desired" ] || refuse conflicting_override 'A conflicting override is present'
+    echo 'SET_STATUS=already_current'
+    echo 'CONTENT_CHANGED=0'
+    return 0
+  fi
+  return 1
+}
+check_role
+if check_current; then exit 0; fi
+dir=${op%/*}
+tmp=$(mktemp "$dir/.ronin_settings.tmp.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+cat > "$tmp"
+actual=$(checksum "$tmp") || refuse unavailable 'Cannot checksum incoming override'
+[ "$actual" = "$desired" ] || refuse incoming_checksum_mismatch 'Incoming override checksum differs from plan'
+if [ "$group" = auto ]; then group=$auto_group; fi
+chmod "$mode" "$tmp"
+chown "$owner:$group" "$tmp"
+check_role
+# A hard link is an atomic absent-path install on the same filesystem.
+# POSIX link uses exactly two paths, without ln's directory-destination behavior.
+if link "$tmp" "$op" 2>/dev/null; then
+  echo 'SET_STATUS=written'
+  echo 'CONTENT_CHANGED=1'
+else
+  if check_current; then exit 0; fi
+  refuse install_failed 'Could not install override at the absent path'
+fi
+"""
+    return "sudo -n sh -c " + shlex.quote(settings + "\n" + body)
 
 
 def _checked_unset_script(*, backup: bool, backup_suffix: str, expected_checksum: str) -> str:

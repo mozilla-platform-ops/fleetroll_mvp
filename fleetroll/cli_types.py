@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from .override_removal import RemovalPlan
+    from .percentage_deployment import PercentagePlan
 
 
 @dataclass
@@ -82,6 +83,8 @@ class HostSetOverrideArgs:
     force: bool
     no_audit: bool = False
     allow_worker_type_mismatch: bool = False
+    percentage_plan: PercentagePlan | None = None
+    percentage_save_plan: Path | None = None
 
 
 @dataclass

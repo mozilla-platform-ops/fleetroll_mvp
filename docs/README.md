@@ -10,6 +10,7 @@ contracts in more detail.
 | --- | --- |
 | Find and order hosts | [Filter, sort, and saved filters](monitor-filter-sort.md) |
 | Remove overrides from selected hosts | [Population override removal](override-removal.md) |
+| Expand an override by role percentage | [Percentage deployment](percentage-deployment.md) |
 | Record operational context | [Host notes](notes-feature.md) |
 | Check configuration and task outcomes | [Verify a rollout](rollout-health-verification.md), [rollout report](rollout-report.md), [compare pools](rollout-compare.md) |
 | Understand when Puppet runs | [Puppet execution in Ronin](puppet-execution-mechanisms.md) |

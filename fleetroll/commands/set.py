@@ -26,6 +26,7 @@ from ..utils import (
     default_audit_log_path,
     format_host_preview,
     infer_actor,
+    parse_kv_lines,
     sha256_hex,
     utc_now_iso,
 )
@@ -51,12 +52,24 @@ def set_override_for_host(
     log_lock: threading.Lock | None = None,
 ) -> dict[str, Any]:
     """Set override file for a single host and append audit log."""
-    rc, out, err = run_ssh(
-        host,
-        remote_cmd,
-        ssh_options=ssh_opts,
-        input_bytes=data,
-        timeout_s=args.timeout,
+    rc, out, err = None, "", ""
+    try:
+        rc, out, err = run_ssh(
+            host,
+            remote_cmd,
+            ssh_options=ssh_opts,
+            input_bytes=data,
+            timeout_s=args.timeout,
+        )
+    except Exception as exc:
+        if args.percentage_plan is None:
+            raise
+        err = str(exc)
+    info = parse_kv_lines(out)
+    status = info.get("SET_STATUS", "verification_unavailable")
+    checked_ok = rc == 0 and (
+        (status == "written" and info.get("CONTENT_CHANGED") == "1")
+        or (status == "already_current" and info.get("CONTENT_CHANGED") == "0")
     )
 
     result: dict[str, Any] = {
@@ -64,7 +77,7 @@ def set_override_for_host(
         "actor": actor,
         "action": "host.set_override",
         "host": host,
-        "ok": (rc == 0),
+        "ok": checked_ok if args.percentage_plan is not None else (rc == 0),
         "ssh_rc": rc,
         "stderr": err.strip(),
         "observed": {
@@ -83,6 +96,16 @@ def set_override_for_host(
             "allow_worker_type_mismatch": args.allow_worker_type_mismatch,
         },
     }
+    if args.percentage_plan is not None:
+        plan = args.percentage_plan
+        result["status"] = status
+        result["parameters"]["percentage_role"] = plan.role
+        result["parameters"]["target_percent"] = plan.target_percent
+        result["parameters"]["plan_created_at"] = plan.created_at
+        result["selection"] = next(h.model_dump() for h in plan.scope if h.host == host)
+        result["puppet_convergence"] = "not_checked"
+        if not result["ok"]:
+            result["error"] = err.strip() or status
 
     if log_lock:
         with log_lock:
@@ -250,6 +273,23 @@ def cmd_host_set(args: HostSetOverrideArgs) -> None:
     source = f"file:{p}"
 
     content_hash = sha256_hex(data)
+
+    if args.percentage_plan is not None:
+        from .percentage_set import cmd_percentage_set
+
+        if content_hash != args.percentage_plan.checksum:
+            raise UserError("Override contents changed after percentage planning")
+        if args.validate:
+            validate_override_syntax(data)
+            validate_override_semantics(data)
+        if args.percentage_save_plan is not None:
+            from ..percentage_deployment import save_percentage_plan
+
+            save_percentage_plan(args.percentage_plan, path=args.percentage_save_plan)
+        cmd_percentage_set(
+            args, data=data, source=source, actor=actor, audit_log=audit_log, ssh_opts=ssh_opts
+        )
+        return
 
     hosts = args.hosts
     host_file = args.host_file
