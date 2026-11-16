@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from fleetroll.cli import cli
 from fleetroll.commands.monitor.cache import ShaInfoCache
 from fleetroll.commands.monitor.curses_colors import CursesColors
-from fleetroll.commands.monitor.data import build_row_values
+from fleetroll.commands.monitor.data import build_row_values, override_branch_sort_key
 from fleetroll.commands.monitor.display import MonitorDisplay
 from fleetroll.commands.monitor.query import apply_query, parse_query, validate_query
 from fleetroll.commands.web.app import create_app
@@ -112,6 +112,39 @@ def test_branch_sort_respects_explicit_secondary_keys(branch_context):
     assert [r["host"] for r in selected] == ["host2", "host10"]
     selected = apply_query(rows, parse_query("ovr_bch=release sort:ovr_bch,host:asc"))
     assert [r["host"] for r in selected] == ["host10", "host2"]
+
+
+@pytest.mark.parametrize("separator", ["-", "_"])
+def test_dated_branches_stay_together(branch_context, monkeypatch, separator):
+    cache, records, _ = branch_context
+    branches = {
+        "host10": f"20261104{separator}linux_upgrade_v115",
+        "host2": f"20261105{separator}linux_upgrade_v115",
+        "host3": "20261105-linux_networkmanager",
+        "host1": "20261103-gwhc_zombies",
+    }
+    for host, branch in branches.items():
+        checksum = records[host]["observed"]["override_sha256"]
+        (cache.overrides_dir / checksum).write_text(f'PUPPET_BRANCH="{branch}"\n')
+    # Use a fresh cache after changing the stored contents.
+    cache = ShaInfoCache(cache.overrides_dir, cache.vault_dir)
+    rows = [build_row_values(h, r, sha_cache=cache) for h, r in records.items()]
+    display = make_display((cache, records, rows), monkeypatch=monkeypatch)
+    display.sort_field = "ovr_bch"
+    expected = ["host1", "host3", "host10", "host2", "host4", "host5"]
+    assert sorted(display.hosts, key=display._get_sort_key) == expected  # noqa: SLF001
+    assert [r["host"] for r in apply_query(rows, parse_query("sort:ovr_bch"))] == expected
+    descending = ["host2", "host10", "host3", "host1", "host4", "host5"]
+    assert [r["host"] for r in apply_query(rows, parse_query("sort:ovr_bch:desc"))] == descending
+    query = f"ovr_bch={branches['host10']}"
+    assert [r["host"] for r in apply_query(rows, parse_query(query))] == ["host10"]
+
+
+@pytest.mark.parametrize(
+    "branch", ["release", "123-release", "20261104", "20261104-", "x20261104-release"]
+)
+def test_other_branch_names_keep_full_sort_key(branch):
+    assert override_branch_sort_key(branch) == (branch, branch)
 
 
 def make_display(context, *, monkeypatch):

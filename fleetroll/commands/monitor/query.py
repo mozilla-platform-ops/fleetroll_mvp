@@ -6,7 +6,7 @@ import operator as _op
 from dataclasses import dataclass, field
 
 from ...utils import natural_sort_key
-from .data import parse_duration
+from .data import override_branch_sort_key, parse_duration
 
 # Sentinel values that represent "no data" and collapse to "" for filtering.
 # "?" is intentionally excluded — it means "unknown" and remains matchable.
@@ -311,7 +311,8 @@ def _row_sort_tuple(row: dict[str, str], sort_keys: list[SortKey]) -> tuple:
         raw = row.get(sk.column, "")
         if sk.column == "ovr_branch":
             # Only the empty string means unavailable in this raw field.
-            value = raw.lower() if sk.direction == "asc" else _Rev(raw.lower())
+            branch_key = override_branch_sort_key(raw)
+            value = branch_key if sk.direction == "asc" else tuple(_Rev(p) for p in branch_key)
             parts.append((not bool(raw), value))
             continue
         unknown = raw in ("-", "?", "--", "")

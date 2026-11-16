@@ -35,6 +35,13 @@ def strip_fqdn(hostname: str) -> str:
     return hostname.split(".")[0]
 
 
+def override_branch_sort_key(branch: str) -> tuple[str, str]:
+    """Group dated branches by name, then order each group by date."""
+    normalized = branch.lower()
+    name = re.sub(r"^\d{8}[-_](?=.)", "", normalized)
+    return name, normalized
+
+
 def get_host_sort_key(
     hostname: str,
     *,
@@ -85,7 +92,12 @@ def get_host_sort_key(
         if not host_data.get("ok"):
             observed = {}
         branch = resolve_override_branch(observed, sha_cache=sha_cache)
-        return (not bool(branch), branch.lower(), natural_sort_key(hostname), hostname)
+        return (
+            not bool(branch),
+            override_branch_sort_key(branch),
+            natural_sort_key(hostname),
+            hostname,
+        )
 
     # Default to hostname if unknown sort field
     return (natural_sort_key(hostname),)

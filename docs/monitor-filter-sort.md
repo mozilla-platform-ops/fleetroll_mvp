@@ -67,7 +67,11 @@ restrict it to known branches. Missing local contents can leave a present
 override unresolved until collection supplies the file.
 
 `sort:ovr_bch` and the keyboard's branch sort use that same raw value, ignoring
-case. Known branches come first in both directions; all unavailable branches
+case. A leading eight-digit date followed by `-` or `_` is ignored for grouping,
+so `20261104-linux_upgrade_v115` and `20261105-linux_upgrade_v115` stay together.
+Within each name group, full branch names sort by date (oldest first ascending,
+newest first descending). Filters still match the full branch, including its date.
+Known branches come first in both directions; all unavailable branches
 share a final bucket, retaining their distinct `override` states. Explicit
 secondary sort keys take precedence over the final ascending natural-hostname
 tie-breaker (host2 before host10), which applies even in descending branch order.
