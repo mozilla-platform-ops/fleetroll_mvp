@@ -287,6 +287,13 @@ exit 2 indicates invalid input or unavailable local evidence. Exit 0 is not a
 rollout go-ahead. See [rollout report](docs/rollout-report.md) for the
 history model, limitations, and versioned JSON schema.
 
+Complete Puppet history can also support a task when historical host identity
+collection was unavailable, using Queue-verified identity for that exact run.
+This requires a fresh observed host identity for querying and preserves write,
+conflict, transition, and gap boundaries. JSON identifies the proof method and
+limits identity coverage to the task window; current host verification remains
+separate. See [independent task identity proof](docs/rollout-report.md#independent-task-identity-proof).
+
 #### Comparing a candidate pool with a baseline
 
 ```bash

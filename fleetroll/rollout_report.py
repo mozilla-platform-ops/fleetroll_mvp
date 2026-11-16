@@ -42,6 +42,7 @@ from .rollout_history import (
     classify_run,
     parse_timestamp,
     verified_configuration,
+    verified_puppet_configuration,
     worker_identity,
 )
 from .task_name_cache import enrich_task_names
@@ -90,7 +91,9 @@ def load_evidence(
     conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
     try:
         for (data,) in conn.execute("SELECT data FROM host_observations"):
-            record = json.loads(data)
+            record = {
+                key: value for key, value in json.loads(data).items() if not key.startswith("_")
+            }
             stamp = parse_timestamp(record.get("ts"))
             if stamp and stamp <= until:
                 records[record["host"]].append(record)
@@ -153,7 +156,12 @@ def load_evidence(
             continue
         targets = [host] if host in records else aliases.get(host, [])
         for target in targets:
-            records[target].append({**record, "host": target})
+            records[target].append(
+                {
+                    **{key: value for key, value in record.items() if not key.startswith("_")},
+                    "host": target,
+                }
+            )
     # Audit and DB copies of the same observation are common.
     for host, entries in records.items():
         entries = merge_compact_observations(
@@ -203,7 +211,7 @@ def merge_compact_observations(entries, *, overrides_dir, master_refs):
                 continue
             if (
                 not retained.get("_configuration_proof")
-                and verified_configuration(
+                and verified_puppet_configuration(
                     raw[-1], overrides_dir=overrides_dir, master_refs=master_refs
                 )[0]
             ):
@@ -217,15 +225,20 @@ def merge_compact_observations(entries, *, overrides_dir, master_refs):
     return events
 
 
-def history_gaps(intervals, *, since, until):
+def history_gaps(intervals, *, since, until, task_intervals=None):
     gaps = []
     cursor = since
-    for interval in intervals:
-        if interval.end < since or interval.start > until:
+    bounds = [(interval.start, interval.end) for interval in intervals]
+    for interval in task_intervals or []:
+        start, end = parse_timestamp(interval["start"]), parse_timestamp(interval["end"])
+        if start is not None and end is not None:
+            bounds.append((start, end))
+    for start, end in sorted(bounds):
+        if end < since or start > until:
             continue
-        if interval.start > cursor:
-            gaps.append({"start": iso(cursor), "end": iso(min(interval.start, until))})
-        cursor = max(cursor, interval.end)
+        if start > cursor:
+            gaps.append({"start": iso(cursor), "end": iso(min(start, until))})
+        cursor = max(cursor, end)
     if cursor < until:
         gaps.append({"start": iso(cursor), "end": iso(until)})
     return gaps
@@ -303,14 +316,20 @@ def fetch_task_run(
         "name": None,
         "name_error": None,
         "query_error": None,
+        "identity_evidence": None,
     }
     try:
         if not isinstance(task_id, str) or type(run_id) is not int:
             raise ValueError("invalid recent-task reference")
         status = clients.queue.status(task_id).get("status") or {}
-        run = next((item for item in status.get("runs", []) if item.get("runId") == run_id), None)
-        if run is None:
-            raise ValueError("task run missing from Queue status")
+        runs = [
+            item
+            for item in status.get("runs", [])
+            if (type(item.get("runId")) is int and item["runId"] == run_id)
+        ]
+        if len(runs) != 1:
+            raise ValueError("task run missing or ambiguous in Queue status")
+        run = runs[0]
         if (
             status.get("provisionerId") != identity.provisioner
             or status.get("workerType") != identity.pool
@@ -323,6 +342,17 @@ def fetch_task_run(
             started=run.get("started"),
             resolved=run.get("resolved"),
             outcome=outcome if outcome in OUTCOMES else "unknown",
+            identity_evidence={
+                "source": "queue.status",
+                "task_id": task_id,
+                "run_id": run_id,
+                "identity": {
+                    "provisionerId": status["provisionerId"],
+                    "workerType": status["workerType"],
+                    "workerGroup": run["workerGroup"],
+                    "workerId": run["workerId"],
+                },
+            },
         )
     except Exception as exc:
         job["query_error"] = str(exc)
@@ -336,10 +366,17 @@ def attribute_job(
     identity: WorkerIdentity,
     since: dt.datetime,
     until: dt.datetime,
+    task_intervals: list[Interval] | None = None,
 ) -> dict[str, Any]:
     started, resolved = parse_timestamp(job.get("started")), parse_timestamp(job.get("resolved"))
     end = resolved or (until if job["outcome"] in {"running", "pending"} else None)
-    result = {**job, "configuration": None, "exclusion_reason": None, "in_window": True}
+    result = {
+        **job,
+        "configuration": None,
+        "exclusion_reason": None,
+        "in_window": True,
+        "attribution_evidence": None,
+    }
     if started and (started < since or started > until or (end and end > until)):
         result.update(in_window=False, exclusion_reason="outside report window")
         return result
@@ -349,6 +386,57 @@ def attribute_job(
     config, reason = classify_run(intervals, started=started, ended=end)
     if config and config.identity != identity:
         config, reason = None, "historical worker identity differs from queried identity"
+    if config is not None:
+        result["attribution_evidence"] = {"method": "host_configuration_history"}
+    expected_evidence = {
+        "source": "queue.status",
+        "task_id": job.get("task_id"),
+        "run_id": job.get("run_id"),
+        "identity": {
+            "provisionerId": identity.provisioner,
+            "workerType": identity.pool,
+            "workerGroup": identity.worker_group,
+            "workerId": identity.worker_id,
+        },
+    }
+    if (
+        config is None
+        and task_intervals
+        and not identity.legacy
+        and job.get("identity_evidence") == expected_evidence
+    ):
+        config, partial_reason = classify_run(task_intervals, started=started, ended=end)
+        if config is not None and started is not None and end is not None:
+            interval = next(
+                item
+                for item in task_intervals
+                if (
+                    item.configuration == config
+                    and started is not None
+                    and end is not None
+                    and item.start <= started <= end <= item.end
+                )
+            )
+            # Identity proof belongs to this exact Queue run, not the surrounding
+            # Puppet-only interval. Expose only the run's own supported range.
+            result["attribution_evidence"] = {
+                "method": "queue_run_identity_and_puppet_history",
+                "identity": job["identity_evidence"],
+                "puppet_interval": {"start": iso(interval.start), "end": iso(interval.end)},
+                "interval": {
+                    "start": iso(started),
+                    "end": iso(end),
+                    "source": interval.source,
+                    "identity_source": "queue.status",
+                    "max_observation_gap_s": interval.max_gap_s,
+                    "retention_cutoff": iso(interval.retention_cutoff)
+                    if interval.retention_cutoff
+                    else None,
+                },
+            }
+            reason = None
+        elif partial_reason:
+            reason = partial_reason
     result["configuration"] = configuration_json(config) if config else None
     result["exclusion_reason"] = reason
     return result
@@ -458,6 +546,7 @@ def collect_host(
         "history_window": 0,
         "history_may_be_truncated": False,
         "query_ok": False,
+        "query_identity_evidence": None,
         "jobs": [],
         "error": None,
         "warnings": [],
@@ -466,6 +555,10 @@ def collect_host(
                 "observation_ts": entry["ts"],
                 "provenance": (entry.get("_configuration_proof") or {}).get("provenance"),
                 "unknown_reason": entry.get("_compact_reason"),
+                "proof_version": (entry.get("_configuration_proof") or {}).get("version"),
+                "worker_identity_reason": (entry.get("_configuration_proof") or {}).get(
+                    "identity_reason"
+                ),
             }
             for entry in records
             if "_compact_unverified" in entry
@@ -481,6 +574,18 @@ def collect_host(
         result["error"] = identity_reason or stale_reason
         return result
     result["scope"] = [result["role"], identity.provisioner, identity.pool, identity.worker_group]
+    result["query_identity_evidence"] = {
+        "source": "legacy_role_override_mapping"
+        if identity.legacy
+        else "host_collected_configuration",
+        "observation_ts": latest.get("ts"),
+        "identity": {
+            "provisionerId": identity.provisioner,
+            "workerType": identity.pool,
+            "workerGroup": identity.worker_group,
+            "workerId": identity.worker_id,
+        },
+    }
     if identity.legacy:
         result["warnings"].append(
             "Legacy role/override worker identity fallback; refresh gather host."
@@ -497,22 +602,53 @@ def collect_host(
         refs = list(unique.values())[:RECENT_TASK_LIMIT]
         result["history_window"] = len(refs)
         result["history_may_be_truncated"] = len(refs) >= RECENT_TASK_LIMIT
+        task_intervals = (
+            build_history(
+                records,
+                overrides_dir=overrides_dir,
+                master_refs=master_refs,
+                max_gap=max_gap,
+                worker_group=worker_group,
+                task_identity=identity,
+            )
+            if refs
+            else []
+        )
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
             futures = [
                 executor.submit(fetch_task_run, clients, ref, identity=identity) for ref in refs
             ]
             for future in concurrent.futures.as_completed(futures):
-                result["jobs"].append(
-                    attribute_job(
-                        future.result(),
-                        intervals=intervals,
-                        identity=identity,
-                        since=since,
-                        until=until,
-                    )
+                job = attribute_job(
+                    future.result(),
+                    intervals=intervals,
+                    identity=identity,
+                    since=since,
+                    until=until,
+                    task_intervals=task_intervals,
                 )
+                evidence = job.get("attribution_evidence") or {}
+                if evidence.get("method") == "queue_run_identity_and_puppet_history":
+                    evidence["host_association"] = result["query_identity_evidence"]
+                result["jobs"].append(job)
         result["jobs"].sort(key=lambda job: (job.get("started") or "", job.get("task_id") or ""))
         result["query_ok"] = True
+        qualified = []
+        for job in result["jobs"]:
+            evidence = job.get("attribution_evidence") or {}
+            if evidence.get("method") == "queue_run_identity_and_puppet_history":
+                qualified.append({**evidence["interval"], "configuration": job["configuration"]})
+        unique = {json.dumps(item, sort_keys=True): item for item in qualified}
+        result["intervals"].extend(unique.values())
+        result["intervals"].sort(key=lambda item: (item["start"], item["end"]))
+        result["configuration_gaps"] = history_gaps(
+            intervals, since=since, until=until, task_intervals=qualified
+        )
+        if qualified:
+            result["warnings"].append(
+                f"{len(qualified)} run(s) use Queue-verified identity with independent Puppet history; "
+                "identity coverage is limited to those run windows."
+            )
     except Exception as exc:
         result["error"] = str(exc)
     return result
@@ -1588,10 +1724,14 @@ def print_report_details(report, *, labels, verbose):
             for gap in host["configuration_gaps"]:
                 print(f"    Unknown configuration: {gap['start']} to {gap['end']}")
             for job in jobs:
-                print(
-                    f"    {job['outcome']}: {job['task_id']} run {job['run_id']}: "
-                    f"{job['exclusion_reason'] or 'classified'}"
-                )
+                detail = job["exclusion_reason"] or "classified"
+                evidence = job.get("attribution_evidence") or {}
+                if evidence.get("method") == "queue_run_identity_and_puppet_history":
+                    detail += (
+                        "; Queue-verified identity + Puppet history "
+                        f"({evidence['interval']['source']})"
+                    )
+                print(f"    {job['outcome']}: {job['task_id']} run {job['run_id']}: {detail}")
     print("  Rates use completed + failed + exception; running/pending/unknown are not passes.")
 
 

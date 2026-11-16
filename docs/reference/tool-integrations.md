@@ -21,6 +21,7 @@ check exit status. Tables and diagnostic text are not stable parsing interfaces.
 
 | Machine interface | Contract | Preserve |
 | --- | --- | --- |
+| Rollout attribution | Report v1: [rollout report](../rollout-report.md) | Exact Queue run identity, independent Puppet proof, task-scoped attribution provenance, current versus historical state, original outcomes, exclusions and observation/retention bounds. Coverage may increase when formerly missing identity is independently proved; inspect per-job attribution methods. |
 | Explicit pool comparison | Comparison v1: [rollout compare-pools](../rollout-compare.md) | Candidate/baseline identity, shared window, observed versus attributed outcomes, exact role/name matching, query failures, source times and per-worker evidence. |
 | Live worker diagnosis | Diagnosis v2: [host diagnose JSON](host-diagnose.md) | Collection success separate from health, valid exit 1 reports, full structured checks, upstream schema status and source times. Upstream v1 supports present/absent/unknown zombie evidence; legacy evidence stays unknown. Consumers must opt into envelope v2; findings do not authorize recovery. Medic integration is pending. |
 | Host snapshot and worker evidence | Worker evidence v3: [monitor JSON](monitor-json.md), [historical identity](historical-worker-identity.md) | Host-keyed snapshots, full identity, source timestamps, current/historical distinction, lookup outcomes, pinned provenance. Follow mode uses different framing and is not a durable event stream. |

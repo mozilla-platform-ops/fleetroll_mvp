@@ -16,10 +16,12 @@ from .rollout_history import (
     applied_time,
     parse_timestamp,
     repository_name,
-    verified_configuration,
+    verified_puppet_configuration,
+    worker_identity,
 )
 
 VERSION = 1
+PROOF_VERSION = 2
 RETENTION_DAYS = 30
 COMPACTION_GAP_SECONDS = 3600
 # Deliberately exclude contents, output, paths, uptime, and polling/run durations.
@@ -174,9 +176,12 @@ def source_proof(conn, record, *, overrides_dir):
     refs: set[tuple[str, str]] = (
         {(repo, revision)} if ref and repo and isinstance(revision, str) else set()
     )
-    config, reason = verified_configuration(record, overrides_dir=overrides_dir, master_refs=refs)
+    config, reason = verified_puppet_configuration(
+        record, overrides_dir=overrides_dir, master_refs=refs
+    )
     if config is None:
         return None, reason
+    identity, identity_reason = worker_identity(record, overrides_dir=overrides_dir)
     provenance = {
         "source": "host.audit",
         "observation_ts": record["ts"],
@@ -184,7 +189,13 @@ def source_proof(conn, record, *, overrides_dir):
         "master_reference_ts": ref[0] if ref and not config.override_sha else None,
         "override_content_sha256": config.override_sha,
     }
-    return {"version": VERSION, "configuration": asdict(config), "provenance": provenance}, None
+    return {
+        "version": PROOF_VERSION,
+        "configuration": asdict(config),
+        "identity": asdict(identity) if identity else None,
+        "identity_reason": identity_reason,
+        "provenance": provenance,
+    }, identity_reason
 
 
 def record_observation(conn, record, *, overrides_dir=None, now=None):
@@ -375,7 +386,16 @@ def read_evidence(conn, *, until, now=None):
                     "span_end": dt.datetime.fromtimestamp(last, dt.UTC).isoformat(),
                     "max_observation_gap_s": gap,
                     "invalidated": bool(invalidated),
-                    "verified": proof is not None and not invalidated,
+                    "verified": bool(
+                        proof
+                        and (
+                            proof.get("identity")
+                            if proof.get("version") == 2
+                            else proof.get("configuration", {}).get("identity")
+                        )
+                    )
+                    and not invalidated,
+                    "puppet_verified": proof is not None and not invalidated,
                     "provenance": proof.get("provenance") if proof else None,
                 }
             )

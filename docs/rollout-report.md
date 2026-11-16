@@ -165,6 +165,48 @@ Latest host failures within five minutes of report end receive a human warning
 and refresh suggestion because a reboot may be involved. They remain unqueried,
 unverified, and errors in JSON/exit status. Refresh successfully to establish state.
 
+### Independent task identity proof
+
+A successful audit with complete Puppet/file evidence can remain useful when
+historical worker identity collection was unavailable. Attribution first uses
+the normal host configuration history. If that cannot cover a task, Fleetroll
+can combine independent Puppet history with Queue's identity for that exact run.
+This requires a fresh, successful, nonlegacy host identity for querying and a
+unique integer run ID whose Queue provisioner, worker type, group, and worker ID
+all match. Current pool membership alone does not establish historical identity.
+Known identity contradictions, ambiguous/invalid collection, writes, unverified
+Puppet/files, excessive gaps, and transitions remain barriers.
+
+`query_identity_evidence` names the host association source explicitly:
+`host_collected_configuration` or `legacy_role_override_mapping`, with its
+observation timestamp and full identity. Configured identity is not proof of the
+current worker process's running identity. Queue evidence establishes ownership
+of the exact historical run. The combined method retains its configured host
+association under `host_association`; broader configured/runtime identity rules
+remain separate design work (`mvp-dx2b`).
+
+The resulting identity interval covers only that task's start/end, while
+`puppet_interval` reports the independently supported configuration range.
+It does not fill other gaps or upgrade current host status. Failed overall
+collections remain absence of new evidence; normalized partial fields from a
+failed collection are not a new trusted snapshot. Unknown vault presence and
+absent-vault/applied-vault contradictions are unverified as well.
+
+New compact descriptors retain independent Puppet proof. Some old identity-only
+refusals can be strictly revalidated from retained endpoints and available
+artifacts, within retained write-history coverage. Missing proof inputs stay
+unknown. This does not recover unsupported interior historical cutoffs.
+See [compact history](reference/configuration-history.md) for retention behavior
+and the [design/case validation](design/partial-rollout-attribution.md) for the
+November 5 ms-017 example, including the expired original Queue task.
+
+Coverage/cohort counts can increase when previously excluded runs gain complete
+independent proof. Original outcomes remain unchanged: an attributed exception
+is still an exception. JSON stays at version 1 with additive provenance fields;
+consumers should inspect the attribution method and interval rather than assume
+every task used host-collected identity throughout its Puppet interval. No
+attribution result authorizes a host operation or rollout advance.
+
 ## File coverage and live queue depth
 
 Fleet override percentages describe present/absent/unknown files among hosts with
@@ -190,12 +232,14 @@ Top-level fields are `schema_version`, `configuration_history`,
 | Selection | Role or provisioner/pool selectors; null for explicit hosts. Per-host `out_of_scope_history` retains omitted `intervals`, `jobs`, and verified current `configuration`; ordinary fields serve the selected assessment. |
 | Host evidence | Jobs and exclusion reasons; intervals with raw/compact sources, maximum polling gaps, cutoffs; `configuration_evidence` with pinned provenance/reasons; `configuration_gaps` for unknown ranges. Gaps describe the full timeline, not known out-of-scope work. |
 | Task metadata | Job `name` and `name_error` are nullable strings, separate from `query_error`. `task_name_lookups` counts unique task IDs: `cached`, `reused` (names already present in rows), `fetched`, `failed`, and cache `warnings`. |
+| Task identity and attribution | Host `query_identity_evidence` records the configured/legacy query association and timestamp, or null when querying is unavailable. Job `identity_evidence` is null on failed/unresolved Queue checks; otherwise it records `source: queue.status`, task/run IDs, and all four native identity fields. `attribution_evidence` is null for exclusions or has method `host_configuration_history` / `queue_run_identity_and_puppet_history`. The combined method includes Queue evidence, `host_association`, `puppet_interval`, and the task-scoped supported `interval`. |
 | Coverage | Fetched, selected in-window, classified, excluded, unresolved tasks; requested/queried hosts and observation freshness. `out_of_scope` counts known omitted in-window work; `outside_window` counts retrieved work beyond time bounds. |
 | Summary | Cohorts, applied revisions, outcome totals/rates, `evidence` sample/attribution fields. `all_observed_outcomes` includes all retrieved in-window work; `out_of_scope_outcomes` is known omitted work; `unattributed_outcomes` is unknown configuration only. |
 | Cohort health | `health.status`, `sample_status`, `minimum_finished`, `basis: "verified tasks in report window"`, `warnings` |
 | Comparisons | `observed_result`, `sample_status`, `minimum_finished`, `attribution`, `unattributed_failures`; assessment/comparison `warnings` and `host_query_coverage` include queried/requested counts and observed/minimum fractions. |
 | Attribution | `status` (`limited` or `meets threshold`), `fraction`, `warning_threshold`, `warnings`; independent of comparison `status` |
 | History metadata | Availability, schema version, retention cutoff, compact span count, and `historical_cutoffs` with host, cutoff, span endpoints, maximum polling gap, verification/invalidation state, and proof provenance. Per-host results also expose their crossing spans, requested `max_observation_gap_s`, and `observation_status`: `fresh`, `stale`, `missing`, `failed`, or `historical_detail_unavailable`. |
+| Proof provenance | Compact `configuration_evidence` adds `proof_version` and `worker_identity_reason`. Internal proof versions 1/2 are independent of report schema v1; cutoff `puppet_verified` distinguishes stored Puppet-only proof from full `verified` proof. Read-time revalidation does not backfill those stored flags. Sources can include `revalidated_compact`; task-qualified intervals carry `identity_source: queue.status`. |
 | Queue counts | `scope: whole_pool`, `approximate: true`, `pools`, `unresolved_hosts`, `legacy_mapped_hosts`. Each pool has `worker_pool`, nullable `pending_tasks`, `checked_at`, `error`. Also present in fleet-status JSON. |
 
 Unavailable comparisons use `observed_result: "comparison unavailable"` and

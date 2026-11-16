@@ -47,6 +47,25 @@ the same state after caches expire; this does not grant observation continuity.
 The first successful application remains the activation anchor; ordinary Puppet
 reruns update only the latest application bound.
 
+Internal proof version 2 separates Puppet/file proof from optional host worker
+identity. Existing full version-1 proofs and SQLite schema version 1 remain
+supported. A successful audit with unavailable worker identity can pin complete
+Puppet evidence without making its current configuration verified. Queue-verified
+task identity may complete that evidence for an individual run, as described in
+[rollout attribution](../rollout-report.md#independent-task-identity-proof).
+Historical-cutoff metadata retains `verified` for the complete proof and adds
+`puppet_verified` for the stored independent Puppet component. Read-time endpoint
+revalidation does not backfill those stored verification flags.
+
+Older identity-only refusals can be revalidated from their complete endpoint
+fields and available hash-verified artifacts/master evidence. Application time
+must lie within the retained write-history window; prior write-convergence
+refusals and invalidated spans cannot be upgraded. Missing artifacts or incomplete
+evidence remain unknown. Source `revalidated_compact` distinguishes these checked
+endpoints from pinned descriptors. Reports still open storage read-only and do
+not save revalidated proof. External snapshots and audit records cannot supply
+trusted internal proof/continuity fields.
+
 Matching states within one hour extend a span's last endpoint and maximum
 observed polling gap. Larger gaps create another span. Reports may bridge spans
 only when their requested gap bound and the actual retained evidence permit it.

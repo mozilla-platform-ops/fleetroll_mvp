@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -99,13 +99,17 @@ def worker_identity(  # noqa: PLR0911 - distinguish each identity failure explic
 
 
 @dataclass(frozen=True)
-class Configuration:
+class PuppetConfiguration:
     role: str
     repository: str
     branch: str
     override_sha: str | None
     git_sha: str
     vault_sha: str | None
+
+
+@dataclass(frozen=True)
+class Configuration(PuppetConfiguration):
     identity: WorkerIdentity
 
     @property
@@ -129,8 +133,27 @@ class Interval:
 
 def retained_configuration(record: dict[str, Any]) -> Configuration | None:
     """Read only the trusted proof attached by the compact SQLite reader."""
+    puppet = retained_puppet_configuration(record)
+    if puppet is None:
+        return None
+    proof = record["_configuration_proof"]
+    identity = (
+        proof["configuration"].get("identity") if proof["version"] == 1 else proof.get("identity")
+    )
+    try:
+        return Configuration(**asdict(puppet), identity=WorkerIdentity(**identity))
+    except (TypeError, ValueError):
+        return None
+
+
+def retained_puppet_configuration(record: dict[str, Any]) -> PuppetConfiguration | None:
+    """Read pinned file/revision proof independently of worker identity."""
     proof = record.get("_configuration_proof")
-    if not isinstance(proof, dict) or proof.get("version") != 1:
+    if (
+        not isinstance(proof, dict)
+        or type(proof.get("version")) is not int
+        or proof["version"] not in (1, 2)
+    ):
         return None
     established = parse_timestamp((proof.get("provenance") or {}).get("established_ts"))
     stamp = parse_timestamp(record.get("ts"))
@@ -138,8 +161,8 @@ def retained_configuration(record: dict[str, Any]) -> Configuration | None:
         return None
     try:
         data = dict(proof["configuration"])
-        data["identity"] = WorkerIdentity(**data["identity"])
-        config = Configuration(**data)
+        data.pop("identity", None)
+        config = PuppetConfiguration(**data)
     except (KeyError, TypeError, ValueError):
         return None
     observed = record.get("observed") or {}
@@ -166,21 +189,42 @@ def applied_time(observed: dict[str, Any]) -> dt.datetime | None:
     return None
 
 
-def verified_configuration(  # noqa: PLR0911 - explicit evidence refusals remain readable
+def revalidatable_puppet_endpoint(record: dict[str, Any]) -> bool:
+    """Old identity-only refusals can be rechecked, never assumed verified.
+
+    Require retained write coverage back through the application timestamp.
+    Invalidated spans and prior Puppet/file failures are never eligible here.
+    """
+    if not record.get("_compact_unverified") or record.get("_compact_invalidated"):
+        return False
+    if record.get("_compact_reason") not in {
+        "worker identity collection failed; refresh gather host",
+        "no observed identity or legacy role/override mapping",
+        "stored override missing or invalid; legacy pool cannot be resolved safely",
+        "legacy pool is unresolved",
+    }:
+        return False
+    applied = applied_time(record.get("observed") or {})
+    cutoff = parse_timestamp(record.get("_compact_retention_cutoff"))
+    return applied is not None and cutoff is not None and applied >= cutoff
+
+
+def verified_puppet_configuration(  # noqa: PLR0911 - explicit evidence refusals remain readable
     record: dict[str, Any],
     *,
     overrides_dir: Path,
     master_refs: set[tuple[str, str]],
-    worker_group: str = "mdc1",
-) -> tuple[Configuration | None, str | None]:
+) -> tuple[PuppetConfiguration | None, str | None]:
     observed = record.get("observed") or {}
-    if record.get("_compact_unverified"):
+    if not record.get("ok"):
+        return None, "latest host observation failed"
+    proof = record.get("_configuration_proof")
+    if isinstance(proof, dict) and (
+        type(proof.get("version")) is not int or proof["version"] not in (1, 2)
+    ):
+        return None, "unsupported retained Puppet proof version"
+    if record.get("_compact_unverified") and not revalidatable_puppet_endpoint(record):
         return None, record.get("_compact_reason") or "retained configuration was unverified"
-    identity, reason = worker_identity(
-        record, overrides_dir=overrides_dir, worker_group=worker_group
-    )
-    if identity is None:
-        return None, reason
     role = observed.get("role")
     if not role or observed.get("puppet_role") != role:
         return None, "applied role is missing or does not match the configured role"
@@ -193,7 +237,7 @@ def verified_configuration(  # noqa: PLR0911 - explicit evidence refusals remain
         return None, "applied repository, revision, or convergence timestamp is missing"
     if applied > stamp:
         return None, "Puppet convergence timestamp is later than the observation"
-    retained = retained_configuration(record)
+    retained = retained_puppet_configuration(record)
     if observed.get("override_present") is True:
         sha = observed.get("override_sha256")
         if not sha or sha != observed.get("puppet_override_sha_applied"):
@@ -217,12 +261,56 @@ def verified_configuration(  # noqa: PLR0911 - explicit evidence refusals remain
             return None, "no evidence that the clean applied revision belongs to upstream master"
     else:
         return None, "override presence is unknown"
+    if observed.get("vault_present") is not True and observed.get("vault_present") is not False:
+        return None, "vault presence is unknown"
+    if observed.get("vault_present") is False and observed.get("puppet_vault_sha_applied"):
+        return None, "vault removed but Puppet still reports the old vault"
     vault_sha = observed.get("vault_sha256") if observed.get("vault_present") else None
     if observed.get("vault_present") and (
         not vault_sha or vault_sha != observed.get("puppet_vault_sha_applied")
     ):
         return None, "configured vault does not match the applied vault"
-    return Configuration(role, repo, branch, sha, git_sha, vault_sha, identity), None
+    return PuppetConfiguration(role, repo, branch, sha, git_sha, vault_sha), None
+
+
+def verified_configuration(
+    record: dict[str, Any],
+    *,
+    overrides_dir: Path,
+    master_refs: set[tuple[str, str]],
+    worker_group: str = "mdc1",
+    task_identity: WorkerIdentity | None = None,
+) -> tuple[Configuration | None, str | None]:
+    identity, reason = worker_identity(
+        record, overrides_dir=overrides_dir, worker_group=worker_group
+    )
+    if task_identity is not None:
+        observed = record.get("observed") or {}
+        unavailable = (
+            "tc_worker_identity_status" not in observed
+            or observed.get("tc_worker_identity_status")
+            in {
+                "missing",
+                "unreadable",
+                "process_lookup_failed",
+                "collector_unavailable",
+                "unsupported_launch_config",
+                "invalid_launch_config",
+            }
+        ) and not observed.get("tc_worker_identity")
+        if identity is not None and identity.legacy:
+            identity, unavailable = None, True
+        if identity is not None and identity != task_identity:
+            return None, "recorded worker identity contradicts Queue run identity"
+        if identity is None and not unavailable:
+            return None, reason
+        identity = task_identity
+    if identity is None:
+        return None, reason
+    config, reason = verified_puppet_configuration(
+        record, overrides_dir=overrides_dir, master_refs=master_refs
+    )
+    return (Configuration(**asdict(config), identity=identity), None) if config else (None, reason)
 
 
 def build_history(
@@ -232,6 +320,7 @@ def build_history(
     master_refs: set[tuple[str, str]],
     max_gap: dt.timedelta,
     worker_group: str = "mdc1",
+    task_identity: WorkerIdentity | None = None,
 ) -> list[Interval]:
     """Infer bounded intervals, breaking continuity at contradictory/unknown evidence."""
     by_time: dict[dt.datetime, list[dict[str, Any]]] = {}
@@ -264,6 +353,7 @@ def build_history(
                 overrides_dir=overrides_dir,
                 master_refs=master_refs,
                 worker_group=worker_group,
+                task_identity=task_identity,
             )[0]
             for entry in audits
         ]
@@ -294,6 +384,7 @@ def build_history(
                     overrides_dir=overrides_dir,
                     master_refs=master_refs,
                     worker_group=worker_group,
+                    task_identity=task_identity,
                 )[0]
                 == config
             ):
@@ -308,7 +399,12 @@ def build_history(
             intervals[-1] = replace(
                 previous,
                 end=stamp,
-                source=("compact" if previous.source == "compact" else "raw+compact")
+                source="revalidated_compact"
+                if (
+                    previous.source == "revalidated_compact"
+                    or any(revalidatable_puppet_endpoint(entry) for entry in audits)
+                )
+                else ("compact" if previous.source == "compact" else "raw+compact")
                 if compact_gap is not None
                 else previous.source,
                 max_gap_s=max(
@@ -331,7 +427,14 @@ def build_history(
         if intervals and start <= intervals[-1].end:
             start = stamp
         cutoff = parse_timestamp(audits[0].get("_compact_retention_cutoff"))
-        intervals.append(Interval(start, stamp, config, "compact" if cutoff else "raw", 0, cutoff))
+        source = (
+            "revalidated_compact"
+            if any(revalidatable_puppet_endpoint(entry) for entry in audits)
+            else "compact"
+            if cutoff
+            else "raw"
+        )
+        intervals.append(Interval(start, stamp, config, source, 0, cutoff))
         continuous = True
         boundary = None
     return [
