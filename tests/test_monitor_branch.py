@@ -114,6 +114,27 @@ def test_branch_sort_respects_explicit_secondary_keys(branch_context):
     assert [r["host"] for r in selected] == ["host10", "host2"]
 
 
+def test_branch_sort_groups_hosts_by_full_override_checksum(branch_context, monkeypatch):
+    cache, original, _ = branch_context
+    records = {
+        host: {**original[source], "host": host}
+        for host, source in [
+            ("host2", "host2"),
+            ("host3", "host10"),
+            ("host10", "host10"),
+            ("host20", "host2"),
+        ]
+    }
+    rows = [build_row_values(host, record, sha_cache=cache) for host, record in records.items()]
+    display = make_display((cache, records, rows), monkeypatch=monkeypatch)
+    display.sort_field = "ovr_bch"
+    expected = ["host2", "host20", "host3", "host10"]
+    assert sorted(display.hosts, key=display._get_sort_key) == expected  # noqa: SLF001
+    for direction in ("asc", "desc"):
+        sorted_rows = apply_query(rows, parse_query(f"sort:ovr_bch:{direction}"))
+        assert [row["host"] for row in sorted_rows] == expected
+
+
 @pytest.mark.parametrize("separator", ["-", "_"])
 def test_dated_branches_stay_together(branch_context, monkeypatch, separator):
     cache, records, _ = branch_context

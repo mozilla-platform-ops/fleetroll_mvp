@@ -96,6 +96,7 @@ def get_host_sort_key(
         return (
             not bool(branch),
             override_branch_sort_key(branch),
+            (observed.get("override_sha256") or "") if branch else "",
             natural_sort_key(hostname),
             hostname,
         )

@@ -98,8 +98,8 @@ Within each name group, full branch names sort by date (oldest first ascending,
 newest first descending). Filters still match the full branch, including its date.
 Known branches come first in both directions; all unavailable branches
 share a final bucket, retaining their distinct `override` states. Explicit
-secondary sort keys take precedence over the final ascending natural-hostname
-tie-breaker (host2 before host10), which applies even in descending branch order.
+secondary sort keys take precedence over the full override checksum and natural
+hostname tie-breakers. Both tie-breakers are ascending in either branch direction.
 Failed audits use the same last-success fallback for display, filtering and sorting.
 
 Migration: `ovr_bch` formerly compared formatted branch/checksum/worker-type text.

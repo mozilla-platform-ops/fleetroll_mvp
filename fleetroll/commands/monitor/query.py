@@ -353,6 +353,8 @@ def _row_sort_tuple(row: dict[str, str], sort_keys: list[SortKey]) -> tuple:
             else:
                 parts.append((1 if unknown else 0, _Rev(str_val)))
     if any(sk.column == "ovr_branch" for sk in sort_keys):
+        if row.get("ovr_branch"):
+            parts.append(row.get("ovr_sha_full", ""))
         host = row.get("_host", row.get("host", ""))
         parts.extend((natural_sort_key(host), host))
     return tuple(parts)
