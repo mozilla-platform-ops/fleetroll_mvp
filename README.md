@@ -164,9 +164,10 @@ original timestamps after partial failures. See
 [configuration evidence](docs/reference/configuration-evidence.md) for the JSON
 contract and producer limitations.
 
-The monitor's `CONFIG`, `ACTIVITY`, `VERIFY_AGE`, and `VERIFY_WHY` columns separate
-configuration verification from linked TC activity and source freshness. JSON
-publishes verification schema v1 with component reasons and provenance.
+Monitor text snapshots and the web view use `CONFIG`, `ACTIVITY`, `VERIFY_AGE`,
+and `VERIFY_WHY` to report configuration verification, linked TC activity, and
+source freshness. JSON publishes verification schema v1 with component reasons
+and provenance.
 Use `--filter 'config=not_verified|unknown'` for configuration review. Existing
 HEALTHY/PP_MATCH queries keep their compatibility meanings. See
 [configuration verification](docs/reference/configuration-verification.md),
@@ -247,9 +248,10 @@ Quiet mode prints status, collected/requested counts, and elapsed time in at mos
 See [worker identity collection](docs/reference/worker-identity.md) for configuration
 sources and supported launch configurations.
 
-Linux `gather host` also records optional, bounded gwhc diagnostics. Monitor
-columns `GW_RUN`, `DISK`, and `GWHC_AGE` show generic-worker process evidence,
-filesystem free space and its age. Missing checks remain unknown; evidence is
+Linux `gather host` also records optional, bounded gwhc diagnostics. In monitor
+text snapshots and the web view, columns `GW_RUN`, `DISK`, and `GWHC_AGE` show
+generic-worker process evidence, filesystem free space, and observation age.
+Missing checks remain unknown and evidence is
 stale after 15 minutes. See [recorded diagnostics](docs/reference/recorded-gwhc.md)
 for thresholds, query fields, timestamps and JSON contracts.
 

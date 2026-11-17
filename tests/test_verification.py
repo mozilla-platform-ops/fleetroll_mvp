@@ -572,7 +572,7 @@ def test_example_consumer_refuses_unknown_prerequisites(inputs, change):
 
 @pytest.mark.tui
 @skip_no_tmux
-def test_tui_uses_verification_filter_and_shows_independent_activity(inputs, tmp_path, monkeypatch):
+def test_tui_filters_by_configuration_verification(inputs, tmp_path, monkeypatch):
     # Bring collection/reference clocks to the real subprocess clock; the old
     # Puppet completion remains old and must not make current collection stale.
     delta = datetime.now(UTC) - NOW
@@ -606,8 +606,5 @@ def test_tui_uses_verification_filter_and_shows_independent_activity(inputs, tmp
         env={"HOME": str(tmp_path), "PATH": os.environ["PATH"], "TERM": "xterm-256color"},
     ) as session:
         assert session.wait_for("hosts=1/1", timeout=15), session.capture()
-        assert session.wait_for("CONFIG", timeout=5), session.capture()
-        assert session.wait_for("verified", timeout=5), session.capture()
-        assert session.wait_for("recent", timeout=5), session.capture()
         session.send_keys("/", "config=unknown", "Enter")
         assert session.wait_for("hosts=0/1", timeout=5), session.capture()

@@ -143,6 +143,8 @@ class TestMonitorLayout:
         screen = tmux_session.capture()
         for col in ("OS", "ROLE", "OVR_BCH"):
             assert col in screen, f"Column '{col}' not found in screen"
+        for col in ("CONFIG", "ACTIVITY", "VERIFY_AGE", "VERIFY_WHY", "GW_RUN", "DISK", "GWHC_AGE"):
+            assert col not in screen
 
     def test_host_rows_rendered(self, tmux_session: TmuxSession) -> None:
         """At least one seeded host name appears in the output."""

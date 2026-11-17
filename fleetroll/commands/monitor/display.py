@@ -707,7 +707,6 @@ class MonitorDisplay:
             - labels_dict maps column name to header label
             - widths_dict maps column name to computed width
         """
-        # Column order/set mirrors web/src/pages/Hosts.tsx — update both when adding columns.
         all_columns = [
             "host",
             "os",
@@ -724,13 +723,6 @@ class MonitorDisplay:
             "tc_quar",
             "data",
             "healthy",
-            "config",
-            "activity",
-            "verify_age",
-            "verify_why",
-            "gwhc_worker",
-            "gwhc_disk",
-            "gwhc_age",
             "note",
         ]
 
@@ -750,14 +742,7 @@ class MonitorDisplay:
             "pp_sha": "PP_SHA",
             "pp_match": "PP_MATCH",
             "healthy": "HEALTHY",
-            "config": "CONFIG",
-            "activity": "ACTIVITY",
-            "verify_age": "VERIFY_AGE",
-            "verify_why": "VERIFY_WHY",
             "data": "DATA",
-            "gwhc_worker": "GW_RUN",
-            "gwhc_disk": "DISK",
-            "gwhc_age": "GWHC_AGE",
         }
 
         # Add sort indicator (↑/↓) to active column
@@ -826,7 +811,6 @@ class MonitorDisplay:
                 widths[col] = max(widths[col], len(value))
 
         # Add padding for role markers.
-        widths["verify_why"] = min(widths["verify_why"], 80)
         for col in ("role",):
             if col in widths:
                 widths[col] += 2

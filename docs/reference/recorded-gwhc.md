@@ -32,9 +32,9 @@ describe the filesystem actually sampled, not coverage of every mount. Missing
 values never become zero.
 
 Evidence becomes stale at **15 minutes**. Missing/invalid timestamps or times
-more than 60 seconds ahead of the local clock make freshness unknown. TUI/web
-retained evidence after a failed host gather is explicitly stale. A successful
-gather with failed optional diagnostics shows unknown and does not reuse older
+more than 60 seconds ahead of the local clock make freshness unknown. Retained
+evidence after a failed host gather is explicitly stale. A successful gather
+with failed optional diagnostics shows unknown and does not reuse older
 diagnostics. Legacy observations, macOS and Windows show unknown. Normalized
 metrics require supported upstream integer schema v1.
 
@@ -53,8 +53,8 @@ All monitor query consumers support these string fields:
 
 Examples: `gwhc_worker=stopped gwhc_age<15m`, `gwhc_disk_alert=alert`,
 `gwhc_worker=unknown|stale`, `sort:gwhc_age:desc,host`.
-Web tooltips expose source and report timestamp. TUI column help identifies the
-source, and age appears beside the signals. JSON exposes exact timestamps.
+Web tooltips expose source and report timestamp. The interactive TUI supports
+the query fields above. JSON exposes exact timestamps.
 
 ## JSON and storage
 

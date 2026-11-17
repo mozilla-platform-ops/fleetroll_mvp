@@ -356,7 +356,7 @@ def test_cli_json_text_and_web_consume_same_recorded_diagnostics(tmp_path, monke
 
 @pytest.mark.tui
 @skip_no_tmux
-def test_tui_renders_and_filters_recorded_diagnostics(tmp_path, monkeypatch):
+def test_tui_filters_recorded_diagnostics(tmp_path, monkeypatch):
     from fleetroll.db import get_db_path, insert_host_observation
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -373,8 +373,7 @@ def test_tui_renders_and_filters_recorded_diagnostics(tmp_path, monkeypatch):
         rows=40,
         env={"HOME": str(tmp_path), "PATH": os.environ["PATH"], "TERM": "xterm-256color"},
     ) as sess:
-        assert sess.wait_for("GW_RUN", timeout=15), sess.capture()
-        assert sess.wait_for("ALERT /:1GiB", timeout=5), sess.capture()
+        assert sess.wait_for("hosts=1", timeout=15), sess.capture()
         sess.send_keys("/", "gwhc_worker=stopped", "Enter")
         assert sess.wait_for("hosts=0/1", timeout=5), sess.capture()
 

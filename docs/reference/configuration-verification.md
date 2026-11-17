@@ -2,7 +2,7 @@
 
 Monitor JSON publishes `verification_schema_version: 1` and a `verification`
 object, independently of worker-evidence v3 and configuration-collection v1.
-CLI text, TUI, web, queries and collection selectors project the same pure
+CLI text, web, queries and collection selectors project the same pure
 evaluator. Evaluation reads recorded evidence; it does not gather or mutate hosts.
 
 ## Configuration, activity and workload
@@ -148,9 +148,8 @@ Examples: `config=not_verified`, `config=not_verified|unknown sort:host`,
 `config=verified activity=not_recent`, `verify_why~v1_null_is_ambiguous`,
 `reference_fresh=stale sort:verify_age:desc,host`.
 These are review selections, not authorized action targets. Unknown is explicit
-and matchable; `config=not_verified` excludes unknown. TUI/text put the new group
-after HEALTHY; TUI reason cells are capped at 80 characters and full evidence is
-available in JSON/web. The oldest age can describe retained evidence and never
+and matchable; `config=not_verified` excludes unknown. Text snapshots put the group after HEALTHY. The interactive TUI
+supports these query fields. Full evidence is available in JSON and the web view. The oldest age can describe retained evidence and never
 overrides an unknown/failed current collection status.
 
 ## Compatibility and migration
