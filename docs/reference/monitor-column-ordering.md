@@ -124,6 +124,13 @@ the bar nor its color indicates health or confirms that a worker is idle.
 
 ## Compact DATA ages
 
+Recorded Linux diagnostic columns `GW_RUN`, `DISK`, and `GWHC_AGE` form a
+separate group after HEALTHY and before NOTE. They show process existence,
+filesystem space and diagnostic evidence age, independently of HEALTHY and TC
+activity. Unknown and stale states are explicit. The text report drops this
+optional group after NOTE when width is constrained; the interactive table
+retains it through horizontal scrolling. See [recorded diagnostics](recorded-gwhc.md).
+
 The terminal monitor and text table show compact whole-unit ages in
 host-audit/Taskcluster order. Matching displayed ages show once: `5m/5m`
 becomes `5m`, and `1h 02m/1h 58m` becomes `1h`. Ages under a minute use `<1m`.

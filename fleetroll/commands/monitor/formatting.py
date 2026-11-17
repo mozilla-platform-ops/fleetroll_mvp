@@ -177,6 +177,9 @@ def compute_columns_and_widths(
         "tc_quar",
         "data",
         "healthy",
+        "gwhc_worker",
+        "gwhc_disk",
+        "gwhc_age",
         "note",
     ]
     labels = {
@@ -196,6 +199,9 @@ def compute_columns_and_widths(
         "pp_match": "PP_MATCH",
         "healthy": "HEALTHY",
         "data": "DATA",
+        "gwhc_worker": "GW_RUN",
+        "gwhc_disk": "DISK",
+        "gwhc_age": "GWHC_AGE",
     }
     caps = {
         "host": 80,
@@ -211,6 +217,9 @@ def compute_columns_and_widths(
         "pp_match": 8,
         "healthy": 7,
         "data": 7,
+        "gwhc_worker": 7,
+        "gwhc_disk": 80,
+        "gwhc_age": 8,
     }
     if cap_widths and max_width > 0:
         caps["host"] = min(caps["host"], max_width)
@@ -265,6 +274,9 @@ def compute_columns_and_widths(
 
     drop_order = [
         "note",
+        "gwhc_age",
+        "gwhc_disk",
+        "gwhc_worker",
         "vlt_sha",
         "sha",
         "role",
@@ -412,6 +424,9 @@ def render_monitor_lines(
         "pp_match": "PP_MATCH",
         "healthy": "HEALTHY",
         "data": "DATA",
+        "gwhc_worker": "GW_RUN",
+        "gwhc_disk": "DISK",
+        "gwhc_age": "GWHC_AGE",
     }
     header_parts = [clip_cell(labels[col], widths[col]) for col in columns]
     header = col_sep.join(header_parts)

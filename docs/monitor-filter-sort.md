@@ -55,6 +55,13 @@ Supported fields: `host`, `os`, `role`, `override`, `vlt_sha`, `ovr_bch`, `uptim
 `ovr_bch`, `ovr_sha_full` for `ovr_checksum`, `tc_j_sf` for `tc_t_dur`, and
 `health` for `healthy`.
 
+Recorded Linux diagnostics also support `gwhc_worker`, `gwhc_disk`,
+`gwhc_disk_alert`, `gwhc_age` (duration), `gwhc_ts`, and `gwhc_source`.
+For example, `gwhc_worker=stopped gwhc_age<15m` selects recent stopped-process
+observations; `gwhc_disk_alert=alert` selects recent low-space evidence.
+Statuses `unknown` and `stale` are explicit, matchable values. See
+[recorded gwhc evidence](reference/recorded-gwhc.md) for scope and freshness.
+
 `ovr_bch` now compares only the raw branch from structured cached override
 details. For example, `ovr_bch=release` matches `release` with any checksum or
 worker-pool setting, but excludes `release-next`. `ovr_bch~release` matches both.

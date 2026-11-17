@@ -57,6 +57,12 @@ const fakeRow = {
   healthy: "Y",
   data: "1h/2h",
   note: "-",
+  gwhc_worker: "running",
+  gwhc_disk: "ALERT /:4GiB(9%)",
+  gwhc_disk_alert: "alert",
+  gwhc_age: "<1m",
+  gwhc_ts: "2026-11-16T20:00:00Z",
+  gwhc_source: "sudo -n gwhc --json",
 };
 
 describe("Hosts", () => {
@@ -72,6 +78,8 @@ describe("Hosts", () => {
     expect(await screen.findByText("host1")).toBeInTheDocument();
     expect(screen.getByText("t-linux-talos")).toBeInTheDocument();
     expect(screen.getByText("hosts=1")).toBeInTheDocument();
+    expect(screen.getByText("running")).toHaveAttribute("title", "sudo -n gwhc --json at 2026-11-16T20:00:00Z");
+    expect(screen.getByText("ALERT /:4GiB(9%)")).toHaveClass("text-status-crit");
   });
 
   it("renders empty state when no hosts", async () => {

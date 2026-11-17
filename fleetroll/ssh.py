@@ -200,6 +200,7 @@ def audit_script_body(*, include_content: bool) -> str:
     include_content_cmd = "true" if include_content else "false"
     identity_code = (Path(__file__).with_name("worker_identity.rb")).read_text()
     identity_command = shlex.quote(identity_code)
+    gwhc_command = recorded_gwhc_script_body()
     # Note: use /bin/sh for portability.
     # We use sudo -n everywhere; failures will be visible.
     script = f"""
@@ -371,6 +372,9 @@ else
   fi
 fi
 
+# Optional diagnostic evidence, before the override content sentinel.
+{gwhc_command}
+
 # Override (best effort)
 if sudo -n test -e "$op" 2>/dev/null; then
   printf 'OVERRIDE_PRESENT=1\\n'
@@ -414,6 +418,25 @@ fi
 def remote_audit_script(*, include_content: bool) -> str:
     """Generate remote shell script for auditing a host."""
     return "sh -c " + shlex.quote(audit_script_body(include_content=include_content))
+
+
+def recorded_gwhc_script_body() -> str:
+    """Bound optional Linux diagnostics independently of the core host audit."""
+    return r"""printf 'GWHC_CHECKED_AT=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+if [ "$os_type" != Linux ]; then
+  printf 'GWHC_ERROR=unsupported_os\n'
+elif ! command -v gwhc >/dev/null 2>&1; then
+  printf 'GWHC_ERROR=gwhc_missing\n'
+elif ! command -v timeout >/dev/null 2>&1; then
+  printf 'GWHC_ERROR=timeout_unavailable\n'
+else
+  gwhc_rc=0
+  gwhc_output=$(timeout -k 2s 20s sudo -n gwhc --json 2>/dev/null) || gwhc_rc=$?
+  printf 'GWHC_EXIT=%s\n' "$gwhc_rc"
+  printf 'GWHC_STDOUT_B64='
+  printf '%s' "$gwhc_output" | head -c 262145 | base64 | tr -d '\n'
+  printf '\n'
+fi"""
 
 
 def remote_read_file_script(path: str) -> str:

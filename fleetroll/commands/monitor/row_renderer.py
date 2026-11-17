@@ -235,6 +235,13 @@ class RowRenderer:
                 draw(row, col, cell, attr)
                 col += len(cell)
                 continue
+            if col_name == "gwhc_disk":
+                attr = self.colors.ro_health_attr(
+                    "N" if values.get("gwhc_disk_alert") == "alert" else "-"
+                )
+                draw(row, col, cell, attr)
+                col += len(cell)
+                continue
             if col_name == "healthy":
                 attr = self.colors.ro_health_attr(values.get("healthy", "-"))
                 draw(row, col, cell, attr)

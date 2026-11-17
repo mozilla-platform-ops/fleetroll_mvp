@@ -17,6 +17,7 @@ from typing import Any
 
 from .constants import CONTENT_PREFIX_LEN, CONTENT_PREFIX_STEP, CONTENT_SENTINEL
 from .exceptions import FleetRollError
+from .gwhc import parse_recorded_gwhc
 from .utils import ensure_parent_dir, parse_kv_lines, sha256_hex, utc_now_iso
 
 
@@ -362,6 +363,7 @@ def process_audit_result(
             "role_present": role_present,
             "role": info.get("ROLE") if role_present else None,
             "os_type": os_type,
+            "gwhc": parse_recorded_gwhc(info, ssh_rc=rc),
             "override_present": override_present,
             "override_meta": (
                 {

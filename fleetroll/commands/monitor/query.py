@@ -19,7 +19,7 @@ def normalize_for_filter(value: str) -> str:
 
 
 # Columns whose values are time durations (for numeric comparison)
-TIME_COLUMNS = frozenset({"pp_last", "tc_act", "uptime", "tc_j_sf"})
+TIME_COLUMNS = frozenset({"pp_last", "tc_act", "uptime", "tc_j_sf", "gwhc_age"})
 
 # All valid column names (used for validation)
 KNOWN_COLUMNS = frozenset(
@@ -50,6 +50,12 @@ KNOWN_COLUMNS = frozenset(
         "pool",  # actual TC worker pool name
         "wt_ovr",  # override sets a worker pool: Y / N / -
         "note",
+        "gwhc_worker",
+        "gwhc_disk",
+        "gwhc_disk_alert",
+        "gwhc_age",
+        "gwhc_ts",
+        "gwhc_source",
     }
 )
 

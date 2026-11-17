@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from ...constants import ROLE_TO_TASKCLUSTER, STALE_DATA_THRESHOLD_SECONDS
+from ...gwhc import recorded_signals
 from .data import strip_fqdn
 
 if TYPE_CHECKING:
@@ -222,8 +223,12 @@ def build_monitor_json_record(
             if provenance == historical["provenance"]
             else "mismatch"
         )
+    gwhc = recorded_signals(record, now=now)
+    # Follow mode emits evidence/status changes, not a new record each second.
+    gwhc.pop("age_seconds")
     result.update(
         worker_evidence_schema_version=3,
+        gwhc_evidence=gwhc,
         configured_worker_type=configured,
         observed_worker_identity=observed_identity,
         historical_worker_identity=historical,

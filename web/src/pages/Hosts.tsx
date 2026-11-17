@@ -143,6 +143,17 @@ const columns = [
       );
     },
   }),
+  columnHelper.accessor("gwhc_worker", {
+    header: th("GW_RUN", "Recorded Linux gwhc generic-worker process: running, stopped, unknown, or stale. No task-progress or availability claim."),
+    cell: (info) => <span title={`${info.row.original.gwhc_source} at ${info.row.original.gwhc_ts}`}>{info.getValue()}</span>,
+  }),
+  columnHelper.accessor("gwhc_disk", {
+    header: th("DISK", "Recorded gwhc filesystem available GiB and percent. ALERT below 5 GiB or 10% free; stale after 15 minutes."),
+    cell: (info) => <span className={info.row.original.gwhc_disk_alert === "alert" ? "text-status-crit" : ""} title={`${info.row.original.gwhc_source} at ${info.row.original.gwhc_ts}`}>{info.getValue()}</span>,
+  }),
+  columnHelper.accessor("gwhc_age", {
+    header: th("GWHC_AGE", "Age of the oldest gwhc report, check, or host observation timestamp. Unknown when timestamps are unavailable."),
+  }),
   columnHelper.accessor("note", {
     header: th("NOTE", "Operator note for this host"),
   }),

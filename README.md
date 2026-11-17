@@ -232,6 +232,12 @@ Quiet mode prints status, collected/requested counts, and elapsed time in at mos
 See [worker identity collection](docs/reference/worker-identity.md) for configuration
 sources and supported launch configurations.
 
+Linux `gather host` also records optional, bounded gwhc diagnostics. Monitor
+columns `GW_RUN`, `DISK`, and `GWHC_AGE` show generic-worker process evidence,
+filesystem free space and its age. Missing checks remain unknown; evidence is
+stale after 15 minutes. See [recorded diagnostics](docs/reference/recorded-gwhc.md)
+for thresholds, query fields, timestamps and JSON contracts.
+
 For SSH-unreachable hosts, monitor JSON also exposes a durable historical worker
 identity with its original timestamp and contradiction signals. An explicit
 `uv run fleetroll gather tc --use-historical-identity HOST_OR_FILE` queries that

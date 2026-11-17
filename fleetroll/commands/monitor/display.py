@@ -720,6 +720,9 @@ class MonitorDisplay:
             "tc_quar",
             "data",
             "healthy",
+            "gwhc_worker",
+            "gwhc_disk",
+            "gwhc_age",
             "note",
         ]
 
@@ -740,6 +743,9 @@ class MonitorDisplay:
             "pp_match": "PP_MATCH",
             "healthy": "HEALTHY",
             "data": "DATA",
+            "gwhc_worker": "GW_RUN",
+            "gwhc_disk": "DISK",
+            "gwhc_age": "GWHC_AGE",
         }
 
         # Add sort indicator (↑/↓) to active column

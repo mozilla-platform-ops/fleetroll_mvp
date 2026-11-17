@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from ...constants import DEFAULT_GITHUB_REPO
+from ...gwhc import recorded_signals
 from ...humanhash import humanize
 from ...utils import natural_sort_key
 from .cache import abbreviate_checksum
@@ -637,6 +638,7 @@ def build_ok_row_values(
     # sees some as potentially Any due to dict.get() returning Any type
     return {  # type: ignore[invalid-return-type]
         "status": "OK",
+        **diagnostic_row_values(record),
         "host": display_host,
         "uptime": uptime,
         "override": override_state,
@@ -697,6 +699,7 @@ def build_row_values(
             pool = tc_data.get("worker_type") or "-"
         return {
             "status": "UNK",
+            **diagnostic_row_values(None),
             "host": display_host,
             "uptime": "?",
             "override": "?",
@@ -740,6 +743,7 @@ def build_row_values(
                 git_checksums=git_checksums,
             )
             values["status"] = "FAIL"
+            values.update(diagnostic_row_values(last_ok, latest_failed=True))
             values["err"] = err
             return values
         tc_str = "-"
@@ -752,6 +756,7 @@ def build_row_values(
         audit_str = "-"
         return {
             "status": "FAIL",
+            **diagnostic_row_values(record),
             "host": display_host,
             "uptime": "-",
             "override": "-",
@@ -933,3 +938,28 @@ class AuditLogTailer:
         rowid, record = self._buffer.pop(0)
         self._last_rowid = rowid
         return record
+
+
+def diagnostic_row_values(
+    record: dict[str, Any] | None,
+    *,
+    latest_failed: bool = False,
+) -> dict[str, str]:
+    """String row/query contract shared by CLI, TUI and web."""
+    signals = recorded_signals(record, latest_failed=latest_failed)
+    parts = []
+    for disk in signals["disks"]:
+        text = "?" if disk["free_gib"] is None else f"{disk['free_gib']:g}GiB"
+        if disk["free_pct"] is not None:
+            text += f"({disk['free_pct']:g}%)"
+        parts.append(f"{disk['path']}:{text}")
+    details = " ".join(parts)
+    prefix = signals["disk_status"].upper()
+    return {
+        "gwhc_worker": signals["worker_status"],
+        "gwhc_disk": f"{prefix} {details}".strip(),
+        "gwhc_disk_alert": signals["disk_status"],
+        "gwhc_age": humanize_duration(signals["age_seconds"], min_unit="m"),
+        "gwhc_ts": signals["observation_ts"] or "-",
+        "gwhc_source": signals["source"],
+    }

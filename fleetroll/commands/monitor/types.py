@@ -144,6 +144,12 @@ DATA      Data freshness: audit_age/tc_age
           Each source: green <5m, yellow <30m, red >=30m
           A shared age uses the older source's color
 
+GW_RUN    Recorded Linux gwhc process: running/stopped/unknown/stale
+DISK      gwhc path:available GiB(percent); ALERT below 5GiB or 10%
+GWHC_AGE  Evidence age; stale at 15m or after a failed host gather
+          Source: sudo -n gwhc --json; unsupported/missing = unknown
+          Process state is independent of TC activity and availability
+
 HEALTHY   Recorded revision/vault/activity signal (not overall health)
           Y = PP_MATCH and TC activity <1h and full vault checksums match
           N = legacy revision/activity failure, or vault checksum mismatch

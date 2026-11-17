@@ -51,6 +51,12 @@ class HostRow(BaseModel):
     healthy: str
     data: str
     note: str
+    gwhc_worker: str = "unknown"
+    gwhc_disk: str = "UNKNOWN"
+    gwhc_disk_alert: str = "unknown"
+    gwhc_age: str = "-"
+    gwhc_ts: str = "-"
+    gwhc_source: str = "sudo -n gwhc --json"
 
 
 class HostsSummary(BaseModel):

@@ -1,5 +1,9 @@
 # Monitor JSON worker evidence (version 3)
 
+Recorded Linux diagnostics are independent: `observed.gwhc` retains collection
+evidence and additive `gwhc_evidence` schema v1 qualifies worker-process/disk
+signals by source time. See [recorded gwhc](recorded-gwhc.md).
+
 `fleetroll host monitor HOST_OR_FILE --once --json` emits a host-keyed object.
 Each value preserves the latest raw host audit, including `observed.role` as
 the Puppet role, and adds `worker_evidence_schema_version: 3` plus four objects.

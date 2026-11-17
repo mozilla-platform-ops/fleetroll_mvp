@@ -117,15 +117,30 @@ export interface components {
             sha: string;
             /** Vlt Sha */
             vlt_sha: string;
-            /** Ovr Branch */
+            /**
+             * Ovr Branch
+             * @default
+             */
             ovr_branch: string;
-            /** Ovr Sha Full */
+            /**
+             * Ovr Sha Full
+             * @default
+             */
             ovr_sha_full: string;
-            /** Vlt Sha Full */
+            /**
+             * Vlt Sha Full
+             * @default
+             */
             vlt_sha_full: string;
-            /** Vlt Mnemonic */
+            /**
+             * Vlt Mnemonic
+             * @default
+             */
             vlt_mnemonic: string;
-            /** Vlt Symlink */
+            /**
+             * Vlt Symlink
+             * @default
+             */
             vlt_symlink: string;
             /** Mtime */
             mtime: string;
@@ -151,6 +166,36 @@ export interface components {
             data: string;
             /** Note */
             note: string;
+            /**
+             * Gwhc Worker
+             * @default unknown
+             */
+            gwhc_worker: string;
+            /**
+             * Gwhc Disk
+             * @default UNKNOWN
+             */
+            gwhc_disk: string;
+            /**
+             * Gwhc Disk Alert
+             * @default unknown
+             */
+            gwhc_disk_alert: string;
+            /**
+             * Gwhc Age
+             * @default -
+             */
+            gwhc_age: string;
+            /**
+             * Gwhc Ts
+             * @default -
+             */
+            gwhc_ts: string;
+            /**
+             * Gwhc Source
+             * @default sudo -n gwhc --json
+             */
+            gwhc_source: string;
         };
         /** HostsResponse */
         HostsResponse: {
