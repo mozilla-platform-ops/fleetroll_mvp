@@ -5,8 +5,9 @@ result and stored observation. Monitor JSON preserves this object unchanged;
 worker-evidence schema v3 and gwhc evidence have independent versions. Historical
 rows without this object mean **not collected**, not absent or verified.
 
-This contract describes collection. Configuration verification and presentation
-remain under mvp-zjwr. Existing flat fields and SSH-oriented top-level `ok`
+This contract describes collection. The separate
+[verification v1](configuration-verification.md) evaluator consumes this evidence.
+Existing flat fields and SSH-oriented top-level `ok`
 remain available; a successful SSH audit may contain a partial or failed
 configuration capture. No collection status alone establishes convergence.
 
@@ -107,8 +108,9 @@ Old rows are not rewritten, and old flat nulls never manufacture new evidence.
 
 Consumers must check the supported version, latest attempt status, group and
 component consistency, component status, field presence, source freshness and
-producer limitations before using comparisons. Future mvp-zjwr defines those
-verification rules. No fields here authorize a rollout advance, reboot or write.
+producer limitations before using comparisons. The separate evaluator defines
+verification rules; see [verification v1](configuration-verification.md). No fields
+here authorize a rollout advance, reboot or write.
 Legacy `PP_MATCH`, HEALTHY and Windows semantics remain separate. As a parsing
 correction, legacy KV fallback is now a whole-source choice: when a
 `PP_STATE_JSON` line exists, missing/null JSON fields are not filled from KV.

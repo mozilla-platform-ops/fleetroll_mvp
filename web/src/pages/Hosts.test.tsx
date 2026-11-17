@@ -63,6 +63,22 @@ const fakeRow = {
   gwhc_age: "<1m",
   gwhc_ts: "2026-11-16T20:00:00Z",
   gwhc_source: "sudo -n gwhc --json",
+  config: "unknown",
+  verify_why: "vault:v1_null_is_ambiguous",
+  verify_age: "5m",
+  activity: "unknown",
+  activity_reasons: "tc_observation_unlinked",
+  puppet_result: "succeeded",
+  revision_match: "match",
+  override_match: "match",
+  vault_match: "unknown",
+  tc_lookup: "unknown",
+  workload: "unknown",
+  host_fresh: "fresh",
+  reference_fresh: "fresh",
+  tc_fresh: "unknown",
+  verification_schema_version: 1,
+  verification: { components: { vault: { state: "unknown", reasons: ["v1_null_is_ambiguous"], observation_ts: "2026-11-16T20:00:00Z", freshness: { state: "fresh", age_seconds: 300 } } } },
 };
 
 describe("Hosts", () => {
@@ -80,6 +96,8 @@ describe("Hosts", () => {
     expect(screen.getByText("hosts=1")).toBeInTheDocument();
     expect(screen.getByText("running")).toHaveAttribute("title", "sudo -n gwhc --json at 2026-11-16T20:00:00Z");
     expect(screen.getByText("ALERT /:4GiB(9%)")).toHaveClass("text-status-crit");
+    fireEvent.click(screen.getByLabelText("Configuration verification"));
+    expect(screen.getByText(/unknown; v1_null_is_ambiguous; fresh; 300s old/)).toBeInTheDocument();
   });
 
   it("renders empty state when no hosts", async () => {

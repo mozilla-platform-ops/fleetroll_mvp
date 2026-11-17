@@ -19,7 +19,7 @@ def normalize_for_filter(value: str) -> str:
 
 
 # Columns whose values are time durations (for numeric comparison)
-TIME_COLUMNS = frozenset({"pp_last", "tc_act", "uptime", "tc_j_sf", "gwhc_age"})
+TIME_COLUMNS = frozenset({"pp_last", "tc_act", "uptime", "tc_j_sf", "gwhc_age", "verify_age"})
 
 # All valid column names (used for validation)
 KNOWN_COLUMNS = frozenset(
@@ -56,6 +56,20 @@ KNOWN_COLUMNS = frozenset(
         "gwhc_age",
         "gwhc_ts",
         "gwhc_source",
+        "config",
+        "verify_why",
+        "verify_age",
+        "activity",
+        "activity_reasons",
+        "puppet_result",
+        "revision_match",
+        "override_match",
+        "vault_match",
+        "tc_lookup",
+        "workload",
+        "host_fresh",
+        "reference_fresh",
+        "tc_fresh",
     }
 )
 

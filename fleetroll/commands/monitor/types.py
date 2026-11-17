@@ -150,7 +150,13 @@ GWHC_AGE  Evidence age; stale at 15m or after a failed host gather
           Source: sudo -n gwhc --json; unsupported/missing = unknown
           Process state is independent of TC activity and availability
 
-HEALTHY   Recorded revision/vault/activity signal (not overall health)
+CONFIG    Configuration verification: verified/not_verified/unknown
+ACTIVITY  Linked TC activity: recent/not_recent/unknown; independent of CONFIG
+VERIFY_AGE Oldest required configuration source age; stale at 1h
+VERIFY_WHY Failure/unknown reasons; full components/ages in monitor JSON
+          V1 null applied checksums cannot prove absence
+
+HEALTHY   Legacy revision/vault/activity signal (not overall health)
           Y = PP_MATCH and TC activity <1h and full vault checksums match
           N = legacy revision/activity failure, or vault checksum mismatch
           - = required revision/vault evidence unavailable

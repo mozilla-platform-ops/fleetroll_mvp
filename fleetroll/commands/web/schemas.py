@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HealthResponse(BaseModel):
@@ -57,6 +58,22 @@ class HostRow(BaseModel):
     gwhc_age: str = "-"
     gwhc_ts: str = "-"
     gwhc_source: str = "sudo -n gwhc --json"
+    config: str = "unknown"
+    verify_why: str = "-"
+    verify_age: str = "-"
+    activity: str = "unknown"
+    activity_reasons: str = "-"
+    puppet_result: str = "unknown"
+    revision_match: str = "unknown"
+    override_match: str = "unknown"
+    vault_match: str = "unknown"
+    tc_lookup: str = "unknown"
+    workload: str = "unknown"
+    host_fresh: str = "unknown"
+    reference_fresh: str = "unknown"
+    tc_fresh: str = "unknown"
+    verification_schema_version: int = 1
+    verification: dict[str, Any] = Field(default_factory=dict)
 
 
 class HostsSummary(BaseModel):

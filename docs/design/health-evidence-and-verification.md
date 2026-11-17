@@ -1,9 +1,11 @@
 # Health evidence and verification
 
-Design for `mvp-d0kx`. The vault gate in `mvp-p9w` is the first bounded change;
-the component model below requires coherent collection (`mvp-257d`) followed by
-the shared evaluator and presentation (`mvp-zjwr`). Proposed fields here are not
-a shipped JSON contract.
+Design for `mvp-d0kx`, implemented through the vault gate (`mvp-p9w`), coherent
+collection (`mvp-257d`), and shared evaluator/presentation (`mvp-zjwr`). The sections
+below retain the original rationale and delivery sequence. Supported contracts
+are [collection v1](../reference/configuration-evidence.md) and
+[verification v1](../reference/configuration-verification.md); use those exact
+schemas and boundaries instead of treating design examples as an API.
 
 ## Problem and immediate decision
 

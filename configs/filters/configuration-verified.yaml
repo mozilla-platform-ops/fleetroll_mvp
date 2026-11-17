@@ -1,0 +1,2 @@
+query: config=verified sort:host
+description: Recorded configuration verification passed; activity and workload are separate

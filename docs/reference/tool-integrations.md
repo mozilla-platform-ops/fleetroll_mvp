@@ -21,6 +21,7 @@ check exit status. Tables and diagnostic text are not stable parsing interfaces.
 
 | Machine interface | Contract | Preserve |
 | --- | --- | --- |
+| Configuration verification | Verification v1: [configuration, activity and freshness](configuration-verification.md) | Independent schema/version and echoed policy, tri-state configuration, source clocks, reasons, provenance, unknown prerequisites, and TC lookup/observation identity linkage. No operation authority is granted. |
 | Rollout attribution | Report v1: [rollout report](../rollout-report.md) | Exact Queue run identity, independent Puppet proof, task-scoped attribution provenance, current versus historical state, original outcomes, exclusions and observation/retention bounds. Coverage may increase when formerly missing identity is independently proved; inspect per-job attribution methods. |
 | Explicit pool comparison | Comparison v1: [rollout compare-pools](../rollout-compare.md) | Candidate/baseline identity, shared window, observed versus attributed outcomes, exact role/name matching, query failures, source times and per-worker evidence. |
 | Live worker diagnosis | Diagnosis v2: [host diagnose JSON](host-diagnose.md) | Collection success separate from health, valid exit 1 reports, full structured checks, upstream schema status and source times. Upstream v1 supports present/absent/unknown zombie evidence; legacy evidence stays unknown. Consumers must opt into envelope v2; findings do not authorize recovery. Medic integration is pending. |
@@ -103,6 +104,37 @@ lookup/observation linkage, activity timestamps, or raw task-state fields, even
 when JSON shape is unchanged. Producer details remain in the contracts above.
 
 ## Other consumers
+
+### Verification v1 adoption review (2026-11-16)
+
+Repository CLI text/JSON, query selectors, TUI and web now use the shared
+verification evaluator. New configuration review/verified filters opt in;
+existing `healthy`/`pp_match` filters retain their old meanings. The bundled
+`unhealthy-stale.yaml` remains a legacy negative-only selection, excluding
+unknown. Current documentation examples distinguish configuration, activity,
+source freshness and workload instead of replacing old filter semantics.
+
+Rechecked local `worker_rehab_tool/rehab` sources: no HEALTHY/PP_MATCH/new
+verification dependency was found. Its existing freshness/worker-evidence v3
+and historical identity policy remain authoritative; this change does not adopt
+verification v1 for automatic recovery. The Pool Classifier integration document
+still describes a proposal rather than a consumer contract. Repository helpers
+have no new gate on verification. No external consumer removal/migration is
+implied; external owners must explicitly opt in and validate version, policy,
+source evidence and independent operation prerequisites.
+
+Immediate post-Puppet summaries remain `mvp-kq1h.5`. After refreshed collection,
+they should consume verification v1's configuration and separate activity/source
+components, preserve the command's bounded wrapper/Puppet outcome, and keep
+unknown configuration prerequisites visible. A new process or recent TC
+activity cannot replace configuration proof, and a verified configuration does
+not replace live recovery/rollout policy. Shared evaluator entry points are
+internal Python APIs, while documented monitor JSON is the external contract.
+
+Consumers should test supported/unsupported versions, failed/partial or retained
+host evidence, v1 null checksums, stale/future times, latest failed/unlinked TC
+lookups and identity mismatch before adopting new selections. No legacy signal
+is deprecated or removed in this delivery.
 
 **Repository helpers and session launcher** — Fleetroll-maintained, best-effort
 wrappers over supported CLI. `tools/gather-*.sh` collect observations;

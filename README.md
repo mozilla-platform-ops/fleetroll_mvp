@@ -162,7 +162,15 @@ Puppet metadata, override and vault files. It distinguishes absence from failed
 reads, checks snapshot stability, and retains prior component evidence with its
 original timestamps after partial failures. See
 [configuration evidence](docs/reference/configuration-evidence.md) for the JSON
-contract and producer limitations. Configuration verification is a later layer.
+contract and producer limitations.
+
+The monitor's `CONFIG`, `ACTIVITY`, `VERIFY_AGE`, and `VERIFY_WHY` columns separate
+configuration verification from linked TC activity and source freshness. JSON
+publishes verification schema v1 with component reasons and provenance.
+Use `--filter 'config=not_verified|unknown'` for configuration review. Existing
+HEALTHY/PP_MATCH queries keep their compatibility meanings. See
+[configuration verification](docs/reference/configuration-verification.md),
+including why producer v1 null checksums can leave no-override hosts unknown.
 
 #### Linux host selection
 

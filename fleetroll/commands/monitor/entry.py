@@ -35,6 +35,7 @@ from .formatting import (
 )
 from .json_output import build_monitor_json_snapshot, follow_monitor_json
 from .query import apply_query, parse_query_safe
+from .verification import evaluate_hosts
 
 if TYPE_CHECKING:
     from ...cli_types import HostMonitorArgs
@@ -87,6 +88,15 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         # Load notes data
         notes_path = default_notes_path()
         notes_data = load_latest_notes(notes_path)
+        lookup_attempts = provider.load_tc_lookup_attempts(hosts=hosts)
+        verifications = evaluate_hosts(
+            hosts,
+            latest=latest,
+            tc_data=tc_data,
+            refs=github_refs,
+            sha_cache=sha_cache,
+            lookup_attempts=lookup_attempts,
+        )
 
         if args.once:
             # Sort hosts according to --sort option
@@ -105,6 +115,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                         values = build_row_values(
                             h,
                             latest.get(h),
+                            verification=verifications.get(h),
                             last_ok=latest_ok.get(h),
                             tc_data=tc_data.get(strip_fqdn(h)),
                             sha_cache=sha_cache,
@@ -127,6 +138,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     sha_cache=sha_cache,
                     lookup_attempts=provider.load_tc_lookup_attempts(hosts=sorted_hosts),
                     historical_states=provider.load_worker_history(hosts=sorted_hosts),
+                    github_refs=github_refs,
+                    verifications=verifications,
                 )
                 print(json.dumps(payload, indent=2, sort_keys=True))
             else:
@@ -141,6 +154,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     sha_cache=sha_cache,
                     github_refs=github_refs,
                     notes_data=notes_data,
+                    verifications=verifications,
                 )
                 print(header)
                 for line in lines:
@@ -164,6 +178,8 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                     sha_cache=sha_cache,
                     lookup_attempts=provider.load_tc_lookup_attempts(hosts=sorted_hosts),
                     historical_states=provider.load_worker_history(hosts=sorted_hosts),
+                    github_refs=github_refs,
+                    verifications=verifications,
                 )
                 print(json.dumps(payload, indent=2, sort_keys=True), flush=True)
                 for record in follow_monitor_json(
@@ -179,6 +195,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 max_width=0,
                 cap_widths=False,
                 sep_len=2,
+                verifications=verifications,
                 sha_cache=sha_cache,
                 github_refs=github_refs,
                 notes_data=notes_data,
@@ -191,6 +208,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 max_width=0,
                 cap_widths=False,
                 col_sep="  ",
+                verifications=verifications,
                 sha_cache=sha_cache,
                 github_refs=github_refs,
                 notes_data=notes_data,
@@ -219,6 +237,14 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                         github_refs=github_refs,
                         sha_cache=sha_cache,
                         notes_data=notes_data,
+                        verifications=evaluate_hosts(
+                            [host],
+                            latest=latest,
+                            tc_data=provider.load_tc_workers(hosts=hosts),
+                            refs=provider.load_github_refs(),
+                            sha_cache=sha_cache,
+                            lookup_attempts=provider.load_tc_lookup_attempts(hosts=hosts),
+                        ),
                     )
                 )
             return

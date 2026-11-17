@@ -14,6 +14,7 @@ from . import db
 from .commands.monitor.cache import ShaInfoCache
 from .commands.monitor.data import build_row_values
 from .commands.monitor.query import Query, apply_query, parse_query, validate_query
+from .commands.monitor.verification import evaluate_hosts
 from .notes import default_notes_path, load_latest_notes
 from .utils import resolve_host_args
 
@@ -61,6 +62,7 @@ def select_hosts(host_args: tuple[str, ...], *, query: Query) -> HostSelection:
     source = str(host_file) if host_file else "explicit hosts" if host_args else "local database"
     latest, latest_ok, tc, refs, windows = {}, {}, {}, {}, {}
     override_writes = {}
+    lookup_attempts = {}
     db_path = db.get_db_path()
     if db_path.exists():
         conn = sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)
@@ -82,6 +84,7 @@ def select_hosts(host_args: tuple[str, ...], *, query: Query) -> HostSelection:
             hosts = sorted(set(hosts))
             latest, latest_ok = db.get_latest_host_observations(conn, hosts)
             tc = db.get_latest_tc_workers(conn, hosts)
+            lookup_attempts = db.get_latest_tc_lookup_attempts(conn, hosts)
             refs = db.get_latest_github_refs(conn)
             windows = db.get_latest_windows_pools(conn)
             boundary_columns = {
@@ -102,10 +105,19 @@ def select_hosts(host_args: tuple[str, ...], *, query: Query) -> HostSelection:
     cache.load_all()
     notes = load_latest_notes(default_notes_path())
     rows = []
+    verifications = evaluate_hosts(
+        hosts,
+        latest=latest,
+        tc_data=tc,
+        refs=refs,
+        sha_cache=cache,
+        lookup_attempts=lookup_attempts,
+    )
     for host in hosts:
         row = build_row_values(
             host,
             latest.get(host),
+            verification=verifications.get(host),
             last_ok=latest_ok.get(host),
             tc_data=tc.get(host),
             sha_cache=cache,

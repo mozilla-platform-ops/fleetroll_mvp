@@ -159,6 +159,7 @@ def compute_columns_and_widths(
     github_refs: dict[str, dict[str, Any]] | None = None,
     windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
+    verifications: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     """Compute columns and widths that fit within max_width."""
     columns = [
@@ -177,6 +178,10 @@ def compute_columns_and_widths(
         "tc_quar",
         "data",
         "healthy",
+        "config",
+        "activity",
+        "verify_age",
+        "verify_why",
         "gwhc_worker",
         "gwhc_disk",
         "gwhc_age",
@@ -198,6 +203,10 @@ def compute_columns_and_widths(
         "pp_sha": "PP_SHA",
         "pp_match": "PP_MATCH",
         "healthy": "HEALTHY",
+        "config": "CONFIG",
+        "activity": "ACTIVITY",
+        "verify_age": "VERIFY_AGE",
+        "verify_why": "VERIFY_WHY",
         "data": "DATA",
         "gwhc_worker": "GW_RUN",
         "gwhc_disk": "DISK",
@@ -216,6 +225,10 @@ def compute_columns_and_widths(
         "pp_last": 12,
         "pp_match": 8,
         "healthy": 7,
+        "config": 12,
+        "activity": 10,
+        "verify_age": 12,
+        "verify_why": 80,
         "data": 7,
         "gwhc_worker": 7,
         "gwhc_disk": 80,
@@ -235,6 +248,7 @@ def compute_columns_and_widths(
         values = build_row_values(
             host,
             latest.get(host),
+            verification=(verifications or {}).get(host),
             last_ok=latest_ok.get(host) if latest_ok else None,
             tc_data=tc_data.get(short_host),
             fqdn_suffix=fqdn_suffix,
@@ -274,6 +288,10 @@ def compute_columns_and_widths(
 
     drop_order = [
         "note",
+        "verify_why",
+        "verify_age",
+        "activity",
+        "config",
         "gwhc_age",
         "gwhc_disk",
         "gwhc_worker",
@@ -326,12 +344,14 @@ def format_monitor_row(
     github_refs: dict[str, dict[str, Any]] | None = None,
     windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
+    verifications: dict[str, dict[str, Any]] | None = None,
     git_checksums: set[str] | None = None,
 ) -> str:
     """Format a single table row for a host."""
     values = build_row_values(
         host,
         record,
+        verification=(verifications or {}).get(host),
         last_ok=last_ok,
         tc_data=tc_data,
         fqdn_suffix=fqdn_suffix,
@@ -387,6 +407,7 @@ def render_monitor_lines(
     github_refs: dict[str, dict[str, Any]] | None = None,
     windows_pools: dict[str, dict[str, Any]] | None = None,
     notes_data: dict[str, str] | None = None,
+    verifications: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[str, list[str]]:
     """Render monitor header + lines in the provided host order."""
     tc_data = tc_data or {}
@@ -406,6 +427,7 @@ def render_monitor_lines(
         github_refs=github_refs,
         windows_pools=windows_pools,
         notes_data=notes_data,
+        verifications=verifications,
     )
     labels = {
         "host": "HOST",
@@ -423,6 +445,10 @@ def render_monitor_lines(
         "pp_sha": "PP_SHA",
         "pp_match": "PP_MATCH",
         "healthy": "HEALTHY",
+        "config": "CONFIG",
+        "activity": "ACTIVITY",
+        "verify_age": "VERIFY_AGE",
+        "verify_why": "VERIFY_WHY",
         "data": "DATA",
         "gwhc_worker": "GW_RUN",
         "gwhc_disk": "DISK",
@@ -450,6 +476,7 @@ def render_monitor_lines(
             windows_pools=windows_pools,
             notes_data=notes_data,
             git_checksums=git_checksums,
+            verifications=verifications,
         )
         for host in host_slice
     ]

@@ -13,6 +13,7 @@ from fleetroll.commands.monitor.json_output import (
     build_monitor_json_snapshot,
     follow_monitor_json,
 )
+from fleetroll.commands.monitor.verification import comparison_record
 from fleetroll.db import (
     get_connection,
     get_db_path,
@@ -260,9 +261,13 @@ def test_once_and_initial_follow_use_same_contract(evidence, tmp_path, monkeypat
     )
     initial = runner.invoke(cli, ["host", "monitor", HOST, "--json"])
     assert initial.exit_code == 0, initial.output
-    assert json.loads(once.output) == json.loads(initial.output)
+    assert comparison_record(json.loads(once.output)[HOST]) == comparison_record(
+        json.loads(initial.output)[HOST]
+    )
     assert json.loads(once.output)[HOST]["taskcluster"]["identity"]["worker_type"] == OVERRIDE
-    assert follow.call_args.kwargs["initial"] == json.loads(once.output)
+    assert comparison_record(follow.call_args.kwargs["initial"][HOST]) == comparison_record(
+        json.loads(once.output)[HOST]
+    )
     assert json.loads(once.output)[HOST]["worker_evidence_schema_version"] == 3
     assert json.loads(once.output)[HOST]["historical_worker_identity"]["status"] == "present"
     assert json.loads(once.output)[HOST]["historical_worker_identity"]["observation_ts"] == TS

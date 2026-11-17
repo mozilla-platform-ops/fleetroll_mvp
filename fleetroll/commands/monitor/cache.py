@@ -69,6 +69,12 @@ def parse_override_file(path: Path) -> dict[str, str | None] | None:
     except (OSError, UnicodeDecodeError):
         return None
 
+    return parse_override_content(content)
+
+
+def parse_override_content(content: str) -> dict[str, str | None] | None:
+    """Parse already-read bytes so callers can bind intent to a verified hash."""
+
     # Extract PUPPET_REPO and PUPPET_BRANCH
     repo_url = _literal_assignment(content, name="PUPPET_REPO")
     branch = _literal_assignment(content, name="PUPPET_BRANCH")

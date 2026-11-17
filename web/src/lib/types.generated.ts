@@ -196,6 +196,85 @@ export interface components {
              * @default sudo -n gwhc --json
              */
             gwhc_source: string;
+            /**
+             * Config
+             * @default unknown
+             */
+            config: string;
+            /**
+             * Verify Why
+             * @default -
+             */
+            verify_why: string;
+            /**
+             * Verify Age
+             * @default -
+             */
+            verify_age: string;
+            /**
+             * Activity
+             * @default unknown
+             */
+            activity: string;
+            /**
+             * Activity Reasons
+             * @default -
+             */
+            activity_reasons: string;
+            /**
+             * Puppet Result
+             * @default unknown
+             */
+            puppet_result: string;
+            /**
+             * Revision Match
+             * @default unknown
+             */
+            revision_match: string;
+            /**
+             * Override Match
+             * @default unknown
+             */
+            override_match: string;
+            /**
+             * Vault Match
+             * @default unknown
+             */
+            vault_match: string;
+            /**
+             * Tc Lookup
+             * @default unknown
+             */
+            tc_lookup: string;
+            /**
+             * Workload
+             * @default unknown
+             */
+            workload: string;
+            /**
+             * Host Fresh
+             * @default unknown
+             */
+            host_fresh: string;
+            /**
+             * Reference Fresh
+             * @default unknown
+             */
+            reference_fresh: string;
+            /**
+             * Tc Fresh
+             * @default unknown
+             */
+            tc_fresh: string;
+            /**
+             * Verification Schema Version
+             * @default 1
+             */
+            verification_schema_version: number;
+            /** Verification */
+            verification?: {
+                [key: string]: unknown;
+            };
         };
         /** HostsResponse */
         HostsResponse: {

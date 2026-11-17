@@ -344,7 +344,9 @@ def test_cli_json_text_and_web_consume_same_recorded_diagnostics(tmp_path, monke
     later = build_monitor_json_record(
         rec["host"], record=rec, tc_record=None, sha_cache=cache, now=now + timedelta(seconds=2)
     )
-    assert first == later
+    from fleetroll.commands.monitor.verification import comparison_record
+
+    assert comparison_record(first) == comparison_record(later)
     stale = build_monitor_json_record(
         rec["host"], record=rec, tc_record=None, sha_cache=cache, now=now + timedelta(minutes=16)
     )

@@ -18,6 +18,7 @@ from fleetroll.commands.monitor.data import (
     strip_fqdn,
 )
 from fleetroll.commands.monitor.query import apply_query, parse_query_safe, validate_query
+from fleetroll.commands.monitor.verification import evaluate_hosts
 from fleetroll.commands.web.schemas import HostRow, HostsResponse, HostsSummary
 from fleetroll.constants import STALE_DATA_THRESHOLD_SECONDS
 from fleetroll.data_provider import LocalProvider
@@ -70,11 +71,20 @@ def hosts(
         sha_cache.load_all()
 
         notes_data = load_latest_notes(default_notes_path())
+        verifications = evaluate_hosts(
+            all_hosts,
+            latest=latest,
+            tc_data=tc_data,
+            refs=github_refs,
+            sha_cache=sha_cache,
+            lookup_attempts=provider.load_tc_lookup_attempts(hosts=all_hosts),
+        )
 
         values_list = [
             build_row_values(
                 host,
                 latest.get(host),
+                verification=verifications.get(host),
                 last_ok=latest_ok.get(host),
                 tc_data=tc_data.get(strip_fqdn(host)),
                 sha_cache=sha_cache,
@@ -85,7 +95,10 @@ def hosts(
             for host in sorted(all_hosts)
         ]
         values_list = apply_query(values_list, q)
-        rows = [HostRow(**v) for v in values_list]
+        rows = [
+            HostRow.model_validate({**v, "verification": verifications[v["host"]]})
+            for v in values_list
+        ]
 
         most_recent_ok = most_recent_ok_ts(latest_ok)
         ok_age = age_seconds(most_recent_ok) if most_recent_ok else None

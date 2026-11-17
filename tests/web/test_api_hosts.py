@@ -161,10 +161,14 @@ def test_hosts_invalid_filter_returns_400(web_client: TestClient, temp_db: Path)
 
 
 def test_hosts_empty_params_unchanged(web_client: TestClient, temp_db: Path) -> None:
+    from fleetroll.commands.monitor.verification import comparison_record
+
     _seed_host(temp_db, "host5.example.com")
 
     response_plain = web_client.get("/api/hosts")
     response_empty = web_client.get("/api/hosts?filter=&sort=")
     assert response_plain.status_code == 200
     assert response_empty.status_code == 200
-    assert response_plain.json()["rows"] == response_empty.json()["rows"]
+    assert [comparison_record(row) for row in response_plain.json()["rows"]] == [
+        comparison_record(row) for row in response_empty.json()["rows"]
+    ]

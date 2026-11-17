@@ -28,6 +28,7 @@ contracts in more detail.
 | Override deployment checks | [Worker type safety](reference/override-worker-type-safety.md) |
 | Puppet run fields and collector paths | [Puppet metadata](reference/puppet-state-tracking.md) |
 | Coherent configuration collection and partial failures | [Configuration evidence v1](reference/configuration-evidence.md) |
+| Configuration, activity and freshness components | [Configuration verification v1](reference/configuration-verification.md) |
 | Taskcluster identity selection | [Worker identity collection](reference/worker-identity.md) |
 | Machine-readable host and worker evidence | [Monitor JSON v3](reference/monitor-json.md) |
 | Live worker health diagnostics | [Host diagnosis JSON v1](reference/host-diagnose.md) |

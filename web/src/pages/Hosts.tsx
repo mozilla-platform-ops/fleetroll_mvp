@@ -42,6 +42,26 @@ function th(label: string, title: string) {
   return () => <abbr title={title}>{label}</abbr>;
 }
 
+type VerificationView = {
+  components?: Record<string, {
+    state: string;
+    reasons: string[];
+    observation_ts: string | null;
+    freshness: { state: string; age_seconds: number | null };
+  }>;
+};
+
+function VerificationDetails({ value }: { value: HostRow["verification"] }) {
+  const components = (value as VerificationView).components ?? {};
+  return <div className="max-h-96 max-w-xl overflow-auto">{Object.entries(components).map(([name, component]) =>
+    <PopoverRow key={name} label={name} value={[
+      component.state, component.reasons.join(", "), component.freshness.state,
+      component.freshness.age_seconds == null ? "age unknown" : `${Math.floor(component.freshness.age_seconds)}s old`,
+      component.observation_ts ?? "source time unknown",
+    ].filter(Boolean).join("; ")} />
+  )}</div>;
+}
+
 const columns = [
   columnHelper.accessor("host", {
     header: th("HOST", "Hostname (FQDN suffix stripped)"),
@@ -133,7 +153,7 @@ const columns = [
     ),
   }),
   columnHelper.accessor("healthy", {
-    header: th("HEALTHY", "Recorded revision/vault/activity signal: Y=revision and vault match with TC activity <1h; N=check failed; -=evidence unavailable. Windows uses pool hash and TC activity. Check data age too; not recovery approval."),
+    header: th("HEALTHY", "Legacy revision/vault/activity signal: Y=revision and vault match with TC activity <1h; N=check failed; -=evidence unavailable. Windows uses pool hash and TC activity. Check data age too; not recovery approval."),
     cell: (info) => {
       const v = info.getValue();
       return (
@@ -142,6 +162,24 @@ const columns = [
         </span>
       );
     },
+  }),
+  columnHelper.accessor("config", {
+    header: th("CONFIG", "Configuration verification only: verified, not_verified, unknown. Independent of TC activity and workload; no operation authority."),
+    cell: (info) => <Popover trigger={<span aria-label="Configuration verification" className={info.getValue() === "not_verified" ? "text-status-crit" : info.getValue() === "verified" ? "text-status-online" : "text-status-unknown"}>{info.getValue()}</span>}>
+      <PopoverRow label="reasons" value={info.row.original.verify_why} />
+      <PopoverRow label="oldest source" value={info.row.original.verify_age} />
+      <VerificationDetails value={info.row.original.verification} />
+    </Popover>,
+  }),
+  columnHelper.accessor("activity", {
+    header: th("ACTIVITY", "Recent TC activity requires fresh linked lookup/observation evidence and exact host identity. Not worker availability or task progress."),
+    cell: (info) => <span title={info.row.original.activity_reasons}>{info.getValue()}</span>,
+  }),
+  columnHelper.accessor("verify_age", {
+    header: th("VERIFY_AGE", "Oldest required configuration source age. Source staleness starts at one hour; unknown timestamps stay unknown."),
+  }),
+  columnHelper.accessor("verify_why", {
+    header: th("VERIFY_WHY", "Configuration failure/unknown reasons; open CONFIG for components, source timestamps and ages."),
   }),
   columnHelper.accessor("gwhc_worker", {
     header: th("GW_RUN", "Recorded Linux gwhc generic-worker process: running, stopped, unknown, or stale. No task-progress or availability claim."),

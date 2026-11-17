@@ -172,6 +172,8 @@ class MonitorDisplay:
         self.tc_data = tc_data
         self.provider = provider
         self.github_refs = github_refs
+        self.lookup_attempts = provider.load_tc_lookup_attempts(hosts=hosts)
+        self._verifications: dict[str, dict[str, Any]] = {}
         self.sha_cache = sha_cache
         self._git_checksums: set[str] = set()
         self.notes_data: dict[str, str] = notes_data or {}
@@ -558,8 +560,10 @@ class MonitorDisplay:
             return False
         self._tc_poll_time = now
         new_data = self.provider.load_tc_workers(hosts=self.hosts)
-        if new_data != self.tc_data:
+        new_lookups = self.provider.load_tc_lookup_attempts(hosts=self.hosts)
+        if new_data != self.tc_data or new_lookups != self.lookup_attempts:
             self.tc_data = new_data
+            self.lookup_attempts = new_lookups
             self._touch_updated()
             return True
         return False
@@ -720,6 +724,10 @@ class MonitorDisplay:
             "tc_quar",
             "data",
             "healthy",
+            "config",
+            "activity",
+            "verify_age",
+            "verify_why",
             "gwhc_worker",
             "gwhc_disk",
             "gwhc_age",
@@ -742,6 +750,10 @@ class MonitorDisplay:
             "pp_sha": "PP_SHA",
             "pp_match": "PP_MATCH",
             "healthy": "HEALTHY",
+            "config": "CONFIG",
+            "activity": "ACTIVITY",
+            "verify_age": "VERIFY_AGE",
+            "verify_why": "VERIFY_WHY",
             "data": "DATA",
             "gwhc_worker": "GW_RUN",
             "gwhc_disk": "DISK",
@@ -783,6 +795,7 @@ class MonitorDisplay:
             values = build_row_values(
                 host,
                 self.latest.get(host),
+                verification=self._verifications.get(host),
                 last_ok=self.latest_ok.get(host),
                 tc_data=tc_worker_data,
                 fqdn_suffix=self.fqdn_suffix,
@@ -813,6 +826,7 @@ class MonitorDisplay:
                 widths[col] = max(widths[col], len(value))
 
         # Add padding for role markers.
+        widths["verify_why"] = min(widths["verify_why"], 80)
         for col in ("role",):
             if col in widths:
                 widths[col] += 2
@@ -863,6 +877,7 @@ class MonitorDisplay:
         values = build_row_values(
             hostname,
             self.latest.get(hostname),
+            verification=self._verifications.get(hostname),
             last_ok=self.latest_ok.get(hostname),
             tc_data=tc_worker_data,
             fqdn_suffix=self.fqdn_suffix,
@@ -887,6 +902,7 @@ class MonitorDisplay:
         values = build_row_values(
             hostname,
             self.latest.get(hostname),
+            verification=self._verifications.get(hostname),
             last_ok=self.latest_ok.get(hostname),
             tc_data=tc_worker_data,
             fqdn_suffix=self.fqdn_suffix,
@@ -897,6 +913,16 @@ class MonitorDisplay:
         return values["os"]
 
     def draw_screen(self) -> None:
+        from .verification import evaluate_hosts
+
+        self._verifications = evaluate_hosts(
+            self.hosts,
+            latest=self.latest,
+            tc_data=self.tc_data,
+            refs=self.github_refs,
+            sha_cache=self.sha_cache,
+            lookup_attempts=self.lookup_attempts,
+        )
         self.stdscr.erase()
 
         # Sort and filter hosts
@@ -914,6 +940,7 @@ class MonitorDisplay:
                 values = build_row_values(
                     h,
                     self.latest.get(h),
+                    verification=self._verifications.get(h),
                     last_ok=self.latest_ok.get(h),
                     tc_data=self.tc_data.get(strip_fqdn(h)),
                     fqdn_suffix=self.fqdn_suffix,
@@ -1013,6 +1040,7 @@ class MonitorDisplay:
                 windows_pools=self.windows_pools,
                 notes_data=self.notes_data,
                 git_checksums=self._git_checksums,
+                verification=self._verifications.get(host),
             )
             self.row_renderer.draw_host_row(
                 row,

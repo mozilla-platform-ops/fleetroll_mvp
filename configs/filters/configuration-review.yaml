@@ -1,0 +1,2 @@
+query: config=not_verified|unknown sort:host
+description: Configuration verification failed or unavailable; includes unknown; review only

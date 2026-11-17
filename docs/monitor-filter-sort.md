@@ -55,6 +55,24 @@ Supported fields: `host`, `os`, `role`, `override`, `vlt_sha`, `ovr_bch`, `uptim
 `ovr_bch`, `ovr_sha_full` for `ovr_checksum`, `tc_j_sf` for `tc_t_dur`, and
 `health` for `healthy`.
 
+Configuration verification v1 adds `config`, `verify_why`, `verify_age`
+(duration), `activity`, `activity_reasons`, `puppet_result`, `revision_match`,
+`override_match`, `vault_match`, `tc_lookup`, `workload`, `host_fresh`,
+`reference_fresh`, and `tc_fresh`. For example:
+
+```text
+config=not_verified|unknown sort:host
+config=verified activity=not_recent
+verify_why~v1_null_is_ambiguous
+reference_fresh=stale sort:verify_age:desc,host
+```
+
+`config=not_verified` excludes unknown; configuration and activity are independent.
+Use the new `configuration-review.yaml`/`configuration-verified.yaml` saved filters
+to opt in. Existing `healthy`/`pp_match` queries keep their compatibility semantics.
+See [verification v1](reference/configuration-verification.md) for source bounds,
+v1 applied-null limitations, and the exact JSON contract.
+
 Recorded Linux diagnostics also support `gwhc_worker`, `gwhc_disk`,
 `gwhc_disk_alert`, `gwhc_age` (duration), `gwhc_ts`, and `gwhc_source`.
 For example, `gwhc_worker=stopped gwhc_age<15m` selects recent stopped-process

@@ -124,6 +124,14 @@ the bar nor its color indicates health or confirms that a worker is idle.
 
 ## Compact DATA ages
 
+Configuration verification v1 adds CONFIG, ACTIVITY, VERIFY_AGE and VERIFY_WHY
+after the legacy HEALTHY column. The group separates configuration proof from
+TC activity and source age; VERIFY_WHY explains negative/unknown results.
+Unknown/retained evidence never supplies a current positive merely because an
+old compatibility row remains visible. TUI reasons are capped at 80 characters;
+full component reasons, source times and ages are in JSON and the web CONFIG
+popover. See [verification v1](configuration-verification.md).
+
 Recorded Linux diagnostic columns `GW_RUN`, `DISK`, and `GWHC_AGE` form a
 separate group after HEALTHY and before NOTE. They show process existence,
 filesystem space and diagnostic evidence age, independently of HEALTHY and TC

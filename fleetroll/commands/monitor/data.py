@@ -668,7 +668,7 @@ def build_ok_row_values(
     }
 
 
-def build_row_values(
+def _build_legacy_row_values(
     host: str,
     record: dict[str, Any] | None,
     *,
@@ -962,4 +962,80 @@ def diagnostic_row_values(
         "gwhc_age": humanize_duration(signals["age_seconds"], min_unit="m"),
         "gwhc_ts": signals["observation_ts"] or "-",
         "gwhc_source": signals["source"],
+    }
+
+
+def build_row_values(
+    host: str,
+    record: dict[str, Any] | None,
+    *,
+    last_ok: dict[str, Any] | None = None,
+    tc_data: dict[str, Any] | None = None,
+    fqdn_suffix: str | None = None,
+    sha_cache: ShaInfoCache | None = None,
+    github_refs: dict[str, dict[str, Any]] | None = None,
+    windows_pools: dict[str, dict[str, Any]] | None = None,
+    notes_data: dict[str, str] | None = None,
+    git_checksums: set[str] | None = None,
+    verification: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Keep legacy fallback rows while evaluating new signals from latest evidence."""
+    from .verification import evaluate_host
+
+    values = _build_legacy_row_values(
+        host,
+        record,
+        last_ok=last_ok,
+        tc_data=tc_data,
+        fqdn_suffix=fqdn_suffix,
+        sha_cache=sha_cache,
+        github_refs=github_refs,
+        windows_pools=windows_pools,
+        notes_data=notes_data,
+        git_checksums=git_checksums,
+    )
+    result = verification or evaluate_host(
+        record,
+        now=dt.datetime.now(dt.UTC),
+        refs=github_refs,
+        sha_cache=sha_cache,
+        tc_record=tc_data,
+    )
+    values.update(verification_row_values(result))
+    return values
+
+
+def verification_row_values(result: dict[str, Any]) -> dict[str, str]:
+    """Project the shared evaluator into queryable strings without changing policy."""
+    configuration, components = result["configuration"], result["components"]
+    reasons = list(configuration["reasons"])
+    for name in ("puppet", "revision", "override", "vault"):
+        component = components[name]
+        if component["state"] in ("failed", "mismatch"):
+            reasons.append(f"{name}:{component['state']}")
+        reasons.extend(
+            f"{name}:{reason}"
+            for reason in component["reasons"]
+            if reason not in configuration["reasons"]
+        )
+    ages = [
+        result["freshness"][name]["age_seconds"]
+        for name in ("host", "capture", "puppet", "override", "vault", "reference")
+    ]
+    age = max(ages) if all(value is not None for value in ages) else None
+    return {
+        "config": configuration["state"],
+        "verify_why": ";".join(dict.fromkeys(reasons)) or "-",
+        "verify_age": humanize_duration(int(age) if age is not None else None, min_unit="m"),
+        "activity": components["activity"]["state"],
+        "activity_reasons": ";".join(components["activity"]["reasons"]) or "-",
+        "puppet_result": components["puppet"]["state"],
+        "revision_match": components["revision"]["state"],
+        "override_match": components["override"]["state"],
+        "vault_match": components["vault"]["state"],
+        "tc_lookup": components["tc_lookup"]["state"],
+        "workload": components["workload"]["state"],
+        "host_fresh": result["freshness"]["host"]["state"],
+        "reference_fresh": result["freshness"]["reference"]["state"],
+        "tc_fresh": result["freshness"]["tc_observation"]["state"],
     }

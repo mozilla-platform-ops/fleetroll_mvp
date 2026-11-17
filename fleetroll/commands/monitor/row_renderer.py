@@ -51,6 +51,7 @@ class RowRenderer:
         windows_pools: dict[str, dict[str, Any]] | None = None,
         notes_data: dict[str, str] | None = None,
         git_checksums: set[str] | None = None,
+        verification: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Compute all data needed to render a single host row.
 
@@ -79,6 +80,7 @@ class RowRenderer:
         values = build_row_values(
             host,
             latest.get(host),
+            verification=verification,
             last_ok=latest_ok.get(host),
             tc_data=tc_worker_data,
             fqdn_suffix=fqdn_suffix,
@@ -232,6 +234,13 @@ class RowRenderer:
                 continue
             if col_name == "pp_match":
                 attr = self.colors.pp_match_attr(values.get("pp_match", "-"))
+                draw(row, col, cell, attr)
+                col += len(cell)
+                continue
+            if col_name == "config":
+                attr = self.colors.ro_health_attr(
+                    {"verified": "Y", "not_verified": "N"}.get(values.get("config", ""), "-")
+                )
                 draw(row, col, cell, attr)
                 col += len(cell)
                 continue

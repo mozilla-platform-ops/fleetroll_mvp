@@ -4,6 +4,14 @@ Check three separate facts: the intended files reached the host, Puppet applied
 the intended configuration successfully, and the worker is processing work.
 A successful override write establishes only the first.
 
+For configuration questions, prefer the monitor's CONFIG signal and
+[verification v1 component evidence](reference/configuration-verification.md).
+It separates recorded configuration proof, source freshness and linked TC
+activity. Existing PP_MATCH/HEALTHY fields below retain compatibility meanings.
+Unknown includes producer v1 applied-null ambiguity and must not be counted as
+verified. Neither CONFIG nor ACTIVITY measures workload success or authorizes
+the next rollout wave.
+
 ## Refresh and inspect
 
 After deploying or removing an override, refresh host, Taskcluster, and GitHub

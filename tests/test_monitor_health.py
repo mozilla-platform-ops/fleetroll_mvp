@@ -240,7 +240,8 @@ def test_cli_json_selection_and_web_rows_use_the_same_vault_gate(
                 assert item["ts"] == record["ts"]
                 assert item["observed"]["vault_sha256"] == VAULT_SHA
                 assert item["worker_evidence_schema_version"] == 3
-                assert "verification" not in item  # The design is not a shipped JSON verdict.
+                assert item["verification_schema_version"] == 1
+                assert item["verification"]["configuration"]["state"] == "unknown"
     else:
         with TestClient(create_app()) as client:
             for query, expected in expected_queries.items():

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from ...constants import ROLE_TO_TASKCLUSTER, STALE_DATA_THRESHOLD_SECONDS
 from ...gwhc import recorded_signals
 from .data import strip_fqdn
+from .verification import comparison_record, evaluate_host
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -133,6 +134,8 @@ def build_monitor_json_record(
     lookup_attempt: dict[str, Any] | None = None,
     historical_state: dict[str, Any] | None = None,
     now: datetime | None = None,
+    github_refs: dict | None = None,
+    verification: dict | None = None,
 ) -> dict[str, Any]:
     """Preserve raw audit fields and qualify each independent evidence source."""
     from ...worker_history import render_history
@@ -227,6 +230,16 @@ def build_monitor_json_record(
     # Follow mode emits evidence/status changes, not a new record each second.
     gwhc.pop("age_seconds")
     result.update(
+        verification_schema_version=1,
+        verification=verification
+        or evaluate_host(
+            record,
+            now=now,
+            refs=github_refs,
+            sha_cache=sha_cache,
+            tc_record=tc_record,
+            lookup_attempt=lookup_attempt,
+        ),
         worker_evidence_schema_version=3,
         gwhc_evidence=gwhc,
         configured_worker_type=configured,
@@ -245,8 +258,11 @@ def build_monitor_json_snapshot(
     sha_cache: ShaInfoCache,
     lookup_attempts: dict | None = None,
     historical_states: dict | None = None,
+    github_refs: dict | None = None,
+    verifications: dict | None = None,
+    now: datetime | None = None,
 ) -> dict[str, dict[str, Any]]:
-    now = datetime.now(UTC)
+    now = now or datetime.now(UTC)
     return {
         host: build_monitor_json_record(
             host,
@@ -256,6 +272,8 @@ def build_monitor_json_snapshot(
             lookup_attempt=(lookup_attempts or {}).get(host),
             historical_state=(historical_states or {}).get(host),
             now=now,
+            github_refs=github_refs,
+            verification=(verifications or {}).get(host),
         )
         for host in hosts
     }
@@ -275,6 +293,7 @@ def follow_monitor_json(
         tc_data = provider.load_tc_workers(hosts=hosts)
         lookup_attempts = provider.load_tc_lookup_attempts(hosts=hosts)
         historical_states = provider.load_worker_history(hosts=hosts)
+        github_refs = provider.load_github_refs()
         # Re-read metadata so newly collected override content is visible in follow mode.
         sha_cache.override_cache.clear()
         current = build_monitor_json_snapshot(
@@ -284,9 +303,10 @@ def follow_monitor_json(
             sha_cache=sha_cache,
             lookup_attempts=lookup_attempts,
             historical_states=historical_states,
+            github_refs=github_refs,
         )
         for host, record in current.items():
-            if record != previous.get(host):
+            if comparison_record(record) != comparison_record(previous.get(host) or {}):
                 yield record
         previous = current
         time.sleep(0.5)

@@ -1,9 +1,15 @@
 # Monitor JSON worker evidence (version 3)
 
+Independent `verification_schema_version: 1` and `verification` fields expose
+configuration verification, component reasons, per-source freshness and linked
+TC activity. They preserve the raw audit and worker-evidence v3 semantics. See
+[configuration verification v1](configuration-verification.md).
+
 `observed.configuration_evidence` is an independent additive collection envelope
 with version 1. It records current component states and separately retained
 evidence after partial/failed gathers; it does not change worker-evidence v3 or
-provide a configuration verification verdict. See
+itself provide a configuration verification verdict. The verifier above consumes
+it explicitly. See
 [configuration collection](configuration-evidence.md).
 
 Recorded Linux diagnostics are independent: `observed.gwhc` retains collection
