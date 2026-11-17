@@ -157,6 +157,13 @@ uv run fleetroll gather host configs/host-lists/linux/all.list
 multiple hosts, pass all hostnames in the same command; use a host-list file for
 larger sets.
 
+Linux/macOS gathers also store versioned configuration collection evidence for
+Puppet metadata, override and vault files. It distinguishes absence from failed
+reads, checks snapshot stability, and retains prior component evidence with its
+original timestamps after partial failures. See
+[configuration evidence](docs/reference/configuration-evidence.md) for the JSON
+contract and producer limitations. Configuration verification is a later layer.
+
 #### Linux host selection
 
 Use `configs/host-lists/linux/all.list` for Moonshot operations. It is generated

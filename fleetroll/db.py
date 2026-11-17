@@ -175,6 +175,21 @@ def _insert_host_observation(
     host = record["host"]
     ts = record["ts"]
     ok = record.get("ok", 0)
+    evidence = record.get("observed", {}).get("configuration_evidence")
+    if isinstance(evidence, dict) and evidence.get("schema_version") == 1:
+        from .configuration_evidence import retain_components
+
+        previous_row = conn.execute(
+            "SELECT data FROM host_observations WHERE host = ? AND ts <= ? "
+            "AND json_extract(data, '$.observed.configuration_evidence.schema_version') = 1 "
+            "ORDER BY ts DESC LIMIT 1",
+            (host, ts),
+        ).fetchone()
+        previous = json.loads(previous_row[0]) if previous_row else {}
+        retain_components(
+            evidence,
+            previous=previous.get("observed", {}).get("configuration_evidence"),
+        )
     data_json = json.dumps(record)
 
     # Insert new record

@@ -54,6 +54,18 @@ use JSON null. The file is intended to be readable by the auditing SSH user
 
 ## Collection and interpretation
 
+Linux/macOS gathers additionally collect
+[configuration evidence v1](configuration-evidence.md) as one bounded,
+stability-checked capture of metadata, override and vault. It preserves component
+states and producer field presence without mixing fallback fields. This new
+envelope is independent of the legacy fields described below.
+
+For new evidence, an applied-checksum null in producer v1 is ambiguous: the
+reference writer also emits null when hashing fails. Explicit deployed-file
+absence is recorded separately; two nulls cannot establish convergence. V1 has
+no qualified invocation ID, and the new collector does not add one to the
+producer. A future stronger producer contract needs separate coordination.
+
 The SSH collector reads and base64-encodes the JSON; `fleetroll/audit.py` parses
 it locally. Fields become `observed.puppet_state_ts`, `puppet_success`,
 `puppet_git_repo`, `puppet_git_branch`, `puppet_git_sha`, `puppet_git_dirty`,
@@ -64,6 +76,8 @@ it locally. Fields become `observed.puppet_state_ts`, `puppet_success`,
 When the JSON file is absent, the collector tries legacy Puppet YAML for run
 time and success. Malformed JSON does not supply applied-state proof. Managed
 macOS hosts typically lack those YAML files, so they need the JSON writer.
+Legacy KV fallback now applies only when `PP_STATE_JSON` is absent entirely;
+it does not fill individual missing/null fields from a JSON document.
 
 A file write is not proof that Puppet applied it. Compare deployed and reported
 checksums and require a successful run. Expected branch revision and Taskcluster

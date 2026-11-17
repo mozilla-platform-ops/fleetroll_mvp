@@ -201,6 +201,9 @@ def audit_script_body(*, include_content: bool) -> str:
     identity_code = (Path(__file__).with_name("worker_identity.rb")).read_text()
     identity_command = shlex.quote(identity_code)
     gwhc_command = recorded_gwhc_script_body()
+    snapshot_command = shlex.quote(
+        Path(__file__).with_name("configuration_snapshot.rb").read_text()
+    )
     # Note: use /bin/sh for portability.
     # We use sudo -n everywhere; failures will be visible.
     script = f"""
@@ -251,6 +254,14 @@ if sudo -n test -e "$rp" 2>/dev/null; then
   printf 'ROLE=%s\\n' "$(printf %s "$role" | tr '\\n' ' ' | sed 's/[[:space:]]\\+/ /g' )"
 else
   printf 'ROLE_PRESENT=0\\n'
+fi
+
+# Independent bounded configuration evidence. No fallback fields enter this snapshot.
+configuration_snapshot=$(sudo -n /opt/puppetlabs/puppet/bin/ruby -e {snapshot_command} "$os_type" 2>/dev/null || true)
+if [ -n "$configuration_snapshot" ]; then
+  printf 'CONFIG_SNAPSHOT_JSON=%s\\n' "$configuration_snapshot"
+else
+  printf 'CONFIG_SNAPSHOT_ERROR=%s\\n' collector_unavailable
 fi
 
 # Vault (best effort)

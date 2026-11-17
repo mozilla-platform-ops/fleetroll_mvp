@@ -1,5 +1,11 @@
 # Monitor JSON worker evidence (version 3)
 
+`observed.configuration_evidence` is an independent additive collection envelope
+with version 1. It records current component states and separately retained
+evidence after partial/failed gathers; it does not change worker-evidence v3 or
+provide a configuration verification verdict. See
+[configuration collection](configuration-evidence.md).
+
 Recorded Linux diagnostics are independent: `observed.gwhc` retains collection
 evidence and additive `gwhc_evidence` schema v1 qualifies worker-process/disk
 signals by source time. See [recorded gwhc](recorded-gwhc.md).

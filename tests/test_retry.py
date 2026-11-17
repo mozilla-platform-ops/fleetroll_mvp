@@ -6,12 +6,20 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
 from fleetroll.cli_types import HostAuditArgs
+from fleetroll.commands import gather_host
 from fleetroll.commands.gather_host import audit_single_host_with_retry
+from fleetroll.db import init_db
 
 
 class TestRetryLogic:
     """Tests for audit_single_host_with_retry function."""
+
+    @pytest.fixture(autouse=True)
+    def initialized_database(self, tmp_dir):
+        """Failed attempts now persist too, so every retry path needs storage."""
+        init_db(tmp_dir / "test.db")
 
     def _make_args(self, tmp_dir: Path) -> HostAuditArgs:
         """Create Args object for testing."""
@@ -217,7 +225,7 @@ class TestRetryLogic:
         mock_run_ssh = mocker.patch("fleetroll.commands.gather_host.run_ssh")
         mock_run_ssh.return_value = (255, "", "Network is unreachable")
 
-        mock_process = mocker.patch("fleetroll.commands.gather_host.process_audit_result")
+        mock_process = mocker.spy(gather_host, "process_audit_result")
         mocker.patch("fleetroll.commands.gather_host.time.sleep")
 
         args = self._make_args(tmp_dir)
@@ -237,8 +245,8 @@ class TestRetryLogic:
         # Should retry on network unreachable (connection error)
         # AUDIT_MAX_RETRIES defaults to 1, so expect 1 attempt
         assert mock_run_ssh.call_count == 1
-        # Should not log to database (connection error bypasses logging)
-        assert mock_process.call_count == 0
+        # Connection failures now persist as failed collection attempts.
+        assert mock_process.call_count == 1
         assert result["ok"] is False
         assert result["error"] == "max_retries_exceeded"
 
@@ -247,7 +255,7 @@ class TestRetryLogic:
         mock_run_ssh = mocker.patch("fleetroll.commands.gather_host.run_ssh")
         mock_run_ssh.return_value = (255, "", "No route to host")
 
-        mock_process = mocker.patch("fleetroll.commands.gather_host.process_audit_result")
+        mock_process = mocker.spy(gather_host, "process_audit_result")
         mocker.patch("fleetroll.commands.gather_host.time.sleep")
 
         args = self._make_args(tmp_dir)
@@ -267,8 +275,8 @@ class TestRetryLogic:
         # Should retry on no route to host (connection error)
         # AUDIT_MAX_RETRIES defaults to 1, so expect 1 attempt
         assert mock_run_ssh.call_count == 1
-        # Should not log to database (connection error bypasses logging)
-        assert mock_process.call_count == 0
+        # Connection failures now persist as failed collection attempts.
+        assert mock_process.call_count == 1
         assert result["ok"] is False
         assert result["error"] == "max_retries_exceeded"
 

@@ -20,6 +20,7 @@ from ..audit import (
     process_audit_result,
     store_content_file,
 )
+from ..configuration_evidence import new_attempt
 from ..constants import (
     AUDIT_DIR_NAME,
     AUDIT_MAX_RETRIES,
@@ -301,28 +302,24 @@ def audit_single_host_with_retry(
 
     logger.debug("Auditing host: %s", host)
 
-    err = ""  # Initialize for type checker
+    from ..db import get_connection
+
     for attempt in range(max_retries):
-        # Check batch timeout
+        collection_attempt = new_attempt()
         with lock:
-            if time.time() > retry_budget["deadline"]:
-                logger.debug("Batch timeout exceeded for %s", host)
-                return {
-                    "ts": utc_now_iso(),
-                    "actor": actor,
-                    "action": "host.audit",
-                    "host": host,
-                    "ok": False,
-                    "error": "batch_timeout_exceeded",
-                    "attempts": attempt,
-                }
-
-        if attempt > 0:
-            logger.debug("Retry attempt %d/%d for %s", attempt + 1, max_retries, host)
-
-        rc, out, err = run_ssh(
-            ssh_host, remote_cmd, ssh_options=host_ssh_opts, timeout_s=args.timeout
-        )
+            batch_expired = time.time() > retry_budget["deadline"]
+        collection_error = None
+        if batch_expired:
+            rc, out, err = 1, "", "batch_timeout_exceeded"
+            collection_error = err
+        else:
+            try:
+                rc, out, err = run_ssh(
+                    ssh_host, remote_cmd, ssh_options=host_ssh_opts, timeout_s=args.timeout
+                )
+            except Exception as exc:
+                rc, out, err = 255, "", f"{type(exc).__name__}: {exc}"
+                collection_error = "ssh_error"
 
         # Check if retryable (connection errors)
         is_connection_error = rc != 0 and (
@@ -332,49 +329,45 @@ def audit_single_host_with_retry(
             or "Network is unreachable" in err
             or "No route to host" in err
         )
-
-        if rc == 0 or not is_connection_error:
-            # Success or non-retryable error
-            # Create thread-local database connection
-            from ..db import get_connection
-
-            db_conn = get_connection(db_path)
-            try:
-                if rc == 0:
-                    logger.debug("Host %s: audit successful", host)
-                else:
-                    logger.debug("Host %s: non-retryable error (rc=%d)", host, rc)
-                result = process_audit_result(
-                    host,
-                    rc=rc,
-                    out=out,
-                    err=err,
-                    db_conn=db_conn,
-                    actor=actor,
-                    overrides_dir=overrides_dir,
-                    vault_sha256=(vault_checksums.get(host) if vault_checksums else None),
-                    log_lock=log_lock,
-                )
-                vault_sha = result.get("observed", {}).get("vault_sha256")
-                vault_present = result.get("observed", {}).get("vault_present")
-                if vault_present and vault_sha and vault_dir:
-                    if not has_content_file(vault_sha, vault_dir):
-                        vault_cmd = remote_read_vault_script()
-                        v_rc, v_out, v_err = run_ssh(
-                            ssh_host,
-                            vault_cmd,
-                            ssh_options=host_ssh_opts,
-                            timeout_s=args.timeout,
-                        )
-                        if v_rc == 0:
-                            stored_path = store_content_file(v_out, vault_sha, vault_dir)
-                            result["observed"]["vault_file_path"] = str(stored_path)
-                        else:
-                            result["observed"]["vault_fetch_error"] = v_err.strip()
-                result["attempts"] = attempt + 1
-                return result
-            finally:
-                db_conn.close()
+        if is_connection_error and attempt == max_retries - 1:
+            collection_error = "max_retries_exceeded"
+        # Every attempt is durable, including retryable connection failures.
+        db_conn = get_connection(db_path)
+        try:
+            result = process_audit_result(
+                host,
+                rc=rc,
+                out=out,
+                err=err,
+                db_conn=db_conn,
+                actor=actor,
+                overrides_dir=overrides_dir,
+                vault_sha256=(vault_checksums.get(host) if vault_checksums else None),
+                log_lock=log_lock,
+                collection_attempt=collection_attempt,
+                collection_error=collection_error,
+            )
+        finally:
+            db_conn.close()
+        result["attempts"] = attempt if batch_expired else attempt + 1
+        if batch_expired or not is_connection_error or attempt == max_retries - 1:
+            vault_sha = result.get("observed", {}).get("vault_sha256")
+            vault_present = result.get("observed", {}).get("vault_present")
+            if rc == 0 and vault_present and vault_sha and vault_dir:
+                if not has_content_file(vault_sha, vault_dir):
+                    vault_cmd = remote_read_vault_script()
+                    v_rc, v_out, v_err = run_ssh(
+                        ssh_host,
+                        vault_cmd,
+                        ssh_options=host_ssh_opts,
+                        timeout_s=args.timeout,
+                    )
+                    if v_rc == 0:
+                        stored_path = store_content_file(v_out, vault_sha, vault_dir)
+                        result["observed"]["vault_file_path"] = str(stored_path)
+                    else:
+                        result["observed"]["vault_fetch_error"] = v_err.strip()
+            return result
 
         # Retry with exponential backoff
         if attempt < max_retries - 1:
@@ -382,18 +375,7 @@ def audit_single_host_with_retry(
             logger.debug("Host %s: connection error, retrying in %ds", host, delay)
             time.sleep(delay)
 
-    # Max retries exceeded
-    logger.debug("Host %s: max retries exceeded", host)
-    return {
-        "ts": utc_now_iso(),
-        "actor": actor,
-        "action": "host.audit",
-        "host": host,
-        "ok": False,
-        "error": "max_retries_exceeded",
-        "attempts": max_retries,
-        "stderr": err.strip(),
-    }
+    raise RuntimeError("AUDIT_MAX_RETRIES must be positive")
 
 
 def format_summary_table(summary: dict[str, Any], verbose: bool = False) -> str:

@@ -15,6 +15,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from .configuration_evidence import collect_evidence
 from .constants import CONTENT_PREFIX_LEN, CONTENT_PREFIX_STEP, CONTENT_SENTINEL
 from .exceptions import FleetRollError
 from .gwhc import parse_recorded_gwhc
@@ -188,6 +189,8 @@ def process_audit_result(
     vault_present: bool | None = None,
     vault_meta: dict[str, str] | None = None,
     log_lock: threading.Lock | None = None,
+    collection_attempt: dict[str, Any] | None = None,
+    collection_error: str | None = None,
 ) -> dict[str, Any]:
     """Process audit SSH result into structured dict."""
     # Split content if present
@@ -262,6 +265,8 @@ def process_audit_result(
             # Decode base64 and parse JSON
             pp_state_json = base64.b64decode(pp_state_json_b64).decode("utf-8")
             pp_state = json.loads(pp_state_json)
+            if not isinstance(pp_state, dict):
+                raise TypeError("Puppet metadata must be an object")
 
             # Extract fields from JSON; normalize "NA" strings to None
             puppet_state_ts = _normalize_na(pp_state.get("ts"))
@@ -284,49 +289,50 @@ def process_audit_result(
                 except (ValueError, AttributeError):
                     pass
 
-        except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError):
             # If parsing fails, leave all fields as None
             pass
 
-    # Backward compatibility: Fall back to old format fields if new format not present
-    if puppet_state_ts is None and "PP_STATE_TS" in info:
+    # Fallback is a whole-source choice, never a way to fill gaps in JSON.
+    legacy_only = "PP_STATE_JSON" not in info
+    if legacy_only and puppet_state_ts is None and "PP_STATE_TS" in info:
         puppet_state_ts = info["PP_STATE_TS"]
 
-    if puppet_last_run_epoch is None and "PP_LAST_RUN_EPOCH" in info:
+    if legacy_only and puppet_last_run_epoch is None and "PP_LAST_RUN_EPOCH" in info:
         with contextlib.suppress(ValueError, TypeError):
             puppet_last_run_epoch = int(info["PP_LAST_RUN_EPOCH"])
 
-    if puppet_success is None and "PP_SUCCESS" in info:
+    if legacy_only and puppet_success is None and "PP_SUCCESS" in info:
         with contextlib.suppress(ValueError, TypeError):
             puppet_success = info["PP_SUCCESS"] == "1"
 
-    if puppet_git_sha is None and "PP_GIT_SHA" in info:
+    if legacy_only and puppet_git_sha is None and "PP_GIT_SHA" in info:
         puppet_git_sha = info["PP_GIT_SHA"]
 
-    if puppet_git_repo is None and "PP_GIT_REPO" in info:
+    if legacy_only and puppet_git_repo is None and "PP_GIT_REPO" in info:
         puppet_git_repo = info["PP_GIT_REPO"]
 
-    if puppet_git_branch is None and "PP_GIT_BRANCH" in info:
+    if legacy_only and puppet_git_branch is None and "PP_GIT_BRANCH" in info:
         puppet_git_branch = info["PP_GIT_BRANCH"]
 
-    if puppet_git_dirty is None and "PP_GIT_DIRTY" in info:
+    if legacy_only and puppet_git_dirty is None and "PP_GIT_DIRTY" in info:
         with contextlib.suppress(ValueError, TypeError):
             puppet_git_dirty = info["PP_GIT_DIRTY"] == "1"
 
-    if puppet_override_sha_applied is None and "PP_OVERRIDE_SHA_APPLIED" in info:
+    if legacy_only and puppet_override_sha_applied is None and "PP_OVERRIDE_SHA_APPLIED" in info:
         puppet_override_sha_applied = info["PP_OVERRIDE_SHA_APPLIED"]
 
-    if puppet_vault_sha_applied is None and "PP_VAULT_SHA_APPLIED" in info:
+    if legacy_only and puppet_vault_sha_applied is None and "PP_VAULT_SHA_APPLIED" in info:
         puppet_vault_sha_applied = info["PP_VAULT_SHA_APPLIED"]
 
-    if puppet_role is None and "PP_ROLE" in info:
+    if legacy_only and puppet_role is None and "PP_ROLE" in info:
         puppet_role = info["PP_ROLE"]
 
-    if puppet_exit_code is None and "PP_EXIT_CODE" in info:
+    if legacy_only and puppet_exit_code is None and "PP_EXIT_CODE" in info:
         with contextlib.suppress(ValueError, TypeError):
             puppet_exit_code = int(info["PP_EXIT_CODE"])
 
-    if puppet_duration_s is None and "PP_DURATION_S" in info:
+    if legacy_only and puppet_duration_s is None and "PP_DURATION_S" in info:
         with contextlib.suppress(ValueError, TypeError):
             puppet_duration_s = int(info["PP_DURATION_S"])
 
@@ -351,8 +357,13 @@ def process_audit_result(
             "mtime_epoch": info.get("VLT_MTIME") or "",
         }
 
+    configuration_evidence = collect_evidence(
+        info, ssh_rc=rc, attempt=collection_attempt, error=collection_error
+    )
     result: dict[str, Any] = {
-        "ts": utc_now_iso(),
+        "ts": configuration_evidence["attempt"]["finished_at"]
+        if collection_attempt
+        else utc_now_iso(),
         "actor": actor,
         "action": "host.audit",
         "host": host,
@@ -364,6 +375,7 @@ def process_audit_result(
             "role": info.get("ROLE") if role_present else None,
             "os_type": os_type,
             "gwhc": parse_recorded_gwhc(info, ssh_rc=rc),
+            "configuration_evidence": configuration_evidence,
             "override_present": override_present,
             "override_meta": (
                 {
@@ -395,6 +407,9 @@ def process_audit_result(
             "puppet_duration_s": puppet_duration_s,
         },
     }
+
+    if collection_error:
+        result["error"] = collection_error
 
     if worker_identity_status is not None:
         result["observed"]["tc_worker_identity_status"] = worker_identity_status
