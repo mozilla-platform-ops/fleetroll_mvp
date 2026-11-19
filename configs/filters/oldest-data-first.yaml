@@ -1,0 +1,2 @@
+query: sort:data:desc,healthy
+description: Sort by oldest recorded data first, then by health
