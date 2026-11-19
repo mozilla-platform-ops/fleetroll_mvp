@@ -8,6 +8,10 @@ file `Moonshot Master Inventory.xlsx` supplied that day is an export of the shee
 not a live connection or a verified Google revision. A reproducible export/import
 procedure and source revision are not recorded in this repository.
 
+IT maintains DHCP, DNS, rack location, and MAC address records in **Infoblox**.
+Coordinate with IT to keep those records current when hosts are added, moved,
+replaced, or renamed.
+
 The intended subject is Moonshot hardware across Windows-to-Linux and Ubuntu
 18.04-to-24.04 imaging. Observed OS, current hostname, reachability, and last
 Taskcluster registration can change while the hardware remains in the inventory.
@@ -80,8 +84,8 @@ The maintainer confirmed on 2026-11-13:
 - The numeric Moonshot identifier stays fixed across imaging: `ms-241` remains
   `ms-241`. Use `ms-NNN` as the logical node key within this Moonshot inventory.
 - Windows-to-Linux migration changes the hostname prefix from `t-w1064` to
-  `t-linux64`. The endpoint/domain change is performed with IT in its DHCP/DNS
-  database; imaging alone does not establish that the new endpoint is valid.
+  `t-linux64`. Coordinate the hostname and domain change with IT in Infoblox,
+  then verify the new endpoint when the DNS change is in place.
 - Linux 18.04-to-24.04 imaging keeps the existing Linux hostname.
 
 Fleetroll should reconcile recorded names to one inventory node while retaining
