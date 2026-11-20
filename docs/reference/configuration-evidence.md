@@ -69,6 +69,11 @@ envelope is limited to 128 KiB. A missing/denied Puppet Ruby collector is
 `collector_unavailable`; no fallback claims a coherent capture. Windows is
 `unsupported_os` in this contract.
 
+With `gather host --no-content`, the gather skips downloading and caching the
+override file. When the audit detects an override and the current snapshot has
+a stable override reading, the gather reports that checksum in
+`observed.override_sha256`. Otherwise the checksum is unknown.
+
 ### Puppet metadata
 
 Supported producer format is integer `schema_version: 1`. Required fields are

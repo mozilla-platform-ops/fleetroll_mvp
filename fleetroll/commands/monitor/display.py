@@ -870,8 +870,7 @@ class MonitorDisplay:
             github_refs=self.github_refs,
             windows_pools=self.windows_pools,
         )
-        sha_value = values.get("sha", "")
-        return sha_value not in ("-", "?", "")
+        return values.get("override") == "present"
 
     def _get_host_os(self, hostname: str) -> str:
         """Get the OS abbreviation for a host.

@@ -191,7 +191,7 @@ def gather_filter_options(func):
 @click.option(
     "--no-content",
     is_flag=True,
-    help="Do not print override contents (still prints presence + metadata).",
+    help="Skip downloading override contents. Report presence, metadata, and SHA-256 when available.",
 )
 @click.option(
     "--workers",

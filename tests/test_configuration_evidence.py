@@ -95,6 +95,46 @@ def output(snapshot):
     return "OS_TYPE=Linux\nCONFIG_SNAPSHOT_JSON=" + json.dumps(snapshot) + "\n"
 
 
+def test_gather_no_content_records_current_checksum_without_caching(
+    paths, tmp_path, monkeypatch, mocker
+):
+    from click.testing import CliRunner
+    from fleetroll.cli import cli
+
+    home = tmp_path / "isolated-home"
+    monkeypatch.setenv("HOME", str(home))
+    host = "host.example.com"
+    header = "OVERRIDE_PRESENT=1\n"
+    run = mocker.patch(
+        "fleetroll.commands.gather_host.run_ssh",
+        return_value=(0, header + output(collect(paths)), ""),
+    )
+    runner = CliRunner()
+    args = ["gather", "host", host, "--no-content", "--json"]
+
+    result = runner.invoke(cli, args)
+    assert result.exit_code == 0, result.output
+    observed = json.loads(result.output)["observed"]
+    checksum = hashlib.sha256(paths["override"].read_bytes()).hexdigest()
+    assert observed["override_present"] is True
+    assert observed["override_sha256"] == checksum
+    assert "override_contents_for_display" not in observed
+    assert "override_file_path" not in observed
+    assert not list((home / ".fleetroll" / "overrides").glob("*"))
+    with get_connection(home / ".fleetroll" / "fleetroll.db") as conn:
+        latest, _ = get_latest_host_observations(conn, [host])
+    assert latest[host]["observed"]["override_sha256"] == checksum
+
+    run.return_value = (0, header + "OS_TYPE=Linux\n", "")
+    result = runner.invoke(cli, args)
+    assert result.exit_code == 0, result.output
+    observed = json.loads(result.output)["observed"]
+    assert observed["override_present"] is True
+    assert observed["override_sha256"] is None
+    retained = observed["configuration_evidence"]["retained_components"]["override"]
+    assert retained["sha256"] == checksum
+
+
 def test_capture_regular_files_and_same_run_metadata(paths):
     snapshot = collect(paths)
     evidence = normalize(snapshot)

@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from .configuration_evidence import collect_evidence
+from .configuration_evidence import collect_evidence, usable_component
 from .constants import CONTENT_PREFIX_LEN, CONTENT_PREFIX_STEP, CONTENT_SENTINEL
 from .exceptions import FleetRollError
 from .gwhc import parse_recorded_gwhc
@@ -360,6 +360,16 @@ def process_audit_result(
     configuration_evidence = collect_evidence(
         info, ssh_rc=rc, attempt=collection_attempt, error=collection_error
     )
+    override_sha = content_hash
+    override_evidence = configuration_evidence["components"]["override"]
+    if (
+        override_sha is None
+        and override_present
+        and override_evidence["status"] == "present"
+        and usable_component(override_evidence)
+    ):
+        override_sha = override_evidence["sha256"]
+
     result: dict[str, Any] = {
         "ts": configuration_evidence["attempt"]["finished_at"]
         if collection_attempt
@@ -388,7 +398,7 @@ def process_audit_result(
                 if override_present
                 else None
             ),
-            "override_sha256": content_hash,
+            "override_sha256": override_sha,
             "vault_present": vault_present,
             "vault_meta": vault_meta,
             "vault_sha256": info.get("VLT_SHA256") or vault_sha256,

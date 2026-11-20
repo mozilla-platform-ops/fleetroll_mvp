@@ -372,12 +372,35 @@ class TestResize:
 class TestFilters:
     """Verify override and OS filter toggles."""
 
-    def test_override_filter_toggle(self, tmux_session: TmuxSession) -> None:
-        """Pressing o should toggle override filter without crashing."""
+    def test_override_filter_toggle(self, tmux_session: TmuxSession, tmux_monitor_env) -> None:
+        """A newer observation without a checksum keeps the host in the override view."""
+        from contextlib import closing
+
+        from fleetroll.db import get_connection, insert_host_observation
+
+        present, absent = tmux_monitor_env["hosts"][:2]
         tmux_session.send_keys("o")
-        assert tmux_session.wait_for("HOST", timeout=3.0)
+        assert tmux_session.wait_for("hosts=5/5", timeout=3.0), tmux_session.capture()
+
+        with closing(get_connection(tmux_monitor_env["db_path"])) as conn:
+            for host, override_present in ((present, True), (absent, False)):
+                insert_host_observation(
+                    conn,
+                    {
+                        "host": host,
+                        "ts": "2026-11-19T23:55:42+00:00",
+                        "ok": True,
+                        "observed": {"override_present": override_present},
+                    },
+                )
+            conn.commit()
+
+        assert tmux_session.wait_for("hosts=4/5", timeout=5.0), tmux_session.capture()
+        screen = tmux_session.capture()
+        assert present.split(".")[0] in screen
+        assert absent.split(".")[0] not in screen
         tmux_session.send_keys("o")
-        assert tmux_session.wait_for("HOST", timeout=3.0)
+        assert tmux_session.wait_for(absent.split(".")[0], timeout=3.0), tmux_session.capture()
 
     def test_os_filter_cycle(self, tmux_session: TmuxSession) -> None:
         """Pressing O should cycle OS filter without crashing."""
