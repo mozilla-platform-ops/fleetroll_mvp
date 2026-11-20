@@ -9,6 +9,8 @@ import pytest
 from fleetroll.commands.monitor.filter_history import (
     dedupe_append,
     load_filter_history,
+    load_most_used_filters,
+    record_filter_use,
     save_filter_history,
 )
 from fleetroll.constants import FILTER_HISTORY_MAX
@@ -23,6 +25,19 @@ def test_round_trip(tmp_path: Path) -> None:
 
 def test_load_missing_file(tmp_path: Path) -> None:
     assert load_filter_history(tmp_path / "nonexistent") == []
+
+
+def test_most_used_ranks_by_count_then_recency(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "filter_usage.sqlite3"
+    assert load_most_used_filters(path) == []
+    assert not path.exists()
+    timestamps = iter(range(5))
+    monkeypatch.setattr(
+        "fleetroll.commands.monitor.filter_history.time.time_ns", lambda: next(timestamps)
+    )
+    for query in ("os=L", "os=L", "os=M", "healthy=n", "os=M"):
+        record_filter_use(path, query=query)
+    assert load_most_used_filters(path) == [("os=M", 2), ("os=L", 2), ("healthy=n", 1)]
 
 
 def test_load_ignores_blank_lines(tmp_path: Path) -> None:

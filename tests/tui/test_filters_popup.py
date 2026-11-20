@@ -148,7 +148,7 @@ class TestFiltersPopup:
         finally:
             sess.kill()
 
-    def test_right_arrow_switches_to_recent(self, tmp_path: Path) -> None:
+    def test_left_arrow_switches_to_empty_recent(self, tmp_path: Path) -> None:
         ws = _prepare_workspace(
             tmp_path,
             filter_yaml={"prod-talos": "query: os=L\n"},
@@ -156,13 +156,57 @@ class TestFiltersPopup:
         sess = _launch(ws)
         try:
             sess.send_keys("f")
-            assert sess.wait_for("Saved", timeout=5.0)
-            sess.send_keys("Right")
-            # Recent tab is highlighted — saved rows go away since history is empty
+            assert sess.wait_for("[Saved]", timeout=5.0)
+            sess.send_keys("Left")
             assert sess.wait_until(
-                lambda: "prod-talos" not in sess.capture() and "Recent" in sess.capture(),
+                lambda: "prod-talos" not in sess.capture() and "[Recent]" in sess.capture(),
                 timeout=5.0,
             ), sess.capture()
+        finally:
+            sess.kill()
+
+    def test_recent_names_and_usage_across_sessions(self, tmp_path: Path) -> None:
+        ws = _prepare_workspace(
+            tmp_path,
+            filter_yaml={"oldest-data-first": "query: sort:data:desc,healthy\n"},
+        )
+        history = ws["home"] / ".fleetroll" / "filter_history"
+        history.write_text("sort:data:desc,healthy\nhealthy=n\n")
+        sess = _launch(ws)
+        try:
+            sess.send_keys("f")
+            assert sess.wait_for("[Recent]", timeout=5.0), sess.capture()
+            screen = sess.capture()
+            assert "Ad hoc" in screen
+            assert "oldest-data-first" in screen
+            for char in "first":
+                sess.send_keys(char)
+            assert sess.wait_for("find: first", timeout=5.0), sess.capture()
+            sess.send_keys("Enter")
+            assert sess.wait_until(
+                lambda: "sort:data:desc,healthy" in sess.capture()
+                and "[Recent]" not in sess.capture(),
+                timeout=5.0,
+            ), sess.capture()
+            sess.send_keys("/")
+            assert sess.wait_for("Filter ↑:", timeout=5.0), sess.capture()
+            sess.send_keys("Enter")
+            assert sess.wait_until(lambda: "Filter ↑:" not in sess.capture(), timeout=5.0), (
+                sess.capture()
+            )
+        finally:
+            sess.kill()
+
+        sess = _launch(ws)
+        try:
+            sess.send_keys("f")
+            assert sess.wait_for("[Recent]", timeout=5.0), sess.capture()
+            sess.send_keys("Right", "Right")
+            assert sess.wait_for("[Most Used]", timeout=5.0), sess.capture()
+            screen = sess.capture()
+            assert "oldest-data-first" in screen
+            assert "2x" in screen
+            assert "healthy=n" not in screen
         finally:
             sess.kill()
 

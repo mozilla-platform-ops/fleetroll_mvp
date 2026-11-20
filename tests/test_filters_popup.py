@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from fleetroll.commands.monitor.filters_popup import (
+    TAB_MOST_USED,
     TAB_RECENT,
     TAB_SAVED,
     FiltersPopupState,
     PopupRow,
+    build_popup_state,
     build_recent_rows,
     build_saved_rows,
     compute_popup_viewport,
@@ -91,15 +93,30 @@ class TestBuildRows:
 
     def test_build_recent_rows_reversed(self) -> None:
         # history is oldest→newest; most recent should be first
-        rows = build_recent_rows(["old", "mid", "newest"])
+        rows = build_recent_rows(["old", "mid", "newest"], saved_names={"mid": "saved-mid"})
         assert [r.query for r in rows] == ["newest", "mid", "old"]
+        assert [r.label for r in rows] == ["Ad hoc", "saved-mid", "Ad hoc"]
 
     def test_build_recent_rows_empty_history(self) -> None:
-        assert build_recent_rows([]) == []
+        assert build_recent_rows([], saved_names={}) == []
 
     def test_build_recent_rows_skips_empty(self) -> None:
-        rows = build_recent_rows(["", "x", ""])
+        rows = build_recent_rows(["", "x", ""], saved_names={})
         assert [r.query for r in rows] == ["x"]
+
+    def test_recent_opens_on_active_query_and_most_used_resolves_saved_names(self) -> None:
+        state = build_popup_state(
+            [NamedFilter(name="linux", query="os=L")],
+            history=["os=L", "os=M"],
+            most_used=[("os=L", 2), ("os=M", 1)],
+            active_query="os=L",
+        )
+        assert state.active_tab == TAB_RECENT
+        assert state.tab_state().cursor == 1
+        assert state.rows[TAB_MOST_USED] == [
+            PopupRow(label="linux", query="os=L", uses=2),
+            PopupRow(label="Ad hoc", query="os=M", uses=1),
+        ]
 
 
 class TestFindActiveRowIndex:

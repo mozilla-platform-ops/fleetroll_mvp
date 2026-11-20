@@ -27,16 +27,18 @@ from .data import (
     most_recent_ok_ts,
     strip_fqdn,
 )
-from .filter_history import dedupe_append, load_filter_history, save_filter_history
+from .filter_history import (
+    dedupe_append,
+    load_filter_history,
+    load_most_used_filters,
+    record_filter_use,
+    save_filter_history,
+)
 from .filters_popup import (
-    TAB_RECENT,
-    TAB_SAVED,
     FiltersPopupState,
-    build_recent_rows,
-    build_saved_rows,
+    build_popup_state,
     draw_filters_popup,
     filter_rows,
-    find_active_row_index,
 )
 from .formatting import (
     format_data_cell,
@@ -206,6 +208,7 @@ class MonitorDisplay:
         self._filter_bar_text: str = ""  # text being edited in the bar
         self._filter_bar_cursor: int = 0  # cursor position within _filter_bar_text
         self._filter_history: list[str] = []  # committed queries, oldest→newest
+        self._filter_usage_path: Path | None = None
         self._filter_history_idx: int = -1  # -1=fresh input; ≥0=browsing history
         self._filter_history_saved: str = ""  # text saved when browsing began
         self._status_msg: str = ""  # ephemeral status message
@@ -265,6 +268,8 @@ class MonitorDisplay:
             if err:
                 self._status_msg = err
                 self._status_msg_expiry = time.monotonic() + 2.0
+            else:
+                self._record_filter_use(text)
             self.draw_screen()
         elif key == 27:  # Escape — discard edits
             self._filter_history_idx = -1
@@ -440,28 +445,16 @@ class MonitorDisplay:
         return False
 
     def _open_filters_popup(self) -> None:
-        """Open the filters picker popup.
-
-        Reloads named filters from disk so filters added while the monitor was
-        running show up without a restart. If the currently-active query
-        matches a saved or recent entry, lands the cursor on it (preferring
-        Saved).
-        """
+        """Reload presets and usage when opening the filter picker."""
         if self._filters_configs_dir is not None:
             self.named_filters = load_named_filters(self._filters_configs_dir)
-        state = FiltersPopupState()
-        if self._query_text:
-            saved_rows = build_saved_rows(self.named_filters)
-            saved_idx = find_active_row_index(saved_rows, self._query_text)
-            if saved_idx >= 0:
-                state.saved_state.cursor = saved_idx
-            else:
-                recent_rows = build_recent_rows(self._filter_history)
-                recent_idx = find_active_row_index(recent_rows, self._query_text)
-                if recent_idx >= 0:
-                    state.active_tab = TAB_RECENT
-                    state.recent_state.cursor = recent_idx
-        self._filters_popup_state = state
+        usage_path = self._filter_usage_path
+        self._filters_popup_state = build_popup_state(
+            self.named_filters,
+            history=self._filter_history,
+            most_used=load_most_used_filters(usage_path) if usage_path is not None else [],
+            active_query=self._query_text,
+        )
 
     def _close_filters_popup(self) -> None:
         self._filters_popup_state = None
@@ -481,6 +474,8 @@ class MonitorDisplay:
         if err:
             self._status_msg = err
             self._status_msg_expiry = time.monotonic() + 2.0
+        else:
+            self._record_filter_use(query_text)
         self._close_filters_popup()
 
     def _handle_filters_popup_key(self, key: int, *, draw: bool = True) -> None:
@@ -488,16 +483,13 @@ class MonitorDisplay:
         if state is None or not self.curses_mod:
             return
         cm = self.curses_mod
-        saved_rows = build_saved_rows(self.named_filters)
-        recent_rows = build_recent_rows(self._filter_history)
-        active_rows = saved_rows if state.active_tab == TAB_SAVED else recent_rows
-        filtered = filter_rows(active_rows, state.search)
+        filtered = filter_rows(state.rows[state.active_tab], state.search)
         total = len(filtered)
         tab_state = state.tab_state()
 
         enter_keys = (cm.KEY_ENTER, ord("\n"), ord("\r"))
 
-        if key == 27 or key == ord("f"):  # Esc or f — close
+        if key == 27:  # Esc
             self._close_filters_popup()
         elif key in enter_keys:
             if total == 0:
@@ -507,13 +499,13 @@ class MonitorDisplay:
                 selected = filtered[tab_state.cursor]
                 self._apply_filters_popup_selection(selected.query)
         elif key == cm.KEY_LEFT:
-            state.active_tab = TAB_SAVED
+            state.select_adjacent_tab(direction=-1)
         elif key == cm.KEY_RIGHT:
-            state.active_tab = TAB_RECENT
-        elif key in (cm.KEY_UP, ord("k")):
+            state.select_adjacent_tab(direction=1)
+        elif key == cm.KEY_UP:
             if total > 0:
                 tab_state.cursor = max(tab_state.cursor - 1, 0)
-        elif key in (cm.KEY_DOWN, ord("j")):
+        elif key == cm.KEY_DOWN:
             if total > 0:
                 tab_state.cursor = min(tab_state.cursor + 1, total - 1)
         elif key == cm.KEY_PPAGE:
@@ -524,28 +516,16 @@ class MonitorDisplay:
                 tab_state.cursor = min(tab_state.cursor + 10, total - 1)
         elif key == cm.KEY_HOME:
             tab_state.cursor = 0
-        elif key == ord("G"):
+        elif key == cm.KEY_END:
             if total > 0:
                 tab_state.cursor = total - 1
         elif key == 21:  # Ctrl-U
-            state.search = ""
-            state.saved_state.cursor = 0
-            state.saved_state.viewport_start = 0
-            state.recent_state.cursor = 0
-            state.recent_state.viewport_start = 0
+            state.set_search("")
         elif key in (cm.KEY_BACKSPACE, 127, 8):
             if state.search:
-                state.search = state.search[:-1]
-                state.saved_state.cursor = 0
-                state.saved_state.viewport_start = 0
-                state.recent_state.cursor = 0
-                state.recent_state.viewport_start = 0
+                state.set_search(state.search[:-1])
         elif 32 <= key < 127:
-            state.search = state.search + chr(key)
-            state.saved_state.cursor = 0
-            state.saved_state.viewport_start = 0
-            state.recent_state.cursor = 0
-            state.recent_state.viewport_start = 0
+            state.set_search(state.search + chr(key))
 
         if draw:
             self.draw_screen()
@@ -638,9 +618,15 @@ class MonitorDisplay:
 
     def load_history(self, path: Path) -> None:
         self._filter_history = load_filter_history(path)
+        self._filter_usage_path = path.with_name("filter_usage.sqlite3")
 
     def save_history(self, path: Path) -> None:
         save_filter_history(path, self._filter_history)
+
+    def _record_filter_use(self, text: str) -> None:
+        query = text.strip()
+        if query and self._filter_usage_path is not None:
+            record_filter_use(self._filter_usage_path, query=query)
 
     def update_record(self, record: dict[str, Any]) -> None:
         self.latest[record["host"]] = record
@@ -1113,8 +1099,6 @@ class MonitorDisplay:
                 self.stdscr,
                 self.curses_mod,
                 self._filters_popup_state,
-                saved_rows=build_saved_rows(self.named_filters),
-                recent_rows=build_recent_rows(self._filter_history),
                 color_enabled=self.colors.color_enabled,
                 active_query=self._query_text,
             )

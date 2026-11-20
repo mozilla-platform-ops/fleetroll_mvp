@@ -182,7 +182,7 @@ including optional saved plans and live full-checksum verification before remova
 | `Ctrl-U` | Clear the input line |
 | `↑`, `↓` while editing | Browse query history |
 | `\` | Clear the active query |
-| `f` | Open the saved/recent filter picker |
+| `f` | Open the filter picker |
 
 The header shows the active query. Quick filters remain independent: `o` toggles
 overrides only, and `O` cycles OS selection; both combine with the query using
@@ -212,21 +212,28 @@ description: Linux Talos hosts
 TUI picker). The loader creates a missing directory and skips malformed files
 with warnings. The picker reloads saved filters each time it opens.
 
-The Saved and Recent tabs show names/queries and newest-first history. Opening
-selects the active query when found, preferring Saved; otherwise it starts at
-Saved's first row. A dot marks the active query.
+The picker opens on **Recent**, with the active query selected if present and
+the newest query selected otherwise. With empty history it opens on **Saved**,
+which lists presets alphabetically. A dot marks the active query.
+
+**Recent** and **Most Used** show the current preset name for matching query
+text and `Ad hoc` for other queries. **Most Used** ranks queries by how many
+times you applied them with Enter in the picker or `/` bar, with ties broken
+by most recent use. Counts persist in `~/.fleetroll/filter_usage.sqlite3` and
+start accumulating with your next apply. Existing history is still available
+in Recent.
 
 | Picker key | Action |
 | --- | --- |
-| `←`, `→` | Select Saved / Recent |
-| `↑`, `↓`, `k`, `j` | Move within the active tab |
+| `←`, `→` | Switch between Recent, Saved, and Most Used |
+| `↑`, `↓` | Move within the active tab |
 | `PgUp`, `PgDn` | Move ten rows |
-| `Home`, `G` | First / last row |
+| `Home`, `End` | First / last row |
 | Printable characters, Backspace, Ctrl-U | Edit the substring search across names and queries |
 | `Enter` | Apply selection, promote it in history, and close; empty matches flash a message |
-| `Esc`, `f` | Close |
+| `Esc` | Close |
 
-Search resets both cursors; tab switches preserve them while open. Search and
+Search resets each tab's cursor; tab switches preserve them while open. Search and
 cursor positions are not saved across opens. The footer counts matching/total
 rows. Small terminals show a resize prompt. Edit YAML files directly to create,
 rename, or remove saved filters; the picker is read-only.

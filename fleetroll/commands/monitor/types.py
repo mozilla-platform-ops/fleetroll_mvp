@@ -105,7 +105,7 @@ Keybindings:
   O           Cycle OS filter (all → Linux → macOS → all)
   /           Open filter bar (query syntax: col>val sort:col:desc)
   \\          Clear active /query filter
-  f           Open filter picker (saved + recent)
+  f           Open filter picker (Recent, Saved, Most Used)
   q           Quit monitor"""
 
 HELP_COLUMNS = """\

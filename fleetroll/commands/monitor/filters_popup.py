@@ -1,8 +1,6 @@
 """Filter picker popup for the host-monitor TUI.
 
-Modal overlay with two tabs — Saved and Recent — for browsing named filters
-(from configs/filters/*.yaml) and recent filter history. v1 is read-only;
-mutations happen by editing the YAML files directly.
+Modal overlay for browsing recent, saved, and frequently used queries.
 """
 
 from __future__ import annotations
@@ -17,6 +15,8 @@ if TYPE_CHECKING:
 
 TAB_SAVED = "saved"
 TAB_RECENT = "recent"
+TAB_MOST_USED = "most_used"
+TABS = {TAB_RECENT: "Recent", TAB_SAVED: "Saved", TAB_MOST_USED: "Most Used"}
 
 # Size caps — keep the popup dialog-sized even on wide/tall terminals.
 MAX_POPUP_WIDTH = 100
@@ -30,11 +30,11 @@ V_MARGIN = 6
 
 @dataclass
 class PopupRow:
-    """One row shown in the popup. `label` is the left column (name); `query`
-    is the right column. For Recent entries, label is empty."""
+    """A display label, query, and optional usage count."""
 
     label: str
     query: str
+    uses: int = 0
 
     def match_text(self) -> str:
         return f"{self.label} {self.query}".strip()
@@ -52,14 +52,25 @@ class FiltersPopupState:
 
     active_tab: str = TAB_SAVED
     search: str = ""
-    saved_state: TabState = field(default_factory=TabState)
-    recent_state: TabState = field(default_factory=TabState)
+    rows: dict[str, list[PopupRow]] = field(default_factory=lambda: {tab: [] for tab in TABS})
+    positions: dict[str, TabState] = field(
+        default_factory=lambda: {tab: TabState() for tab in TABS}
+    )
     flash_msg: str = ""
     flash_expiry: float = 0.0
 
-    def tab_state(self, tab: str | None = None) -> TabState:
-        tab = tab or self.active_tab
-        return self.saved_state if tab == TAB_SAVED else self.recent_state
+    def tab_state(self) -> TabState:
+        return self.positions[self.active_tab]
+
+    def select_adjacent_tab(self, *, direction: int) -> None:
+        tabs = tuple(TABS)
+        index = tabs.index(self.active_tab) + direction
+        self.active_tab = tabs[max(0, min(index, len(tabs) - 1))]
+
+    def set_search(self, search: str) -> None:
+        self.search = search
+        for tab in self.positions:
+            self.positions[tab] = TabState()
 
 
 def compute_popup_viewport(
@@ -106,9 +117,40 @@ def build_saved_rows(filters: list[NamedFilter]) -> list[PopupRow]:
     return [PopupRow(label=f.name, query=f.query) for f in filters]
 
 
-def build_recent_rows(history: list[str]) -> list[PopupRow]:
+def build_recent_rows(history: list[str], *, saved_names: dict[str, str]) -> list[PopupRow]:
     # history is oldest→newest; show most-recent first.
-    return [PopupRow(label="", query=q) for q in reversed(history) if q]
+    return [
+        PopupRow(label=saved_names.get(query.strip(), "Ad hoc"), query=query)
+        for query in reversed(history)
+        if query.strip()
+    ]
+
+
+def build_popup_state(
+    filters: list[NamedFilter],
+    *,
+    history: list[str],
+    most_used: list[tuple[str, int]],
+    active_query: str,
+) -> FiltersPopupState:
+    saved_names: dict[str, str] = {}
+    for preset in filters:
+        saved_names.setdefault(preset.query, preset.name)
+    recent = build_recent_rows(history, saved_names=saved_names)
+    state = FiltersPopupState(
+        active_tab=TAB_RECENT if recent else TAB_SAVED,
+        rows={
+            TAB_RECENT: recent,
+            TAB_SAVED: build_saved_rows(filters),
+            TAB_MOST_USED: [
+                PopupRow(label=saved_names.get(query, "Ad hoc"), query=query, uses=uses)
+                for query, uses in most_used
+            ],
+        },
+    )
+    for tab, rows in state.rows.items():
+        state.positions[tab].cursor = max(find_active_row_index(rows, active_query), 0)
+    return state
 
 
 def draw_filters_popup(
@@ -116,8 +158,6 @@ def draw_filters_popup(
     curses_mod,
     state: FiltersPopupState,
     *,
-    saved_rows: list[PopupRow],
-    recent_rows: list[PopupRow],
     color_enabled: bool,
     active_query: str = "",
 ) -> None:
@@ -146,7 +186,7 @@ def draw_filters_popup(
         return
 
     popup_attr = curses_mod.color_pair(18) if color_enabled else curses_mod.A_REVERSE
-    reverse_attr = popup_attr | curses_mod.A_REVERSE
+    reverse_attr = popup_attr ^ curses_mod.A_REVERSE
     win.bkgd(" ", popup_attr)
     win.border()
 
@@ -160,16 +200,17 @@ def draw_filters_popup(
 
     # Row 1: tab strip
     tab_row = 1
-    tabs = [("Saved", TAB_SAVED), ("Recent", TAB_RECENT)]
     col = inner_left
-    for label, tab_id in tabs:
-        attr = reverse_attr if state.active_tab == tab_id else popup_attr
+    for tab_id, label in TABS.items():
+        selected = state.active_tab == tab_id
+        text = f"[{label}]" if selected else label
+        attr = reverse_attr if selected else popup_attr
         with contextlib.suppress(curses_error):
-            win.addstr(tab_row, col, label, attr)
-        col += len(label) + 2  # 2-space separator
+            win.addstr(tab_row, col, text, attr)
+        col += len(text) + 2
 
     # Determine active rows after filter
-    all_rows = saved_rows if state.active_tab == TAB_SAVED else recent_rows
+    all_rows = state.rows[state.active_tab]
     filtered = filter_rows(all_rows, state.search)
 
     # Rows area: between top (border + tab + blank) and bottom (blank + border)
@@ -180,9 +221,7 @@ def draw_filters_popup(
 
     tab_state = state.tab_state()
     total = len(filtered)
-    tab_state.cursor = 0 if total == 0 else min(tab_state.cursor, total - 1)
-    if total == 0:
-        tab_state.cursor = 0
+    tab_state.cursor = min(tab_state.cursor, max(total - 1, 0))
     tab_state.viewport_start = compute_popup_viewport(
         tab_state.cursor, tab_state.viewport_start, visible_rows, total
     )
@@ -192,6 +231,19 @@ def draw_filters_popup(
     if filtered:
         label_w = max(len(r.label) for r in filtered)
         label_w = min(label_w, max(inner_w // 3, 10))
+
+    if not filtered:
+        message = (
+            "No matches"
+            if state.search
+            else {
+                TAB_RECENT: "No recent filters",
+                TAB_SAVED: "No saved filters",
+                TAB_MOST_USED: "Apply a filter to start",
+            }[state.active_tab]
+        )
+        with contextlib.suppress(curses_error):
+            win.addstr(rows_top, inner_left, message[:inner_w], popup_attr)
 
     for i in range(visible_rows):
         idx = tab_state.viewport_start + i
@@ -209,8 +261,9 @@ def draw_filters_popup(
             text = f"{prefix}{label}  {row.query}"
         else:
             text = f"{prefix}{row.query}"
-        text = text[: inner_w - 2]  # leave room for scroll arrow
-        text = text.ljust(inner_w - 2)
+        count = f"  {row.uses}x" if row.uses else ""
+        text_width = max(inner_w - 2 - len(count), 0)  # leave room for scroll arrow
+        text = text[:text_width].ljust(text_width) + count
         attr = reverse_attr if is_sel else popup_attr
         with contextlib.suppress(curses_error):
             win.addstr(y, inner_left, text, attr)
@@ -241,7 +294,9 @@ def draw_filters_popup(
     bottom_row = popup_h - 1
     with contextlib.suppress(curses_error):
         if status_left:
-            win.addstr(bottom_row, 2, status_left, popup_attr)
+            win.addstr(
+                bottom_row, 2, status_left[: max(popup_w - len(status_right) - 4, 0)], popup_attr
+            )
         win.addstr(
             bottom_row,
             max(popup_w - len(status_right) - 2, 2),
