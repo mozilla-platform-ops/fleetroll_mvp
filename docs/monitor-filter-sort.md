@@ -223,12 +223,11 @@ The picker opens on **Recent**, with the active query selected if present and
 the newest query selected otherwise. With empty history it opens on **Saved**,
 which lists presets alphabetically. A dot marks the active query.
 
-**Recent** and **Most Used** show the preset name first for saved filters and
-start directly with the query for unnamed filters. **Most Used** ranks queries by how many
-times you applied them with Enter in the picker or `/` bar, with ties broken
-by most recent use. Counts persist in `~/.fleetroll/filter_usage.sqlite3` and
-start accumulating with your next apply. Existing history is still available
-in Recent.
+**Recent** and **Most Used** emphasize saved filter names and indent unnamed
+queries. **Most Used** ranks queries by how many times you applied them with
+Enter in the picker or `/` bar, with ties broken by most recent use. Counts
+persist in `~/.fleetroll/filter_usage.sqlite3` and start accumulating with your
+next apply. Existing history is still available in Recent.
 
 | Picker key | Action |
 | --- | --- |

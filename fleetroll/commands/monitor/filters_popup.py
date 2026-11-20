@@ -187,6 +187,7 @@ def draw_filters_popup(
 
     popup_attr = curses_mod.color_pair(18) if color_enabled else curses_mod.A_REVERSE
     reverse_attr = popup_attr ^ curses_mod.A_REVERSE
+    name_attr = curses_mod.color_pair(1) if color_enabled else popup_attr
     win.bkgd(" ", popup_attr)
     win.border()
 
@@ -226,12 +227,6 @@ def draw_filters_popup(
         tab_state.cursor, tab_state.viewport_start, visible_rows, total
     )
 
-    # Compute label column width for alignment
-    label_w = 0
-    if filtered:
-        label_w = max(len(r.label) for r in filtered)
-        label_w = min(label_w, max(inner_w // 3, 10))
-
     if not filtered:
         message = (
             "No matches"
@@ -258,15 +253,14 @@ def draw_filters_popup(
         prefix = f"{cursor_glyph} {active_glyph} "
         count = f"  {row.uses}x" if row.uses else ""
         body_width = max(inner_w - 2 - len(prefix) - len(count), 0)
-        body = row.query
-        if row.label:
-            # Preserve the name before spending space on the query preview.
-            label = row.label.ljust(label_w)
-            body = f"{label}  {row.query}"
+        body = f"{row.label}  ·  {row.query}" if row.label else f"    {row.query}"
         text = prefix + body[:body_width].ljust(body_width) + count
         attr = reverse_attr if is_sel else popup_attr
         with contextlib.suppress(curses_error):
             win.addstr(y, inner_left, text, attr)
+            if row.label:
+                label_attr = (reverse_attr if is_sel else name_attr) | curses_mod.A_BOLD
+                win.addstr(y, inner_left + len(prefix), row.label[:body_width], label_attr)
 
     # Scroll arrows on right edge
     arrow_col = popup_w - 2

@@ -181,7 +181,8 @@ class TestFiltersPopup:
             screen = sess.capture()
             named = next(line for line in screen.splitlines() if "oldest-data-first" in line)
             unnamed = next(line for line in screen.splitlines() if "healthy=n" in line)
-            assert unnamed.index("healthy=n") == named.index("oldest-data-first")
+            assert unnamed.index("healthy=n") == named.index("oldest-data-first") + 4
+            assert "oldest-data-first  ·  sort:data:desc,healthy" in named
             assert "Ad hoc" not in screen
             for char in "first":
                 sess.send_keys(char)
@@ -210,7 +211,7 @@ class TestFiltersPopup:
             screen = sess.capture()
             named = next(line for line in screen.splitlines() if "oldest-data-first" in line)
             unnamed = next(line for line in screen.splitlines() if "healthy=n" in line)
-            assert unnamed.index("healthy=n") == named.index("oldest-data-first")
+            assert unnamed.index("healthy=n") == named.index("oldest-data-first") + 4
             assert unnamed.index("1x") == named.index("2x")
             sess.resize(36, 20)
             assert sess.wait_until(

@@ -2,15 +2,24 @@
 
 ## Source and scope
 
-The maintainer identified the Google Sheet **Moonshot Master Inventory** as the
+The maintainer identified the [Moonshot Master Inventory][moonshot-sheet] as the
 source of `configs/host-lists/linux/all_moonshots.list` on 2026-11-13. The local
 file `Moonshot Master Inventory.xlsx` supplied that day is an export of the sheet,
 not a live connection or a verified Google revision. A reproducible export/import
 procedure and source revision are not recorded in this repository.
 
-IT maintains DHCP, DNS, rack location, and MAC address records in **Infoblox**.
-Coordinate with IT to keep those records current when hosts are added, moved,
-replaced, or renamed.
+The sheet combines IT records with RelOps planning and status. It includes rough
+plans for roles, Taskcluster worker types, and OS assignments by cartridge.
+Contact `aerickson` for sheet updates. `mcornmesser` is the Windows co-owner.
+Windows no longer uses the sheet.
+
+Use Fleetroll host observations and their timestamps to check a host's observed
+role and Taskcluster worker type.
+
+[moonshot-sheet]: https://docs.google.com/spreadsheets/d/1IPTmppvqDw0PQV-O1LgXLJg_7TC-H_IAAnSxcur8c7I/edit?usp=sharing
+
+IT maintains DHCP, DNS, and MAC address records in **Infoblox**. Coordinate
+network record updates with IT when hosts are added, moved, replaced, or renamed.
 
 The intended subject is Moonshot hardware across Windows-to-Linux and Ubuntu
 18.04-to-24.04 imaging. Observed OS, current hostname, reachability, and last
@@ -119,9 +128,9 @@ gap is 35 nodes, and the coverage denominator is 315.
 
 ## Consequences for coverage work
 
-- Preserve membership separately from the sheet's OS/state annotations, live
-  collection results, and desired imaging target. The workbook has a current-OS
-  column; it does not establish where intended future assignment is maintained.
+- Preserve membership separately from recorded OS and status, planned imaging
+  targets, and live observations. Treat rough assignments in the sheet as
+  planning context and confirm targets before using them for operations.
 - Account separately for a failed latest gather, stale last-success evidence,
   historical identity only, and no observations. Failure to reach a host is
   evidence at that attempt's time, not permanent offline status.
