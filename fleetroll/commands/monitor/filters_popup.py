@@ -120,7 +120,7 @@ def build_saved_rows(filters: list[NamedFilter]) -> list[PopupRow]:
 def build_recent_rows(history: list[str], *, saved_names: dict[str, str]) -> list[PopupRow]:
     # history is oldest→newest; show most-recent first.
     return [
-        PopupRow(label=saved_names.get(query.strip(), "Ad hoc"), query=query)
+        PopupRow(label=saved_names.get(query.strip(), ""), query=query)
         for query in reversed(history)
         if query.strip()
     ]
@@ -143,7 +143,7 @@ def build_popup_state(
             TAB_RECENT: recent,
             TAB_SAVED: build_saved_rows(filters),
             TAB_MOST_USED: [
-                PopupRow(label=saved_names.get(query, "Ad hoc"), query=query, uses=uses)
+                PopupRow(label=saved_names.get(query, ""), query=query, uses=uses)
                 for query, uses in most_used
             ],
         },
@@ -256,14 +256,14 @@ def draw_filters_popup(
         cursor_glyph = "›" if is_sel else " "  # noqa: RUF001
         active_glyph = "●" if is_active else " "
         prefix = f"{cursor_glyph} {active_glyph} "
-        if label_w > 0:
-            label = row.label[:label_w].ljust(label_w)
-            text = f"{prefix}{label}  {row.query}"
-        else:
-            text = f"{prefix}{row.query}"
         count = f"  {row.uses}x" if row.uses else ""
-        text_width = max(inner_w - 2 - len(count), 0)  # leave room for scroll arrow
-        text = text[:text_width].ljust(text_width) + count
+        body_width = max(inner_w - 2 - len(prefix) - len(count), 0)
+        body = row.query
+        if row.label:
+            # Preserve the name before spending space on the query preview.
+            label = row.label.ljust(label_w)
+            body = f"{label}  {row.query}"
+        text = prefix + body[:body_width].ljust(body_width) + count
         attr = reverse_attr if is_sel else popup_attr
         with contextlib.suppress(curses_error):
             win.addstr(y, inner_left, text, attr)

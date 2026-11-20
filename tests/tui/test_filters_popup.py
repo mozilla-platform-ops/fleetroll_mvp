@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fleetroll.commands.monitor.filter_history import record_filter_use
 
 from tests.tmux_helpers import (
     _UV_PATH,
@@ -172,13 +173,16 @@ class TestFiltersPopup:
         )
         history = ws["home"] / ".fleetroll" / "filter_history"
         history.write_text("sort:data:desc,healthy\nhealthy=n\n")
+        record_filter_use(history.with_name("filter_usage.sqlite3"), query="healthy=n")
         sess = _launch(ws)
         try:
             sess.send_keys("f")
             assert sess.wait_for("[Recent]", timeout=5.0), sess.capture()
             screen = sess.capture()
-            assert "Ad hoc" in screen
-            assert "oldest-data-first" in screen
+            named = next(line for line in screen.splitlines() if "oldest-data-first" in line)
+            unnamed = next(line for line in screen.splitlines() if "healthy=n" in line)
+            assert unnamed.index("healthy=n") == named.index("oldest-data-first")
+            assert "Ad hoc" not in screen
             for char in "first":
                 sess.send_keys(char)
             assert sess.wait_for("find: first", timeout=5.0), sess.capture()
@@ -204,9 +208,18 @@ class TestFiltersPopup:
             sess.send_keys("Right", "Right")
             assert sess.wait_for("[Most Used]", timeout=5.0), sess.capture()
             screen = sess.capture()
-            assert "oldest-data-first" in screen
-            assert "2x" in screen
-            assert "healthy=n" not in screen
+            named = next(line for line in screen.splitlines() if "oldest-data-first" in line)
+            unnamed = next(line for line in screen.splitlines() if "healthy=n" in line)
+            assert unnamed.index("healthy=n") == named.index("oldest-data-first")
+            assert unnamed.index("1x") == named.index("2x")
+            sess.resize(36, 20)
+            assert sess.wait_until(
+                lambda: any(
+                    "oldest-data-first" in line and "2x" in line and len(line) <= 36
+                    for line in sess.capture().splitlines()
+                ),
+                timeout=5.0,
+            ), sess.capture()
         finally:
             sess.kill()
 

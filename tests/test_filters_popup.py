@@ -95,7 +95,7 @@ class TestBuildRows:
         # history is oldest→newest; most recent should be first
         rows = build_recent_rows(["old", "mid", "newest"], saved_names={"mid": "saved-mid"})
         assert [r.query for r in rows] == ["newest", "mid", "old"]
-        assert [r.label for r in rows] == ["Ad hoc", "saved-mid", "Ad hoc"]
+        assert [r.label for r in rows] == ["", "saved-mid", ""]
 
     def test_build_recent_rows_empty_history(self) -> None:
         assert build_recent_rows([], saved_names={}) == []
@@ -115,7 +115,7 @@ class TestBuildRows:
         assert state.tab_state().cursor == 1
         assert state.rows[TAB_MOST_USED] == [
             PopupRow(label="linux", query="os=L", uses=2),
-            PopupRow(label="Ad hoc", query="os=M", uses=1),
+            PopupRow(label="", query="os=M", uses=1),
         ]
 
 
