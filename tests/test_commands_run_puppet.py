@@ -6,11 +6,94 @@ import json
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
+from fleetroll.cli import cli
 from fleetroll.cli_types import HostRunPuppetArgs
 from fleetroll.commands.run_puppet import _strip_ansi, cmd_host_run_puppet
 from fleetroll.exceptions import CommandFailureError
 
 from tests.puppet_helpers import run_evidence
+
+
+def idle_evidence(state="IDLE", *, puppet="false", os_type="Linux"):
+    return (
+        "FLEETROLL_IDLE_CHECKED_AT=2026-11-19T00:00:00Z\n"
+        f"FLEETROLL_IDLE_OS_TYPE={os_type}\n"
+        f"FLEETROLL_IDLE_PUPPET_RUNNING={puppet}\n"
+        "FLEETROLL_IDLE_GWHC_EXIT=0\n"
+        "FLEETROLL_IDLE_JSON_BEGIN=\n" + json.dumps({"ok": True, "state": state})
+    )
+
+
+@pytest.mark.parametrize(
+    ("check_reply", "exit_code", "skipped", "reason", "runs_puppet"),
+    [
+        ((0, idle_evidence(), ""), 0, False, "worker_idle", True),
+        ((0, idle_evidence("WORKING"), ""), 0, True, "worker_working", False),
+        ((0, idle_evidence(puppet="true"), ""), 0, True, "puppet_running", False),
+        ((0, idle_evidence(puppet="unknown"), ""), 1, False, "puppet_activity_unknown", False),
+        ((0, idle_evidence(os_type="Darwin"), ""), 1, False, "unsupported_os", False),
+        (TimeoutError("timeout"), 1, False, "ssh_exception", False),
+    ],
+)
+def test_only_if_idle_cli(mocker, tmp_path, check_reply, exit_code, skipped, reason, runs_puppet):
+    audit_log = tmp_path / "audit.jsonl"
+    ssh = mocker.patch(
+        "fleetroll.commands.run_puppet.run_ssh",
+        side_effect=[check_reply, (0, run_evidence(), "")],
+    )
+    refresh = mocker.patch(
+        "fleetroll.commands.run_puppet._maybe_auto_audit",
+        side_effect=lambda *args: print("Audit refreshed"),
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "host",
+            "run-puppet",
+            "test.example.com",
+            "--only-if-idle",
+            "--confirm",
+            "--json",
+            "--audit-log",
+            str(audit_log),
+        ],
+    )
+    assert result.exit_code == exit_code, result.output
+    record = json.loads(result.stdout)
+    assert record["ok"] is runs_puppet
+    assert record["skipped"] is skipped
+    assert record["idle_check"]["reason"] == reason
+    assert json.loads(audit_log.read_text())["idle_check"] == record["idle_check"]
+    assert "gwhc --json" in ssh.call_args_list[0].args[1]
+    assert ssh.call_count == (2 if runs_puppet else 1)
+    if runs_puppet:
+        assert "FLEETROLL_SINGLE_RUN=1 run-puppet.sh" in ssh.call_args_list[1].args[1]
+        refresh.assert_called_once()
+    else:
+        refresh.assert_not_called()
+
+
+def test_only_if_idle_batch(mocker, mock_args_run_puppet, capsys):
+    mock_args_run_puppet.only_if_idle = True
+    mock_args_run_puppet.hosts = ["idle", "busy", "unknown"]
+    mock_args_run_puppet.quiet = True
+
+    def fake_ssh(host, command, **kwargs):
+        if "gwhc --json" in command:
+            return 0, idle_evidence({"idle": "IDLE", "busy": "BUSY", "unknown": "DOWN"}[host]), ""
+        assert host == "idle"
+        return 0, run_evidence(), ""
+
+    mocker.patch("fleetroll.commands.run_puppet.run_ssh", side_effect=fake_ssh)
+    refresh = mocker.patch("fleetroll.commands.run_puppet._maybe_auto_audit")
+    with pytest.raises(CommandFailureError):
+        cmd_host_run_puppet(mock_args_run_puppet)
+    output = capsys.readouterr().out
+    assert "SKIP busy worker_working" in output
+    assert "FAIL unknown idle check unavailable" in output
+    assert "total=3 successful=1 failed=0 unknown=1 skipped=1" in output
+    assert refresh.call_args.args[0] == ["idle"]
 
 
 class TestCmdHostRunPuppet:
@@ -111,6 +194,7 @@ class TestCmdHostRunPuppet:
         self, mocker, mock_args_run_puppet: HostRunPuppetArgs, tmp_dir: Path, capsys, json_output
     ):
         mock_args_run_puppet.confirm = False
+        mock_args_run_puppet.only_if_idle = True
         mock_args_run_puppet.json = json_output
         mock_args_run_puppet.no_audit = False
         mock_args_run_puppet.audit_log = str(tmp_dir / "audit.jsonl")
@@ -125,10 +209,12 @@ class TestCmdHostRunPuppet:
             assert preview["dry_run"] is True
             assert preview["host"] == "test.example.com"
             assert preview["auto_audit"] is True
+            assert preview["only_if_idle"] is True
         else:
             assert "DRY RUN" in output
             assert "test.example.com" in output
             assert "Auto-audit after:" in output
+            assert "live Linux worker and Puppet idle check" in output
         ssh.assert_not_called()
         auto_audit.assert_not_called()
         assert not Path(mock_args_run_puppet.audit_log).exists()

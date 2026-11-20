@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,7 +19,13 @@ from ..audit import append_jsonl
 from ..constants import DRY_RUN_PREVIEW_LIMIT
 from ..exceptions import CommandFailureError
 from ..puppet_outcome import parse_run_observation, strip_run_markers, unknown_puppet_observation
-from ..ssh import build_ssh_options, is_windows_host, remote_run_puppet_script, run_ssh
+from ..ssh import (
+    build_ssh_options,
+    is_windows_host,
+    remote_idle_script,
+    remote_run_puppet_script,
+    run_ssh,
+)
 from ..utils import (
     default_audit_log_path,
     format_host_preview,
@@ -27,6 +33,7 @@ from ..utils import (
     utc_now_iso,
 )
 from ._auto_audit import _maybe_auto_audit
+from .idle import parse_idle_output
 
 if TYPE_CHECKING:
     from ..cli_types import HostRunPuppetArgs
@@ -77,54 +84,56 @@ def run_puppet_for_host(
     # width (which made the pretty-printer emit absurd padding). Mode-change
     # ANSI escapes that would corrupt the user's terminal are stripped below
     # via _strip_ansi; SGR color codes are preserved.
+    idle_check = None
+    rc = None
+    out = err = ""
+    error = None
     try:
-        rc, out, err = run_ssh(
-            host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout, force_tty=True
-        )
+        if args.only_if_idle:
+            rc, idle_output, err = run_ssh(
+                host, remote_idle_script(), ssh_options=ssh_opts, timeout_s=min(args.timeout, 30)
+            )
+            idle_check = parse_idle_output(idle_output, ssh_rc=rc)
+        if idle_check is None or idle_check["idle"] is True:
+            rc, out, err = run_ssh(
+                host, remote_cmd, ssh_options=ssh_opts, timeout_s=args.timeout, force_tty=True
+            )
     except Exception as exc:
-        duration_s = round(time.monotonic() - start, 2)
-        result: dict[str, Any] = {
-            "ts": utc_now_iso(),
-            "actor": actor,
-            "action": "host.run_puppet",
-            "host": host,
-            "ok": False,
-            "ssh_rc": None,
-            "stderr": "",
-            "error": f"{type(exc).__name__}: {exc}",
-            "observed": {
-                **unknown_puppet_observation(reason="ssh_exception"),
-                "duration_s": duration_s,
-            },
-            "parameters": {
-                "reason": args.reason,
-            },
-        }
-        out = ""
+        rc = None
+        err = ""
+        error = f"{type(exc).__name__}: {exc}"
+        if args.only_if_idle and idle_check is None:
+            idle_check = parse_idle_output("", ssh_rc=1)
+            idle_check["reason"] = "ssh_exception"
+
+    blocked = idle_check is not None and idle_check["idle"] is not True
+    if blocked:
+        observed = unknown_puppet_observation(reason="idle_check_blocked")
+    elif error is not None:
+        observed = unknown_puppet_observation(reason="ssh_exception")
     else:
-        duration_s = round(time.monotonic() - start, 2)
         observed = parse_run_observation(out)
-        ok = (
+    result: dict[str, Any] = {
+        "ts": utc_now_iso(),
+        "actor": actor,
+        "action": "host.run_puppet",
+        "host": host,
+        "ok": (
             rc == 0
             and observed["wrapper_exit"] == 0
             and observed["puppet_outcome"] in {"unchanged", "changed"}
-        )
-        result = {
-            "ts": utc_now_iso(),
-            "actor": actor,
-            "action": "host.run_puppet",
-            "host": host,
-            "ok": ok,
-            "ssh_rc": rc,
-            "stderr": err.strip(),
-            "observed": {
-                **observed,
-                "duration_s": duration_s,
-            },
-            "parameters": {
-                "reason": args.reason,
-            },
-        }
+        ),
+        "ssh_rc": rc,
+        "stderr": err.strip(),
+        "observed": {**observed, "duration_s": round(time.monotonic() - start, 2)},
+        "parameters": {"reason": args.reason},
+    }
+    if error is not None:
+        result["error"] = error
+    if args.only_if_idle:
+        result["parameters"]["only_if_idle"] = True
+        result["idle_check"] = idle_check
+        result["skipped"] = idle_check is not None and idle_check["idle"] is False
 
     if log_lock:
         with log_lock:
@@ -138,6 +147,13 @@ def run_puppet_for_host(
 def format_puppet_line(result: dict[str, Any]) -> str:
     """Format a single-line status for a puppet run result."""
     host = result.get("host", "?")
+    idle_check = result.get("idle_check")
+    if idle_check is not None and idle_check["idle"] is not True:
+        if result.get("skipped"):
+            return f"SKIP {host} {idle_check['reason']}"
+        detail = result.get("error") or result.get("stderr")
+        suffix = f" ({detail})" if detail else ""
+        return f"FAIL {host} idle check unavailable ({idle_check['reason']}){suffix}"
     if result.get("ok"):
         observed = result.get("observed", {})
         duration_s = observed.get("duration_s", 0)
@@ -182,6 +198,8 @@ def _print_dry_run(
             "auto_audit": not args.no_audit,
             "audit_log": str(audit_log),
         }
+        if args.only_if_idle:
+            summary["only_if_idle"] = True
         print(json.dumps(summary, indent=2, sort_keys=True))
         return
 
@@ -198,6 +216,8 @@ def _print_dry_run(
     else:
         print(f"{click.style('Host:', fg='cyan')} {hosts[0] if hosts else '(none)'}")
     print(f"{click.style('Action:', fg='cyan')} run-puppet.sh on {len(hosts)} host(s)")
+    if args.only_if_idle:
+        print("Run only after a live Linux worker and Puppet idle check.")
     if args.reason:
         print(f"{click.style('Reason:', fg='cyan')} {args.reason}")
     print(f"{click.style('Auto-audit after:', fg='cyan')} {'yes' if not args.no_audit else 'no'}")
@@ -345,18 +365,47 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
                 if output:
                     print(output)
             print(format_puppet_line(result))
-            if not result["ok"]:
+            if not result["ok"] and (result.get("idle_check") or {}).get("idle", True) is True:
                 print(
                     f"[{hosts[0]}] Puppet execution not verified successful (rc={rc}, "
                     f"puppet_exit={result['observed']['puppet_exit']}). "
                     f"stderr:\n{result.get('stderr', '')}",
                     file=sys.stderr,
                 )
-        _maybe_auto_audit([hosts[0]], args, audit_log)
-        if not result["ok"]:
-            raise CommandFailureError
-        return
+        results = [result]
+    else:
+        results = _run_batch_and_report(
+            hosts,
+            windows_hosts=windows_hosts,
+            args=args,
+            ssh_opts=ssh_opts,
+            remote_cmd=remote_cmd,
+            actor=actor,
+            audit_log=audit_log,
+        )
 
+    audit_hosts = hosts
+    if args.only_if_idle:
+        audit_hosts = [
+            r["host"] for r in results if (r.get("idle_check") or {}).get("idle") is True
+        ]
+    if audit_hosts:
+        with redirect_stdout(sys.stderr) if args.json else nullcontext():
+            _maybe_auto_audit(audit_hosts, args, audit_log)
+    if any(not r["ok"] and not r.get("skipped") for r in results):
+        raise CommandFailureError
+
+
+def _run_batch_and_report(
+    hosts: list[str],
+    *,
+    windows_hosts: list[str],
+    args: HostRunPuppetArgs,
+    ssh_opts: list[str],
+    remote_cmd: str,
+    actor: str,
+    audit_log: Path,
+) -> list[dict[str, Any]]:
     start_time = time.monotonic()
     if not args.json:
         workers = min(args.workers, len(hosts))
@@ -373,10 +422,13 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
         total = len(results)
         successful = sum(1 for r in results if r.get("ok"))
         unknown = sum(
-            1 for r in results if not r.get("ok") and r["observed"]["puppet_outcome"] == "unknown"
+            1
+            for r in results
+            if not r["ok"] and not r.get("skipped") and r["observed"]["puppet_outcome"] == "unknown"
         )
-        failed = total - successful - unknown
-        skipped = len(windows_hosts)
+        idle_skipped = sum(1 for r in results if r.get("skipped"))
+        failed = total - successful - unknown - idle_skipped
+        skipped = len(windows_hosts) + idle_skipped
         duration_s = time.monotonic() - start_time
         print(
             f"\nSummary: total={total} successful={successful} failed={failed} "
@@ -386,7 +438,4 @@ def cmd_host_run_puppet(args: HostRunPuppetArgs) -> None:
             print(f"Skipped (Windows): {', '.join(windows_hosts)}")
         print(f"Audit log: {audit_log}")
 
-    _maybe_auto_audit(hosts, args, audit_log)
-
-    if any(not r.get("ok") for r in results):
-        raise CommandFailureError
+    return results

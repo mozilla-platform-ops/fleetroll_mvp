@@ -887,6 +887,11 @@ def host_unset_override(
 @click.argument("host", metavar="HOST_OR_FILE...", nargs=-1, required=True)
 @common_options(timeout_default=600)
 @click.option(
+    "--only-if-idle",
+    is_flag=True,
+    help="Run only on Linux hosts whose live worker and Puppet checks show they are idle.",
+)
+@click.option(
     "--workers",
     type=int,
     default=10,
@@ -925,6 +930,7 @@ def host_run_puppet(
     confirm: bool,
     no_audit: bool,
     quiet: bool,
+    only_if_idle: bool,
 ):
     """SSH to one or more hosts and run sudo run-puppet.sh, then refresh audit data.
 
@@ -945,6 +951,7 @@ def host_run_puppet(
         confirm=confirm,
         no_audit=no_audit,
         quiet=quiet,
+        only_if_idle=only_if_idle,
     )
     cmd_host_run_puppet(args)
 

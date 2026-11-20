@@ -735,6 +735,18 @@ This is a snapshot of gwhc's current assessment, which uses heuristics and can
 miss stale worker state. It does not reserve or quarantine the worker; a new
 task may start immediately afterward. Recheck before taking an action.
 
+### Running Puppet on idle workers
+
+```bash
+uv run fr host run-puppet t-linux64-ms-017 --only-if-idle --confirm
+```
+
+`--only-if-idle` uses the live Linux idle check immediately before starting
+Puppet on each target. A worker running a task or already running Puppet is
+skipped. An unavailable or unsupported check blocks Puppet and returns a
+nonzero exit status. The check is best effort. A worker can still claim a task
+after the check.
+
 ### Rebooting an idle worker
 
 `host reboot-if-idle` checks a Linux host's live `sudo gwhc --json` output and

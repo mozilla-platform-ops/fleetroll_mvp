@@ -147,6 +147,7 @@ class HostRunPuppetArgs:
     confirm: bool
     no_audit: bool
     quiet: bool
+    only_if_idle: bool = False
 
 
 @dataclass
