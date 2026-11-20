@@ -191,6 +191,13 @@ also accepts `--sort ovr_bch`. Clearing the
 query leaves quick filters intact. Recent queries persist in
 `~/.fleetroll/filter_history`.
 
+The interactive monitor remembers the applied query, overrides-only toggle,
+OS filter, and keyboard sort separately for each hostname or host-list path.
+Explicit `--filter`, `--filter-file`, and `--sort` options take precedence for
+their settings when the TUI opens. Use `--filter ''` to open with the query
+cleared. `--once`, JSON, and other non-interactive output use only the command
+line options.
+
 ## Saved filters and picker
 
 For Moonshots, use `configs/host-lists/linux/all.list`. The former OS,

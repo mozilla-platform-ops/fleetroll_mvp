@@ -52,6 +52,7 @@ from .named_filters import load_named_filters
 from .query import Query, apply_query, parse_query_safe, tokenize_for_highlight, validate_query
 from .row_renderer import RowRenderer
 from .types import cycle_os_filter
+from .view_state import MonitorView
 from .viewport import HorizontalViewport
 
 
@@ -236,14 +237,28 @@ class MonitorDisplay:
     def filters_popup_active(self) -> bool:
         return self._filters_popup_state is not None
 
-    def set_query(self, text: str) -> None:
+    def set_query(self, text: str, *, remember: bool = True) -> None:
         """Set the active filter query (e.g. from --filter CLI arg)."""
         self._query_text = text
         self._query = parse_query_safe(text)
         self._filter_bar_text = text
         self._filter_bar_cursor = len(text)
-        if text:
+        if text and remember:
             dedupe_append(self._filter_history, text)
+
+    def restore_view(self, view: MonitorView) -> None:
+        self.set_query(view.query, remember=False)
+        self.show_only_overrides = view.overrides_only
+        self.os_filter = view.os_filter
+        self.sort_field = view.sort
+
+    def view_state(self) -> MonitorView:
+        return MonitorView(
+            query=self._query_text,
+            overrides_only=self.show_only_overrides,
+            os_filter=self.os_filter,
+            sort=self.sort_field,
+        )
 
     def _handle_filter_bar_key(self, key: int, *, draw: bool = True) -> bool:
         """Handle keypresses while the filter bar is active. Returns True to exit monitor."""

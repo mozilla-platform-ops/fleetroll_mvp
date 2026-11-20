@@ -36,6 +36,7 @@ from .formatting import (
 from .json_output import build_monitor_json_snapshot, follow_monitor_json
 from .query import apply_query, parse_query_safe
 from .verification import evaluate_hosts
+from .view_state import load_view, save_view, view_path
 
 if TYPE_CHECKING:
     from ...cli_types import HostMonitorArgs
@@ -51,13 +52,15 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         raise FleetRollError("--hostname-only and --json are mutually exclusive")
 
     ensure_host_or_file(args.host)
-    if is_host_file(args.host):
+    is_host_list = is_host_file(args.host)
+    if is_host_list:
         host_file = Path(args.host)
         hosts = parse_host_list(host_file)
         host_source = str(host_file)
     else:
         hosts = [args.host]
         host_source = args.host
+    sort_field = args.sort or "host"
 
     # Initialize SQLite database
     db_path = get_db_path()
@@ -103,7 +106,11 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
             sorted_hosts = sorted(
                 hosts,
                 key=lambda h: get_host_sort_key(
-                    h, sort_field=args.sort, latest=latest, latest_ok=latest_ok, sha_cache=sha_cache
+                    h,
+                    sort_field=sort_field,
+                    latest=latest,
+                    latest_ok=latest_ok,
+                    sha_cache=sha_cache,
                 ),
             )
 
@@ -166,7 +173,11 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
             sorted_hosts = sorted(
                 hosts,
                 key=lambda h: get_host_sort_key(
-                    h, sort_field=args.sort, latest=latest, latest_ok=latest_ok, sha_cache=sha_cache
+                    h,
+                    sort_field=sort_field,
+                    latest=latest,
+                    latest_ok=latest_ok,
+                    sha_cache=sha_cache,
                 ),
             )
 
@@ -250,8 +261,16 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
             return
 
         filters_configs_dir = Path("configs/filters")
+        state_path = view_path(fleetroll_dir, source=host_source, is_host_list=is_host_list)
+        history_path = filter_history_path()
 
         display_ref: list[MonitorDisplay] = []
+
+        def checkpoint_view(display: MonitorDisplay) -> None:
+            nonlocal saved_view
+            view = display.view_state()
+            if view != saved_view and save_view(state_path, view=view):
+                saved_view = view
 
         def curses_main(stdscr) -> None:
             stdscr.nodelay(True)
@@ -271,9 +290,13 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                 filters_configs_dir=filters_configs_dir,
             )
             display_ref.append(display)
-            display.load_history(filter_history_path())
-            if args.filter:
+            display.load_history(history_path)
+            display.restore_view(saved_view)
+            if args.sort is not None:
+                display.sort_field = args.sort
+            if args.filter is not None:
                 display.set_query(args.filter)
+            checkpoint_view(display)
             display.draw_screen()
             tailer = provider.make_tailer(hosts=hosts)
             last_redraw_time = time.monotonic()
@@ -305,6 +328,7 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
                         peek = stdscr.getch()
                         if peek != -1:
                             curses.flushinp()
+                    checkpoint_view(display)
                     display.draw_screen()
                     redrew = True
 
@@ -354,14 +378,17 @@ def cmd_host_monitor(args: HostMonitorArgs) -> None:
         for h in stderr_handlers:
             fleetroll_logger.removeHandler(h)
         fleetroll_logger.addHandler(file_handler)
+        saved_view = load_view(state_path)
         try:
             curses_wrapper(curses_main)
         finally:
+            if display_ref:
+                display = display_ref[0]
+                display.save_history(history_path)
+                checkpoint_view(display)
             fleetroll_logger.removeHandler(file_handler)
             file_handler.close()
             for h in stderr_handlers:
                 fleetroll_logger.addHandler(h)
-            if display_ref:
-                display_ref[0].save_history(filter_history_path())
     finally:
         db_conn.close()

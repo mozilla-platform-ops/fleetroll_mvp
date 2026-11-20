@@ -291,8 +291,7 @@ def gather_host(
 @click.option(
     "--sort",
     type=click.Choice(["host", "role", "ovr_bch"], case_sensitive=False),
-    default="host",
-    help="Sort order for display (default: host).",
+    help="Sort order for display (default: host, or the last TUI sort).",
 )
 @click.option(
     "--filter",
@@ -317,7 +316,7 @@ def host_monitor(
     audit_log: str | None,
     json_output: bool,
     once: bool,
-    sort: str,
+    sort: str | None,
     filter_query: str | None,
     filter_file: str | None,
     hostname_only: bool,
@@ -344,7 +343,7 @@ def host_monitor(
         audit_log=audit_log,
         json=json_output,
         once=once,
-        sort=sort.lower(),
+        sort=sort.lower() if sort is not None else None,
         filter=filter_query,
         hostname_only=hostname_only,
     )

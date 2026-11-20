@@ -7,6 +7,7 @@ import shlex
 from typing import Any
 
 import pytest
+from fleetroll.commands.monitor.view_state import load_view, view_path
 
 from tests.tmux_helpers import _PROJECT_ROOT, _UV_PATH, TmuxSession, seed_test_db, skip_no_tmux
 
@@ -469,4 +470,46 @@ class TestFilterHistoryPersistence:
             assert sess.wait_for("HOST", timeout=15.0), "TUI did not render (session 2)"
             sess.send_keys("/")
             sess.send_keys("Up")
-            assert sess.wait_for("role=nomatch", timeout=3.0), "History not recalled with Up"
+            assert sess.wait_for("Filter ↓: role=nomatch", timeout=3.0), (
+                "History not recalled with Up"
+            )
+
+    def test_restores_view_for_same_host_list(self, tmux_monitor_env: dict[str, Any]) -> None:
+        hosts_file = tmux_monitor_env["hosts_file"]
+        home_dir = tmux_monitor_env["home"]
+        env = _session_env(home_dir)
+        cmd = f"{_UV_PATH} run fleetroll host-monitor {shlex.quote(str(hosts_file))}"
+        session_options = {"cols": 160, "rows": 40, "env": env, "cwd": _PROJECT_ROOT}
+        state_path = view_path(home_dir / ".fleetroll", source=str(hosts_file), is_host_list=True)
+        with TmuxSession(cmd=f"{cmd} --filter role~talos", **session_options) as sess:
+            assert sess.wait_for("/role~talos", timeout=15.0), sess.capture()
+            for key, field, value in (
+                ("o", "overrides_only", True),
+                ("O", "os_filter", "L"),
+                ("s", "sort", "role"),
+            ):
+                sess.send_keys(key)
+                assert sess.wait_until(
+                    lambda field=field, value=value: getattr(load_view(state_path), field) == value
+                ), sess.capture()
+
+        with TmuxSession(cmd=cmd, **session_options) as sess:
+            assert sess.wait_for("/role~talos", timeout=15.0), sess.capture()
+            header = sess.capture().splitlines()[0]
+            for label in ("OVERRIDES", "os=Linux", "sort=role"):
+                assert label in header
+
+        with TmuxSession(cmd=f"{cmd} --sort host --filter ''", **session_options) as sess:
+            assert sess.wait_for("sort=host", timeout=15.0), sess.capture()
+            header = sess.capture().splitlines()[0]
+            assert "/role~talos" not in header
+            assert "OVERRIDES" in header
+
+        other_file = hosts_file.with_name("other.list")
+        other_file.write_text(hosts_file.read_text())
+        other_cmd = f"{_UV_PATH} run fleetroll host-monitor {shlex.quote(str(other_file))}"
+        with TmuxSession(cmd=other_cmd, **session_options) as sess:
+            assert sess.wait_for("sort=host", timeout=15.0), sess.capture()
+            header = sess.capture().splitlines()[0]
+            assert "OVERRIDES" not in header
+            assert "os=Linux" not in header
